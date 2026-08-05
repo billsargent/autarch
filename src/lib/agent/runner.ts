@@ -16,29 +16,6 @@ function worseRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
   return RISK_RANK[a] >= RISK_RANK[b] ? a : b;
 }
 
-// Detect messages that are purely conversational so we can suppress tool calls —
-// the model otherwise tends to call tools reflexively even for small talk.
-const CHAT_ONLY_PATTERNS: RegExp[] = [
-  /^(hi|hiya|hey|hello|yo|sup|howdy|good\s*(morning|afternoon|evening))\b/i,
-  /^(thanks|thank\s*you|thx|ty|cheers|appreciate\s*(it|that))\b/i,
-  /^(bye|goodbye|see\s*(ya|you|you\s+later)|gnight|good\s*night)\b/i,
-  /how\s+(are\s+you|are\s+things|is\s+it\s+going|you\s+doing)\b/i,
-  /what('?s|\s+is)\s+(up|new)\b/i,
-  /(^|\s)(ok|okay|sounds\s+good|makes\s+sense|got\s+it|interesting|nice|cool|right|sure)\s*[!.?]?$/i,
-];
-
-const ACTION_INTENT =
-  /\b(run|execute|install|uninstall|upgrade|check|inspect|show|display|list|read|write|create|make|build|edit|update|delete|remove|scan|start|stop|restart|monitor|schedule|download|upload|fetch|report|analyze|search|look|status|cpu|memory|ram|disk|process|processes|package|service|file|files|network|uptime|journal|goal|job|logs?|screenshot)\b/i;
-
-function looksConversational(text: string): boolean {
-  const t = text.trim();
-  if (t.length < 3) return true;
-  if (CHAT_ONLY_PATTERNS.some((re) => re.test(t))) return true;
-  if (ACTION_INTENT.test(t)) return false;
-  // Short messages with no action/state intent are treated as chat.
-  return t.length <= 80;
-}
-
 export async function ensureConversation(conversationId?: number | null) {
   if (conversationId) {
     const rows = await db.select().from(conversations).where(eq(conversations.id, conversationId));
@@ -92,7 +69,7 @@ export type SessionTrigger = "chat" | "approval" | "scheduled" | "report";
 // Progress events emitted (optionally) during a turn so the UI can stream a
 // live view of the agent's activity instead of only getting a final payload.
 export type AgentEvent =
-  | { type: "session_start"; sessionId: number }
+  | { type: "session_start"; sessionId: number; toolsAvailable?: boolean; model?: string; chatMode?: string; toolsCount?: number }
   | { type: "step_start"; step: number; maxSteps: number }
   | { type: "model_reply"; step: number; content: string }
   | { type: "tool_start"; tool: string; args: Record<string, unknown>; executionId: number }
@@ -237,16 +214,25 @@ export async function runAgentTurn(opts: {
 
     const maxSteps = Math.max(1, settings.maxAgentSteps);
     // Direct user chat: in conversation mode we DON'T expose tools at all (a tool
-    // call becomes impossible); in agentic mode tools are auto but the first
-    // completion is gated to "none" for conversational messages. Scheduled,
-    // approval, and self-directed turns always keep tools.
+    // call becomes impossible); in agentic mode tools are always "auto" — the
+    // chat-mode toggle is the single explicit control. Scheduled, approval, and
+    // self-directed turns always keep tools.
     const isDirectChat = Boolean(opts.userMessage) && !opts.jobId && !opts.trigger;
     const conversationMode = isDirectChat && settings.chatMode === "conversation";
-    const chatOnly = isDirectChat && !conversationMode && looksConversational(opts.userMessage ?? "");
     const toolsAvailable = tools.length > 0 && !conversationMode;
-    // Hard guarantee: in conversation mode, no tool call is ever executed, even if
-    // one somehow reaches the loop (defense in depth on top of not offering tools).
+    // Hard guarantee: in conversation mode, no tool call is ever executed.
     const toolsForbidden = conversationMode;
+    onEvent?.({
+      type: "session_start",
+      sessionId: session.id,
+      toolsAvailable,
+      model: settings.modelName,
+      chatMode: settings.chatMode,
+      toolsCount: tools.length,
+    });
+    console.log(
+      `[turn] trigger=${opts.trigger ?? (opts.jobId ? "scheduled" : "chat")} chatMode=${settings.chatMode} model=${settings.modelName} tools=${tools.length} available=${toolsAvailable} conversationDirect=${conversationMode}`,
+    );
     let terminated = false;
     let ranTools = false;
     let lastContentEmpty = true;
@@ -269,7 +255,7 @@ export async function runAgentTurn(opts: {
         model: settings.modelName,
         messages: apiMessages,
         tools: toolsAvailable ? tools : undefined,
-        tool_choice: toolsAvailable ? (step === 0 && chatOnly ? "none" : "auto") : undefined,
+        tool_choice: toolsAvailable ? "auto" : undefined,
       });
 
       const choice = completion.choices[0];
@@ -438,7 +424,6 @@ export async function runAgentTurn(opts: {
                 "Give a brief plain-language summary of what you just did in this turn: the actions you took (including any tools) and their outcome. Reply with only the summary.",
             },
           ],
-          tool_choice: "none",
         });
         const sMsg = summaryCompletion.choices[0].message as OpenAI.Chat.Completions.ChatCompletionMessage & {
           reasoning_content?: string;

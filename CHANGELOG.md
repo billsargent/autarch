@@ -3,6 +3,21 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-08-05 — Remove conversational tool gate + add turn diagnostics
+
+- Removed the `looksConversational` heuristic gate that was forcing `tool_choice:"none"`
+  in agentic mode for short/chatty messages — it misclassified messages that needed tools
+  ("how much space left", "what time is it", "whoami"), making the agent unable to call
+  tools in agentic mode. The **chat-mode toggle is now the single explicit control**:
+  conversation = hard no-tools, agentic = tools always available.
+- Dropped `tool_choice:"none"` from the main loop and the summary completion to avoid
+  provider errors when the conversation history contains prior tool calls.
+- Added a per-turn diagnostic log line (`[turn] trigger chatMode model tools=N`) and
+  extended the SSE `session_start` event with `toolsAvailable`/`model`/`chatMode` so the
+  logs or live console reveal *why* tools are off.
+- Model warning in the system prompt when the selected model is a reasoning model
+  (`deepseek-reasoner`/R1), which may not support function calling.
+
 ## 2026-08-05 — Chat mode toggle (agentic vs conversation)
 
 - New **chat mode** setting (`chatMode`, default `agentic`) with a one-click toggle in the
@@ -12,8 +27,9 @@ framework that gives an autonomous AI agent supervised control of a computer sys
   Tool definitions are omitted entirely in this mode, **and** the execution layer refuses
   any tool call that somehow reaches it — a hard "no tools, no matter what" guarantee
   regardless of message content or prior tool calls in the session.
-- **Agentic mode**: tools available, but a **conversational gate** suppresses reflexive
-  tool calls on small talk / chat-only messages (greetings, opinions, short questions).
+- **Agentic mode**: tools available with `auto` tool_choice. (Previously had a conversational
+  gate that forced `"none"` on step 0 for chatty messages — removed 2026-08-05 after it caused
+  misclassification issues.)
 - The Chat header toggle now **reverts + shows an error** if the server rejects the change,
   reconciles with the server periodically, and shows a **"tools disabled"** pill while in
   conversation mode.
