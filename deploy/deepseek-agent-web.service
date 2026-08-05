@@ -1,0 +1,20 @@
+[Unit]
+Description=Autarch - web dashboard (Next.js production server)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+# Adjust WorkingDirectory to wherever you deployed the repo on the machine.
+WorkingDirectory=/root/autarch
+# Build first:  cd /root/deepseek-root-lab && npm ci && npm run build
+ExecStart=/usr/bin/npm run start -- -H 0.0.0.0 -p 3000
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+# NOTE: the worker (npm run worker) and this web server share the same SQLite
+# file in data/app.db. WAL mode handles concurrent access; keep both units
+# pointing at the same repo directory.
+
+[Install]
+WantedBy=multi-user.target

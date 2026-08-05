@@ -1,0 +1,9 @@
+[Unit]
+Description=Autarch - nightly WAL-safe DB backup
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/root/deepseek-root-lab
+ExecStart=/usr/bin/npm run backup
+Environment=BACKUP_DIR=/root/backups
