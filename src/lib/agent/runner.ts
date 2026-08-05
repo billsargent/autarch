@@ -409,6 +409,18 @@ export async function runAgentTurn(opts: {
       }
     }
 
+    // If the step limit was reached while the agent was still working (it didn't
+    // choose to stop), insert an event so the agent knows it was truncated and the
+    // human sees a clear indicator that more work is pending.
+    if (ranTools && session.stepsUsed >= maxSteps && !terminated) {
+      const row = await insertMessage({
+        conversationId,
+        role: "event",
+        content: `[TRUNCATED] Work session #${session.id} reached its step limit (${maxSteps} steps) and was stopped mid-task. Send another message or wait for the next scheduled work window to continue.`,
+      });
+      newMessages.push(row);
+    }
+
     // Always end a working turn with a plain-language summary: if the last
     // assistant message was empty (e.g. it stopped on a tool call alone), make
     // one final no-tools completion asking for a summary.

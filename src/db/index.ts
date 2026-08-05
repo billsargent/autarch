@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   autonomy_mode TEXT NOT NULL DEFAULT 'manual',
   model_name TEXT NOT NULL DEFAULT 'deepseek-chat',
-  max_agent_steps INTEGER NOT NULL DEFAULT 8,
+  max_agent_steps INTEGER NOT NULL DEFAULT 16,
   max_actions_per_hour INTEGER NOT NULL DEFAULT 120,
   command_timeout_sec INTEGER NOT NULL DEFAULT 30,
   workspace_dir TEXT NOT NULL DEFAULT '/root/agent-workspace',

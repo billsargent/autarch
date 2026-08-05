@@ -3,6 +3,16 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-08-05 — Step-limit truncation event + raised default
+
+- Raised the default `maxAgentSteps` from 8 to 16 (new installs; existing installs keep their
+  current value). 8 steps was too few for meaningful tasks — the turn would silently stop
+  mid-work with no indication to the human or the agent.
+- When the step limit is reached and the agent was still working (had tool calls), a
+  **`[TRUNCATED]` event** is now inserted into the conversation so both the human and the
+  agent know the turn was cut short — send another message or wait for the next work window
+  to continue. Previously it was a silent exit (only the time limit produced an event).
+
 ## 2026-08-05 — Remove conversational tool gate + add turn diagnostics
 
 - Removed the `looksConversational` heuristic gate that was forcing `tool_choice:"none"`
