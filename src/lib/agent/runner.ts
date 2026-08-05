@@ -236,12 +236,14 @@ export async function runAgentTurn(opts: {
     const apiMessages: ChatMessageParam[] = [{ role: "system", content: systemPrompt }, ...dbRowsToApiMessages(historyRows)];
 
     const maxSteps = Math.max(1, settings.maxAgentSteps);
-    // Direct user chat: in conversation mode tools are off entirely; in agentic
-    // mode the conversational gate stops reflexive tool calls on small talk.
-    // Scheduled/self-directed turns always keep tools.
+    // Direct user chat: in conversation mode we DON'T expose tools at all (a tool
+    // call becomes impossible); in agentic mode tools are auto but the first
+    // completion is gated to "none" for conversational messages. Scheduled,
+    // approval, and self-directed turns always keep tools.
     const isDirectChat = Boolean(opts.userMessage) && !opts.jobId && !opts.trigger;
-    const chatOnly =
-      isDirectChat && (settings.chatMode === "conversation" || looksConversational(opts.userMessage ?? ""));
+    const conversationMode = isDirectChat && settings.chatMode === "conversation";
+    const chatOnly = isDirectChat && !conversationMode && looksConversational(opts.userMessage ?? "");
+    const toolsAvailable = tools.length > 0 && !conversationMode;
     let terminated = false;
     let ranTools = false;
     let lastContentEmpty = true;
@@ -263,8 +265,8 @@ export async function runAgentTurn(opts: {
       const completion = await client.chat.completions.create({
         model: settings.modelName,
         messages: apiMessages,
-        tools: tools.length ? tools : undefined,
-        tool_choice: step === 0 && chatOnly ? "none" : tools.length ? "auto" : undefined,
+        tools: toolsAvailable ? tools : undefined,
+        tool_choice: toolsAvailable ? (step === 0 && chatOnly ? "none" : "auto") : undefined,
       });
 
       const choice = completion.choices[0];

@@ -9,6 +9,8 @@ framework that gives an autonomous AI agent supervised control of a computer sys
   Chat header and a selector in Settings.
 - **Conversation mode**: direct chat runs with tools disabled — the agent answers from
   knowledge/context only and tells you to switch to agentic mode if a task needs tools.
+  Tool definitions are omitted entirely in this mode, so a tool call is impossible
+  (hardened beyond `tool_choice: "none"`, which some models may ignore).
 - **Agentic mode**: tools available, but a **conversational gate** suppresses reflexive
   tool calls on small talk / chat-only messages (greetings, opinions, short questions).
 - Scheduled and self-directed work windows always run agentic regardless of the toggle.
