@@ -65,6 +65,7 @@ export interface SettingsRow {
   deepseekModels: string[];
   paused: boolean;
   humanAtKeyboard: boolean;
+  chatMode: "agentic" | "conversation";
   minGapMinutes: number;
   maxSessionsPerDay: number;
   maxSessionMinutes: number;

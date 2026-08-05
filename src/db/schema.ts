@@ -170,6 +170,7 @@ export const agentSettings = sqliteTable("agent_settings", {
   deepseekModels: text("deepseek_models", { mode: "json" }).notNull().default(sql`('[]')`),
   paused: integer("paused", { mode: "boolean" }).notNull().default(false),
   humanAtKeyboard: integer("human_at_keyboard", { mode: "boolean" }).notNull().default(false),
+  chatMode: text("chat_mode", { enum: ["agentic", "conversation"] }).notNull().default("agentic"),
   minGapMinutes: integer("min_gap_minutes").notNull().default(10),
   maxSessionsPerDay: integer("max_sessions_per_day").notNull().default(24),
   maxSessionMinutes: integer("max_session_minutes").notNull().default(10),

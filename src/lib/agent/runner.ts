@@ -16,6 +16,29 @@ function worseRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
   return RISK_RANK[a] >= RISK_RANK[b] ? a : b;
 }
 
+// Detect messages that are purely conversational so we can suppress tool calls —
+// the model otherwise tends to call tools reflexively even for small talk.
+const CHAT_ONLY_PATTERNS: RegExp[] = [
+  /^(hi|hiya|hey|hello|yo|sup|howdy|good\s*(morning|afternoon|evening))\b/i,
+  /^(thanks|thank\s*you|thx|ty|cheers|appreciate\s*(it|that))\b/i,
+  /^(bye|goodbye|see\s*(ya|you|you\s+later)|gnight|good\s*night)\b/i,
+  /how\s+(are\s+you|are\s+things|is\s+it\s+going|you\s+doing)\b/i,
+  /what('?s|\s+is)\s+(up|new)\b/i,
+  /(^|\s)(ok|okay|sounds\s+good|makes\s+sense|got\s+it|interesting|nice|cool|right|sure)\s*[!.?]?$/i,
+];
+
+const ACTION_INTENT =
+  /\b(run|execute|install|uninstall|upgrade|check|inspect|show|display|list|read|write|create|make|build|edit|update|delete|remove|scan|start|stop|restart|monitor|schedule|download|upload|fetch|report|analyze|search|look|status|cpu|memory|ram|disk|process|processes|package|service|file|files|network|uptime|journal|goal|job|logs?|screenshot)\b/i;
+
+function looksConversational(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 3) return true;
+  if (CHAT_ONLY_PATTERNS.some((re) => re.test(t))) return true;
+  if (ACTION_INTENT.test(t)) return false;
+  // Short messages with no action/state intent are treated as chat.
+  return t.length <= 80;
+}
+
 export async function ensureConversation(conversationId?: number | null) {
   if (conversationId) {
     const rows = await db.select().from(conversations).where(eq(conversations.id, conversationId));
@@ -213,6 +236,12 @@ export async function runAgentTurn(opts: {
     const apiMessages: ChatMessageParam[] = [{ role: "system", content: systemPrompt }, ...dbRowsToApiMessages(historyRows)];
 
     const maxSteps = Math.max(1, settings.maxAgentSteps);
+    // Direct user chat: in conversation mode tools are off entirely; in agentic
+    // mode the conversational gate stops reflexive tool calls on small talk.
+    // Scheduled/self-directed turns always keep tools.
+    const isDirectChat = Boolean(opts.userMessage) && !opts.jobId && !opts.trigger;
+    const chatOnly =
+      isDirectChat && (settings.chatMode === "conversation" || looksConversational(opts.userMessage ?? ""));
     let terminated = false;
     let ranTools = false;
     let lastContentEmpty = true;
@@ -235,7 +264,7 @@ export async function runAgentTurn(opts: {
         model: settings.modelName,
         messages: apiMessages,
         tools: tools.length ? tools : undefined,
-        tool_choice: tools.length ? "auto" : undefined,
+        tool_choice: step === 0 && chatOnly ? "none" : tools.length ? "auto" : undefined,
       });
 
       const choice = completion.choices[0];

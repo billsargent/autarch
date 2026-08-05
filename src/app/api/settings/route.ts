@@ -50,6 +50,7 @@ export async function PUT(req: Request) {
     "apiBaseUrl",
     "paused",
     "humanAtKeyboard",
+    "chatMode",
     "minGapMinutes",
     "maxSessionsPerDay",
     "maxSessionMinutes",

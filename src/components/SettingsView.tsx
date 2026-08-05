@@ -187,6 +187,39 @@ export default function SettingsView() {
               onToggle={(v) => save({ humanAtKeyboard: v })}
             />
           </div>
+          <div className="mt-4 border-t border-neutral-800 pt-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold text-neutral-300">Chat mode</p>
+                <p className="mt-0.5 text-[11px] text-neutral-500">
+                  Conversation mode answers without tools; agentic mode may use tools for tasks. Scheduled work is
+                  always agentic.
+                </p>
+              </div>
+              <div className="flex shrink-0 rounded-lg border border-neutral-700 bg-neutral-950 p-0.5 text-[11px]">
+                <button
+                  onClick={() => save({ chatMode: "conversation" })}
+                  className={`rounded-md px-3 py-1.5 ${
+                    settings.chatMode === "conversation"
+                      ? "bg-neutral-700 text-white"
+                      : "text-neutral-400 hover:text-neutral-200"
+                  }`}
+                >
+                  💬 Conversation
+                </button>
+                <button
+                  onClick={() => save({ chatMode: "agentic" })}
+                  className={`rounded-md px-3 py-1.5 ${
+                    settings.chatMode === "agentic"
+                      ? "bg-neutral-700 text-white"
+                      : "text-neutral-400 hover:text-neutral-200"
+                  }`}
+                >
+                  🤖 Agentic
+                </button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="mt-6 rounded-xl border border-red-900/50 bg-red-950/10 p-5">

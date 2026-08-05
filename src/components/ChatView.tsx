@@ -85,6 +85,7 @@ export default function ChatView() {
   const [liveStatusByConvo, setLiveStatusByConvo] = useState<Record<number, string | null>>({});
   const [runningByConvo, setRunningByConvo] = useState<Record<number, boolean>>({});
   const [unreadByConvo, setUnreadByConvo] = useState<Record<number, number>>({});
+  const [chatMode, setChatMode] = useState<"agentic" | "conversation">("agentic");
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -127,6 +128,16 @@ export default function ChatView() {
     const t = setTimeout(loadConversations, 0);
     return () => clearTimeout(t);
   }, [loadConversations]);
+
+  // Load the global chat mode so the header toggle reflects reality.
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.settings?.chatMode) setChatMode(d.settings.chatMode);
+      })
+      .catch(() => {});
+  }, []);
 
   // Periodically refresh the sidebar so background work started by jobs (running
   // dots, unread badges, ordering) shows up even when you're not sending.
@@ -328,6 +339,20 @@ export default function ChatView() {
     }
   }
 
+  async function toggleChatMode() {
+    const next: "agentic" | "conversation" = chatMode === "agentic" ? "conversation" : "agentic";
+    setChatMode(next);
+    try {
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chatMode: next }),
+      });
+    } catch {
+      // keep optimistic state; the Settings view reconciles on next load
+    }
+  }
+
   async function newConversation() {
     const created = await fetch("/api/conversations", { method: "POST" }).then((r) => r.json());
     await loadConversations();
@@ -390,6 +415,21 @@ export default function ChatView() {
             <h1 className="text-sm font-semibold">Talk to the agent</h1>
             <p className="text-xs text-neutral-500">Ask what it&apos;s working on, give it a task, or just check in.</p>
           </div>
+          <button
+            onClick={toggleChatMode}
+            title={
+              chatMode === "agentic"
+                ? "Agentic mode — may use tools. Click to switch to conversation mode."
+                : "Conversation mode — no tools. Click to switch to agentic mode."
+            }
+            className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+              chatMode === "agentic"
+                ? "border-cyan-700 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/40"
+                : "border-neutral-700 bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
+            }`}
+          >
+            {chatMode === "agentic" ? "🤖 Agentic" : "💬 Conversation"}
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">

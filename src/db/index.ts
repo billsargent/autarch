@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   deepseek_models TEXT NOT NULL DEFAULT '[]',
   paused INTEGER NOT NULL DEFAULT 0,
   human_at_keyboard INTEGER NOT NULL DEFAULT 0,
+  chat_mode TEXT NOT NULL DEFAULT 'agentic',
   min_gap_minutes INTEGER NOT NULL DEFAULT 10,
   max_sessions_per_day INTEGER NOT NULL DEFAULT 24,
   max_session_minutes INTEGER NOT NULL DEFAULT 10,
@@ -163,6 +164,9 @@ if (!globalForDb.__agentLabSqlite) {
   }
   if (!existingCols("agent_settings").includes("human_at_keyboard")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN human_at_keyboard INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!existingCols("agent_settings").includes("chat_mode")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN chat_mode TEXT NOT NULL DEFAULT 'agentic'");
   }
 
   globalForDb.__agentLabSqlite = sqlite;

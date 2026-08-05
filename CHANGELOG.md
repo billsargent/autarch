@@ -3,6 +3,16 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-08-05 — Chat mode toggle (agentic vs conversation)
+
+- New **chat mode** setting (`chatMode`, default `agentic`) with a one-click toggle in the
+  Chat header and a selector in Settings.
+- **Conversation mode**: direct chat runs with tools disabled — the agent answers from
+  knowledge/context only and tells you to switch to agentic mode if a task needs tools.
+- **Agentic mode**: tools available, but a **conversational gate** suppresses reflexive
+  tool calls on small talk / chat-only messages (greetings, opinions, short questions).
+- Scheduled and self-directed work windows always run agentic regardless of the toggle.
+
 ## 2026-08-05 — Skills editor + job editing
 
 - **Skills editor**: new **Skills** page (nav 🧠) to view, edit, add, and delete the agent's
