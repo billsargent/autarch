@@ -423,7 +423,7 @@ export default function SettingsView() {
 
         <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
           <h2 className="text-sm font-semibold">Limits</h2>
-          <div className="mt-3 grid grid-cols-3 gap-4">
+          <div className="mt-3 grid grid-cols-4 gap-4">
             <label className="text-xs text-neutral-400">
               Max tool steps / turn
               <input
@@ -450,6 +450,18 @@ export default function SettingsView() {
                 onBlur={(e) => save({ commandTimeoutSec: Number(e.target.value) || 5 })}
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
               />
+            </label>
+            <label className="text-xs text-neutral-400">
+              Tool retries on error
+              <input
+                type="number"
+                defaultValue={settings.toolRetries}
+                min={0}
+                max={5}
+                onBlur={(e) => save({ toolRetries: Number(e.target.value) || 0 })}
+                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
+              />
+              <span className="mt-1 block text-[10px] text-neutral-600">Retries on failure (1s between)</span>
             </label>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-4">

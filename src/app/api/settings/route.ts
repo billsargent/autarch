@@ -40,6 +40,7 @@ export async function PUT(req: Request) {
     "maxAgentSteps",
     "maxActionsPerHour",
     "commandTimeoutSec",
+    "toolRetries",
     "workspaceDir",
     "enabledTools",
     "extraProtectedPaths",

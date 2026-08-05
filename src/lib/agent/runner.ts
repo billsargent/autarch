@@ -230,9 +230,11 @@ export async function runAgentTurn(opts: {
       chatMode: settings.chatMode,
       toolsCount: tools.length,
     });
-    console.log(
-      `[turn] trigger=${opts.trigger ?? (opts.jobId ? "scheduled" : "chat")} chatMode=${settings.chatMode} model=${settings.modelName} tools=${tools.length} available=${toolsAvailable} conversationDirect=${conversationMode}`,
-    );
+    if (process.env.DEBUG) {
+      console.log(
+        `[turn] trigger=${opts.trigger ?? (opts.jobId ? "scheduled" : "chat")} chatMode=${settings.chatMode} model=${settings.modelName} tools=${tools.length} available=${toolsAvailable} conversationDirect=${conversationMode}`,
+      );
+    }
     let terminated = false;
     let ranTools = false;
     let lastContentEmpty = true;
@@ -307,7 +309,7 @@ export async function runAgentTurn(opts: {
           args = {};
         }
 
-        let resultContent: string;
+        let resultContent = "";
         let status: typeof toolExecutions.$inferInsert.status = "success";
         let output = "";
         let risk = evaluateToolRisk(toolName, args, settings);
@@ -364,13 +366,34 @@ export async function runAgentTurn(opts: {
             const auto = autonomyAllowsAuto(mode, risk.risk);
             if (auto) {
               try {
-                const execResult = await executeTool(toolName, args, settings, {
-                  conversationId,
-                  sessionId: session.id,
-                });
-                status = "success";
-                output = execResult.output;
-                resultContent = output;
+              const maxRetries = settings.toolRetries ?? 1;
+              let attempt = 0;
+              let lastError = "";
+              while (attempt <= maxRetries) {
+                try {
+                  const execResult = await executeTool(toolName, args, settings, {
+                    conversationId,
+                    sessionId: session.id,
+                  });
+                  status = "success";
+                  output = execResult.output;
+                  resultContent = output;
+                  break;
+                } catch (err) {
+                  attempt++;
+                  lastError = err instanceof Error ? err.message : String(err);
+                  if (attempt > maxRetries) {
+                    status = "error";
+                    output = lastError;
+                    resultContent = `ERROR (after ${maxRetries} retries): ${output}`;
+                  } else {
+                    await new Promise((r) => setTimeout(r, 1000));
+                  }
+                }
+              }
+              if (attempt > 0 && status === "success") {
+                resultContent = `SUCCESS (retried ${attempt} time(s)): ${output}`;
+              }
               } catch (err) {
                 status = "error";
                 output = err instanceof Error ? err.message : String(err);
@@ -413,12 +436,43 @@ export async function runAgentTurn(opts: {
     // choose to stop), insert an event so the agent knows it was truncated and the
     // human sees a clear indicator that more work is pending.
     if (ranTools && session.stepsUsed >= maxSteps && !terminated) {
-      const row = await insertMessage({
+      const truncEvent = await insertMessage({
         conversationId,
         role: "event",
-        content: `[TRUNCATED] Work session #${session.id} reached its step limit (${maxSteps} steps) and was stopped mid-task. Send another message or wait for the next scheduled work window to continue.`,
+        content: `[TRUNCATED] Work session #${session.id} reached its step limit (${maxSteps} steps) and was stopped mid-task.`,
       });
-      newMessages.push(row);
+      newMessages.push(truncEvent);
+      apiMessages.push({
+        role: "user",
+        content:
+          "[SYSTEM] Your turn was truncated — you hit the step limit. Briefly summarize what you just achieved and ask the human if they want you to continue the task. Reply in text only — do not call any tools.",
+      });
+      try {
+        const truncCompletion = await client.chat.completions.create({
+          model: settings.modelName,
+          messages: apiMessages,
+        });
+        const tMsg = truncCompletion.choices[0].message as OpenAI.Chat.Completions.ChatCompletionMessage & {
+          reasoning_content?: string;
+        };
+        const tUsage = truncCompletion.usage as UsageLike | undefined;
+        accumulateUsage(session, tUsage, inputPrice, outputPrice);
+        const tCost = usageCost(tUsage, inputPrice, outputPrice);
+        const tRow = await insertMessage({
+          conversationId,
+          role: "assistant",
+          content: tMsg.content ?? "",
+          reasoning: tMsg.reasoning_content ?? null,
+          sessionId: session.id,
+          promptTokens: tUsage?.prompt_tokens ?? null,
+          completionTokens: tUsage?.completion_tokens ?? null,
+          totalTokens: tUsage?.total_tokens ?? null,
+          costUsd: tCost ? Number(tCost.toFixed(6)) : null,
+        });
+        newMessages.push(tRow);
+      } catch {
+        // best-effort; the truncation event is already in the conversation
+      }
     }
 
     // Always end a working turn with a plain-language summary: if the last

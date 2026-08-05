@@ -155,6 +155,7 @@ export const agentSettings = sqliteTable("agent_settings", {
   maxAgentSteps: integer("max_agent_steps").notNull().default(16),
   maxActionsPerHour: integer("max_actions_per_hour").notNull().default(120),
   commandTimeoutSec: integer("command_timeout_sec").notNull().default(30),
+  toolRetries: integer("tool_retries").notNull().default(1),
   workspaceDir: text("workspace_dir").notNull().default("/root/agent-workspace"),
   enabledTools: text("enabled_tools", { mode: "json" })
     .notNull()

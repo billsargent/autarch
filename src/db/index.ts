@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   max_agent_steps INTEGER NOT NULL DEFAULT 16,
   max_actions_per_hour INTEGER NOT NULL DEFAULT 120,
   command_timeout_sec INTEGER NOT NULL DEFAULT 30,
+  tool_retries INTEGER NOT NULL DEFAULT 1,
   workspace_dir TEXT NOT NULL DEFAULT '/root/agent-workspace',
   enabled_tools TEXT NOT NULL DEFAULT '["run_shell_command","read_file","write_file","list_directory","delete_path","get_system_status","list_processes","manage_package","manage_service","fetch_url","update_journal","schedule_job","list_jobs","cancel_job","manage_goal","list_goals","notify_human","query_database","download_file","edit_file","take_screenshot"]',
   extra_protected_paths TEXT NOT NULL DEFAULT '[]',
@@ -167,6 +168,9 @@ if (!globalForDb.__agentLabSqlite) {
   }
   if (!existingCols("agent_settings").includes("chat_mode")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN chat_mode TEXT NOT NULL DEFAULT 'agentic'");
+  }
+  if (!existingCols("agent_settings").includes("tool_retries")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN tool_retries INTEGER NOT NULL DEFAULT 1");
   }
 
   globalForDb.__agentLabSqlite = sqlite;

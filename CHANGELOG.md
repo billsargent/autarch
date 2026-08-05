@@ -3,6 +3,17 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-08-05 — Truncation model alert + tool retries
+
+- **Tool retries**: new `toolRetries` setting (Settings → Limits, default 1). A failed tool call
+  is retried up to that many times with a 1s pause between attempts. On success after retries,
+  the result shows `SUCCESS (retried N times)`. On final failure, `ERROR (after N retries)`.
+- **Step-limit speaks immediately**: when a turn is truncated by the step limit, the model now
+  gets a final no-tools completion so it tells you *in the same turn* what it achieved and asks
+  if you want it to continue — instead of going silent and waiting for the next turn.
+- The `[turn]` diagnostic log is now gated behind `DEBUG=true` (was printing on every turn,
+  drowning out useful info alongside Next.js dev-mode request logs).
+
 ## 2026-08-05 — Step-limit truncation event + raised default
 
 - Raised the default `maxAgentSteps` from 8 to 16 (new installs; existing installs keep their

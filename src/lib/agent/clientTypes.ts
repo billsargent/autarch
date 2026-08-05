@@ -54,6 +54,7 @@ export interface SettingsRow {
   maxAgentSteps: number;
   maxActionsPerHour: number;
   commandTimeoutSec: number;
+  toolRetries: number;
   workspaceDir: string;
   enabledTools: string[];
   extraProtectedPaths: string[];
