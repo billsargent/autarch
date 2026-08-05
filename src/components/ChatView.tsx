@@ -143,14 +143,14 @@ export default function ChatView() {
       }
     };
     load();
-    const id = setInterval(load, 10000);
+    const id = setInterval(load, 30000);
     return () => clearInterval(id);
   }, []);
 
   // Periodically refresh the sidebar so background work started by jobs (running
   // dots, unread badges, ordering) shows up even when you're not sending.
   useEffect(() => {
-    const id = setInterval(loadConversations, 5000);
+    const id = setInterval(loadConversations, 15000);
     return () => clearInterval(id);
   }, [loadConversations]);
 

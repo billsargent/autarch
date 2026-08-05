@@ -32,7 +32,7 @@ export default function JournalView() {
 
   useEffect(() => {
     const first = setTimeout(load, 0);
-    const id = setInterval(load, 10000);
+    const id = setInterval(load, 20000);
     return () => {
       clearTimeout(first);
       clearInterval(id);

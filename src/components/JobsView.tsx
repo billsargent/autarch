@@ -21,7 +21,7 @@ export default function JobsView() {
 
   useEffect(() => {
     const first = setTimeout(load, 0);
-    const id = setInterval(load, 8000);
+    const id = setInterval(load, 20000);
     return () => {
       clearTimeout(first);
       clearInterval(id);

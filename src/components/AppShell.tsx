@@ -46,7 +46,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }
     }
     poll();
-    const id = setInterval(poll, 8000);
+    const id = setInterval(poll, 15000);
     return () => {
       alive = false;
       clearInterval(id);

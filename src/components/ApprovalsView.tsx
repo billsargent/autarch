@@ -25,7 +25,7 @@ export default function ApprovalsView() {
 
   useEffect(() => {
     const first = setTimeout(load, 0);
-    const id = setInterval(load, 5000);
+    const id = setInterval(load, 15000);
     return () => {
       clearTimeout(first);
       clearInterval(id);
