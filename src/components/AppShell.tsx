@@ -8,6 +8,7 @@ import type { NotificationRow } from "@/lib/agent/clientTypes";
 const NAV = [
   { href: "/", label: "Chat", icon: "💬" },
   { href: "/journal", label: "Journal", icon: "📓" },
+  { href: "/skills", label: "Skills", icon: "🧠" },
   { href: "/jobs", label: "Jobs", icon: "🗓️" },
   { href: "/goals", label: "Goals", icon: "🎯" },
   { href: "/approvals", label: "Approvals", icon: "🛑" },

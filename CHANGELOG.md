@@ -3,6 +3,16 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-08-05 — Skills editor + job editing
+
+- **Skills editor**: new **Skills** page (nav 🧠) to view, edit, add, and delete the agent's
+  markdown playbooks, with a warning when a skill exceeds the 3000-char prompt-injection
+  budget (so you can see what's silently getting truncated). Backed by new `/api/skills`
+  and `/api/skills/[name]` routes (path-safe, contained to the workspace skills dir).
+- **Edit existing jobs**: the Jobs UI now has an **Edit** button that reuses the schedule
+  form and PATCHes the job (name, instruction, interval, max duration, cron) — e.g. tweak
+  the seeded self-directed-work cadence without deleting and recreating it.
+
 ## 2026-08-05 — Renamed to Autarch, background work + session tracking + autonomy
 
 ### Rename / rebrand

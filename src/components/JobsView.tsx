@@ -12,6 +12,7 @@ export default function JobsView() {
   const [cron, setCron] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [runs, setRuns] = useState<Record<number, WorkSessionRow[]>>({});
+  const [editing, setEditing] = useState<JobRow | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/jobs").then((r) => r.json());
@@ -27,17 +28,42 @@ export default function JobsView() {
     };
   }, [load]);
 
-  async function createJob() {
+  async function saveJob() {
     if (!name.trim()) return;
-    await fetch("/api/jobs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, instruction, intervalMinutes, maxDurationMinutes, cron: cron.trim() || undefined }),
-    });
+    const payload = { name, instruction, intervalMinutes, maxDurationMinutes, cron: cron.trim() || undefined };
+    if (editing) {
+      await fetch(`/api/jobs/${editing.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+    cancelEdit();
+    await load();
+  }
+
+  function startEdit(job: JobRow) {
+    setEditing(job);
+    setName(job.name);
+    setInstruction(job.instruction);
+    setIntervalMinutes(job.intervalMinutes);
+    setMaxDurationMinutes(job.maxDurationMinutes);
+    setCron(job.cron || "");
+  }
+
+  function cancelEdit() {
+    setEditing(null);
     setName("");
     setInstruction("");
+    setIntervalMinutes(60);
+    setMaxDurationMinutes(10);
     setCron("");
-    await load();
   }
 
   async function toggleRuns(jobId: number) {
@@ -73,7 +99,7 @@ export default function JobsView() {
         </p>
 
         <section className="mt-5 rounded-xl border border-neutral-800 bg-neutral-900 p-4">
-          <h2 className="text-sm font-semibold">Schedule a new job</h2>
+          <h2 className="text-sm font-semibold">{editing ? `Edit job: ${editing.name}` : "Schedule a new job"}</h2>
           <div className="mt-3 space-y-2">
             <input
               value={name}
@@ -119,13 +145,23 @@ export default function JobsView() {
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
               />
             </label>
-            <button
-              onClick={createJob}
-              disabled={!name.trim()}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-            >
-              Create job
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={saveJob}
+                disabled={!name.trim()}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+              >
+                {editing ? "Save changes" : "Create job"}
+              </button>
+              {editing && (
+                <button
+                  onClick={cancelEdit}
+                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-2 text-xs text-neutral-300 hover:bg-neutral-800"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
           </div>
         </section>
 
@@ -166,6 +202,12 @@ export default function JobsView() {
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    onClick={() => startEdit(j)}
+                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800"
+                  >
+                    Edit
+                  </button>
                   <button
                     onClick={() => toggleRuns(j.id)}
                     className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800"
