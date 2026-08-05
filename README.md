@@ -9,6 +9,11 @@ web dashboard.
 > work windows, and pursue its own goals. Only run this on a machine you are OK with an
 > AI poking around.
 
+## Updating
+When you pull new code from the repo, run `npm ci && npm run build` and restart the web server
+and worker. Behavior guarantees (e.g. the conversation-mode "no tools" rule) only apply to the
+latest build, not to older copied-over versions.
+
 ## Stack
 
 - Next.js 16 (App Router) + React 19 + TypeScript + Tailwind 4

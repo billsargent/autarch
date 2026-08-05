@@ -9,11 +9,17 @@ framework that gives an autonomous AI agent supervised control of a computer sys
   Chat header and a selector in Settings.
 - **Conversation mode**: direct chat runs with tools disabled — the agent answers from
   knowledge/context only and tells you to switch to agentic mode if a task needs tools.
-  Tool definitions are omitted entirely in this mode, so a tool call is impossible
-  (hardened beyond `tool_choice: "none"`, which some models may ignore).
+  Tool definitions are omitted entirely in this mode, **and** the execution layer refuses
+  any tool call that somehow reaches it — a hard "no tools, no matter what" guarantee
+  regardless of message content or prior tool calls in the session.
 - **Agentic mode**: tools available, but a **conversational gate** suppresses reflexive
   tool calls on small talk / chat-only messages (greetings, opinions, short questions).
+- The Chat header toggle now **reverts + shows an error** if the server rejects the change,
+  reconciles with the server periodically, and shows a **"tools disabled"** pill while in
+  conversation mode.
 - Scheduled and self-directed work windows always run agentic regardless of the toggle.
+- Docs: deploy/README + README note that behavior guarantees require the latest deployed
+  build (older copied-over versions don't enforce them).
 
 ## 2026-08-05 — Skills editor + job editing
 

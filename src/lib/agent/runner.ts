@@ -244,6 +244,9 @@ export async function runAgentTurn(opts: {
     const conversationMode = isDirectChat && settings.chatMode === "conversation";
     const chatOnly = isDirectChat && !conversationMode && looksConversational(opts.userMessage ?? "");
     const toolsAvailable = tools.length > 0 && !conversationMode;
+    // Hard guarantee: in conversation mode, no tool call is ever executed, even if
+    // one somehow reaches the loop (defense in depth on top of not offering tools).
+    const toolsForbidden = conversationMode;
     let terminated = false;
     let ranTools = false;
     let lastContentEmpty = true;
@@ -349,7 +352,11 @@ export async function runAgentTurn(opts: {
         const mode = settings.autonomyMode as "manual" | "balanced" | "autonomous" | "unrestricted";
         const unrestricted = mode === "unrestricted";
 
-        if (settings.paused) {
+        if (toolsForbidden) {
+          status = "blocked";
+          output = "Tools are disabled in conversation mode. The agent cannot act until the human switches to agentic mode.";
+          resultContent = `BLOCKED (conversation mode): ${output}`;
+        } else if (settings.paused) {
           status = "blocked";
           output = "The human has globally PAUSED the agent. No actions run while paused.";
           resultContent = `PAUSED: ${output}`;

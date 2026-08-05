@@ -34,3 +34,14 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now deepseek-agent-backup.timer
 ```
 Backups land in `/root/backups/` (override with `BACKUP_DIR`).
+
+## Keeping the deployment up to date
+Behavior changes (safety guarantees, new features, bug fixes) only apply to the **deployed build**.
+To sync the machine with the repo:
+```
+git pull origin master
+npm ci && npm run build
+sudo systemctl restart deepseek-agent-web deepseek-agent-worker   # adjust unit names
+```
+For example, the "conversation mode never calls tools" guarantee is enforced only by the latest
+build — an older copied-over version will not have it.
