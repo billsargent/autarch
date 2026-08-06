@@ -1,6 +1,6 @@
 // Hard-coded safety configuration for the agent runtime.
 // These constants are intentionally NOT exposed as editable settings because
-// they protect the app's own runtime (Next.js, Postgres, Drizzle, node_modules)
+// they protect the app's own runtime (Next.js, SQLite, Drizzle, node_modules)
 // from being damaged by the agent. Users can add *extra* protected paths via
 // settings, but these core protections can never be removed from the UI.
 

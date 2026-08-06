@@ -35,6 +35,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   });
 }
 
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const body = await req.json().catch(() => ({}));
+  const title = typeof body.title === "string" ? body.title.trim() : "";
+  if (!title) return NextResponse.json({ error: "title is required" }, { status: 400 });
+  const updated = await db
+    .update(conversations)
+    .set({ title: title.slice(0, 200), updatedAt: new Date() })
+    .where(eq(conversations.id, Number(id)))
+    .returning();
+  return updated.length ? NextResponse.json({ conversation: updated[0] }) : NextResponse.json({ error: "Not found" }, { status: 404 });
+}
+
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   await db.delete(conversations).where(eq(conversations.id, Number(id)));

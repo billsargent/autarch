@@ -5,7 +5,7 @@ import { getSettings } from "@/lib/agent/settingsStore";
 import { workspaceSkillsDir } from "@/lib/agent/config";
 
 // Matches the per-skill injection budget in buildSystemPrompt.
-const MAX_SKILL_CHARS = 3000;
+const MAX_SKILL_CHARS = 2000;
 
 function sanitizeSkillName(raw: string): string | null {
   const base = raw.trim().replace(/\.md$/i, "");

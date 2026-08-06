@@ -91,9 +91,14 @@ export default function ChatView() {
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const loadSeq = useRef(0);
   const lastActiveRef = useRef<number | null>(null);
   const modeToggleInFlight = useRef(false);
+
+  const [dailyCost, setDailyCost] = useState<number | null>(null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
 
   useEffect(() => {
     lastActiveRef.current = activeId;
@@ -155,6 +160,19 @@ export default function ChatView() {
     return () => clearInterval(id);
   }, [loadConversations]);
 
+  // Periodically refresh daily cost for the header badge.
+  useEffect(() => {
+    const fetchCost = async () => {
+      try {
+        const d = await fetch("/api/stats").then((r) => r.json());
+        setDailyCost(d.today?.costUsd ?? null);
+      } catch { /* ignore */ }
+    };
+    fetchCost();
+    const id = setInterval(fetchCost, 30000);
+    return () => clearInterval(id);
+  }, []);
+
   const loadMessages = useCallback(async (id: number) => {
     const seq = ++loadSeq.current;
     const res = await fetch(`/api/conversations/${id}`).then((r) => r.json());
@@ -206,6 +224,9 @@ export default function ChatView() {
 
   async function send(text: string) {
     if (!text.trim() || sending) return;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     const convoId = activeId;
     setSending(true);
     setError(null);
@@ -233,6 +254,7 @@ export default function ChatView() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ conversationId: convoId, message: text }),
+        signal: ctrl.signal,
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -282,10 +304,15 @@ export default function ChatView() {
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (e instanceof DOMException && e.name === "AbortError") {
+        setError("Turn cancelled.");
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
       if (convoId) setLiveStatusByConvo((prev) => ({ ...prev, [convoId]: null }));
     } finally {
       setSending(false);
+      abortRef.current = null;
     }
   }
 
@@ -331,6 +358,20 @@ export default function ChatView() {
     await loadConversations();
   }
 
+  async function saveRename(id: number) {
+    const t = renameTitle.trim();
+    if (!t) { setRenamingId(null); return; }
+    setRenamingId(null);
+    try {
+      await fetch(`/api/conversations/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title: t }),
+      });
+      await loadConversations();
+    } catch { /* ignore */ }
+  }
+
   async function uploadFile(file: File) {
     setUploadMsg(null);
     const fd = new FormData();
@@ -343,6 +384,18 @@ export default function ChatView() {
         return;
       }
       setUploadMsg(`uploaded ${data.filename} (${data.size} bytes) → ${data.path}`);
+      // Inject a system event so the agent knows the file arrived.
+      if (activeId) {
+        try {
+          await fetch(`/api/conversations/${activeId}/messages`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ role: "event", content: `[UPLOAD] Human uploaded ${data.filename} (${data.size} bytes) → ${data.path}` }),
+          });
+          loadConversations();
+          if (activeId) loadMessages(activeId);
+        } catch { /* best-effort */ }
+      }
     } catch (e) {
       setUploadMsg(`upload failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -396,9 +449,20 @@ export default function ChatView() {
             const unread = unreadByConvo[c.id] || 0;
             return (
               <div key={c.id} className="group relative">
-                <button
-                  onClick={() => setActiveId(c.id)}
-                  className={`block w-full truncate rounded-md px-2.5 py-2 pr-7 text-left text-xs ${
+                {renamingId === c.id ? (
+                  <input
+                    value={renameTitle}
+                    onChange={(e) => setRenameTitle(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveRename(c.id); if (e.key === "Escape") setRenamingId(null); }}
+                    onBlur={() => saveRename(c.id)}
+                    className="block w-full rounded-md border border-neutral-600 bg-neutral-900 px-2 py-1.5 text-xs text-white outline-none"
+                    autoFocus
+                  />
+                ) : (
+                  <button
+                    onClick={() => setActiveId(c.id)}
+                    onDoubleClick={() => { setRenamingId(c.id); setRenameTitle(c.title); }}
+                    className={`block w-full truncate rounded-md px-2.5 py-2 pr-14 text-left text-xs ${
                     activeId === c.id ? "bg-neutral-800 text-white" : "text-neutral-400 hover:bg-neutral-900"
                   }`}
                 >
@@ -407,6 +471,7 @@ export default function ChatView() {
                   )}
                   {c.title || "New session"}
                 </button>
+                )}
                 {unread > 0 && (
                   <span className="absolute right-6 top-1/2 -translate-y-1/2 rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold text-white">
                     {unread}
@@ -435,6 +500,14 @@ export default function ChatView() {
             <p className="text-xs text-neutral-500">Ask what it&apos;s working on, give it a task, or just check in.</p>
           </div>
           <div className="flex items-center gap-2">
+            {dailyCost !== null && (
+              <span
+                className="rounded-full border border-neutral-700 bg-neutral-900 px-2.5 py-0.5 font-mono text-[10px] text-neutral-500"
+                title="Today's spend"
+              >
+                ${dailyCost.toFixed(4)}
+              </span>
+            )}
             {chatMode === "conversation" && (
               <span
                 className="rounded-full border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-[11px] text-neutral-400"
@@ -607,8 +680,17 @@ export default function ChatView() {
               disabled={sending}
               className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
             >
-              Send
+              {sending ? "Sending…" : "Send"}
             </button>
+            {sending && (
+              <button
+                onClick={() => abortRef.current?.abort()}
+                className="rounded-xl bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+                title="Stop the agent"
+              >
+                ⏹
+              </button>
+            )}
           </div>
           <input
             ref={fileRef}

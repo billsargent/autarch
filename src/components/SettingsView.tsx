@@ -538,6 +538,10 @@ export default function SettingsView() {
           <h2 className="text-sm font-semibold">Enabled tools</h2>
           <p className="mt-1 text-xs text-neutral-500">Turn off any capability you don&apos;t want the agent to have at all.</p>
           <div className="mt-3 space-y-2">
+            <div className="flex gap-2">
+              <button onClick={() => save({ enabledTools: tools.map((t) => t.name) })} className="rounded border border-neutral-700 px-2 py-1 text-[10px] text-neutral-400 hover:bg-neutral-800">Select all</button>
+              <button onClick={() => save({ enabledTools: [] })} className="rounded border border-neutral-700 px-2 py-1 text-[10px] text-neutral-400 hover:bg-neutral-800">Deselect all</button>
+            </div>
             {tools.map((t) => (
               <label key={t.name} className="flex items-start gap-3 rounded-lg border border-neutral-800 p-2.5 text-xs">
                 <input

@@ -19,7 +19,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if (patch.enabled === true) {
     const row = await db.select().from(jobs).where(eq(jobs.id, Number(id))).limit(1);
-    const cron = String(patch.cron ?? row[0]?.cron ?? "").trim();
+    const rawCron = (patch.cron as string | undefined) ?? row[0]?.cron ?? "";
+    const cron = rawCron.trim();
     const interval = Number(row[0]?.intervalMinutes) || 60;
     patch.nextRunAt = cron ? nextCronRun(cron, new Date()) ?? new Date(Date.now() + interval * 60_000) : new Date(Date.now() + interval * 60_000);
   }
