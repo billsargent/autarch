@@ -105,45 +105,47 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               {paused ? "▶ Resume" : "⏸ Pause"}
             </button>
-            <button
-              onClick={() => setBellOpen((o) => !o)}
-              className="relative ml-auto flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1.5 text-xs text-neutral-300"
-              title="Notifications"
-            >
-              🔔
-              {unread > 0 && (
-                <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold text-white">{unread}</span>
-              )}
-            </button>
-          </div>
-          {bellOpen && (
-            <div className="absolute right-3 top-36 z-50 w-80 rounded-xl border border-neutral-700 bg-neutral-900 p-2 shadow-2xl">
-              <div className="flex items-center justify-between px-2 py-1">
-                <p className="text-xs font-semibold">Notifications</p>
-                {notifs.length > 0 && (
-                  <button onClick={markAllRead} className="text-[10px] text-blue-400 hover:text-blue-300">
-                    mark all read
-                  </button>
+            <div className="relative ml-auto">
+              <button
+                onClick={() => setBellOpen((o) => !o)}
+                className="flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-900 px-2.5 py-1.5 text-xs text-neutral-300"
+                title="Notifications"
+              >
+                🔔
+                {unread > 0 && (
+                  <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[9px] font-bold text-white">{unread}</span>
                 )}
-              </div>
-              {notifs.length === 0 ? (
-                <p className="px-2 py-3 text-[11px] text-neutral-500">No unread notifications.</p>
-              ) : (
-                <div className="max-h-72 space-y-1 overflow-y-auto">
-                  {notifs.map((n) => (
-                    <div key={n.id} className="rounded-lg border border-neutral-800 bg-neutral-950 p-2">
-                      <p className="text-[11px] font-semibold text-neutral-200">
-                        <span className="mr-1 text-[10px] uppercase text-neutral-500">[{n.severity}]</span>
-                        {n.title}
-                      </p>
-                      {n.body && <p className="mt-0.5 whitespace-pre-wrap text-[10px] text-neutral-400">{n.body}</p>}
-                      <p className="mt-1 text-[9px] text-neutral-600">{new Date(n.createdAt).toLocaleString()}</p>
+              </button>
+              {bellOpen && (
+                <div className="absolute left-full top-0 z-50 ml-2 w-80 rounded-xl border border-neutral-700 bg-neutral-900 p-2 shadow-2xl">
+                  <div className="flex items-center justify-between px-2 py-1">
+                    <p className="text-xs font-semibold">Notifications</p>
+                    {notifs.length > 0 && (
+                      <button onClick={markAllRead} className="text-[10px] text-blue-400 hover:text-blue-300">
+                        mark all read
+                      </button>
+                    )}
+                  </div>
+                  {notifs.length === 0 ? (
+                    <p className="px-2 py-3 text-[11px] text-neutral-500">No unread notifications.</p>
+                  ) : (
+                    <div className="max-h-72 space-y-1 overflow-y-auto">
+                      {notifs.map((n) => (
+                        <div key={n.id} className="rounded-lg border border-neutral-800 bg-neutral-950 p-2">
+                          <p className="text-[11px] font-semibold text-neutral-200">
+                            <span className="mr-1 text-[10px] uppercase text-neutral-500">[{n.severity}]</span>
+                            {n.title}
+                          </p>
+                          {n.body && <p className="mt-0.5 whitespace-pre-wrap text-[10px] text-neutral-400">{n.body}</p>}
+                          <p className="mt-1 text-[9px] text-neutral-600">{new Date(n.createdAt).toLocaleString()}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto p-3">
           {NAV.map((item) => {

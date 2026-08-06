@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { conversations, messages, toolExecutions, workSessions } from "@/db/schema";
 import { eq, asc, and, gte, inArray, sql as dsql } from "drizzle-orm";
 import type OpenAI from "openai";
+import { historyToApiMessages } from "./messageHistory";
 import { getDeepSeekClient } from "./deepseekClient";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { buildSystemPrompt } from "./systemPrompt";
@@ -32,27 +33,6 @@ async function insertMessage(row: typeof messages.$inferInsert) {
 
 async function loadHistory(conversationId: number) {
   return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.id));
-}
-
-function dbRowsToApiMessages(rows: Awaited<ReturnType<typeof loadHistory>>): ChatMessageParam[] {
-  const out: ChatMessageParam[] = [];
-  for (const row of rows) {
-    if (row.role === "user") {
-      out.push({ role: "user", content: row.content ?? "" });
-    } else if (row.role === "event") {
-      out.push({ role: "user", content: `[SYSTEM EVENT] ${row.content ?? ""}` });
-    } else if (row.role === "assistant") {
-      const toolCalls = (row.toolCalls as OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] | null) || undefined;
-      out.push({
-        role: "assistant",
-        content: row.content ?? "",
-        ...(toolCalls && toolCalls.length ? { tool_calls: toolCalls } : {}),
-      } as ChatMessageParam);
-    } else if (row.role === "tool") {
-      out.push({ role: "tool", tool_call_id: row.toolCallId || "", content: row.content ?? "" });
-    }
-  }
-  return out;
 }
 
 async function countRecentActions(): Promise<number> {
@@ -210,7 +190,7 @@ export async function runAgentTurn(opts: {
     const tools = getEnabledToolDefinitions(settings.enabledTools as string[]);
 
     const historyRows = await loadHistory(conversationId);
-    const apiMessages: ChatMessageParam[] = [{ role: "system", content: systemPrompt }, ...dbRowsToApiMessages(historyRows)];
+    const apiMessages: ChatMessageParam[] = [{ role: "system", content: systemPrompt }, ...historyToApiMessages(historyRows)];
 
     const maxSteps = Math.max(1, settings.maxAgentSteps);
     // Direct user chat: in conversation mode we DON'T expose tools at all (a tool
