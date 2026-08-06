@@ -9,6 +9,7 @@ function toolCardStyle(content: string | null) {
   if (c.startsWith("BLOCKED")) return "border-rose-700/50 bg-rose-950/30 text-rose-200";
   if (c.startsWith("PENDING HUMAN APPROVAL")) return "border-amber-700/50 bg-amber-950/20 text-amber-200";
   if (c.startsWith("RATE LIMITED")) return "border-orange-700/50 bg-orange-950/20 text-orange-200";
+  if (c.startsWith("CANCELLED")) return "border-neutral-700 bg-neutral-900 text-neutral-400";
   if (c.startsWith("ERROR")) return "border-red-700/50 bg-red-950/20 text-red-200";
   return "border-neutral-800 bg-neutral-900 text-neutral-300";
 }
@@ -18,6 +19,7 @@ function toolBadge(content: string | null) {
   if (c.startsWith("BLOCKED")) return { text: "BLOCKED", cls: "bg-rose-800 text-rose-100" };
   if (c.startsWith("PENDING HUMAN APPROVAL")) return { text: "AWAITING APPROVAL", cls: "bg-amber-700 text-amber-50" };
   if (c.startsWith("RATE LIMITED")) return { text: "RATE LIMITED", cls: "bg-orange-700 text-orange-50" };
+  if (c.startsWith("CANCELLED")) return { text: "CANCELLED", cls: "bg-neutral-700 text-neutral-300" };
   if (c.startsWith("ERROR")) return { text: "ERROR", cls: "bg-red-700 text-red-50" };
   return { text: "EXECUTED", cls: "bg-emerald-700 text-emerald-50" };
 }

@@ -17,6 +17,19 @@ function worseRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
   return RISK_RANK[a] >= RISK_RANK[b] ? a : b;
 }
 
+// Conversations whose in-flight turn has been cancelled by the human (the Stop
+// button). Checked at step boundaries so the server actually stops spending
+// tokens / running tools instead of just closing the client's SSE stream.
+// In-memory: covers chat turns in the web process (scheduled worker turns are
+// time-boxed and not cancelable from the UI today).
+const cancelledConversations = new Set<number>();
+export function cancelTurn(conversationId: number) {
+  cancelledConversations.add(conversationId);
+}
+export function isTurnCancelled(conversationId: number): boolean {
+  return cancelledConversations.has(conversationId);
+}
+
 export async function ensureConversation(conversationId?: number | null) {
   if (conversationId) {
     const rows = await db.select().from(conversations).where(eq(conversations.id, conversationId));
@@ -151,8 +164,8 @@ export async function runAgentTurn(opts: {
 }, onEvent?: (e: AgentEvent) => void): Promise<AgentTurnResult> {
   const conversation = await ensureConversation(opts.conversationId ?? undefined);
   const conversationId = conversation.id;
+  cancelledConversations.delete(conversationId);
   const newMessages: Array<typeof messages.$inferSelect> = [];
-
   if (opts.userMessage) {
     const row = await insertMessage({ conversationId, role: "user", content: opts.userMessage });
     newMessages.push(row);
@@ -217,6 +230,7 @@ export async function runAgentTurn(opts: {
       );
     }
     let terminated = false;
+    let cancelled = false;
     let ranTools = false;
     let lastContentEmpty = true;
 
@@ -227,6 +241,18 @@ export async function runAgentTurn(opts: {
           conversationId,
           role: "event",
           content: `[SESSION] Work session #${session.id} hit its ${maxDurationMinutes} minute time limit and was stopped.`,
+        });
+        newMessages.push(row);
+        break;
+      }
+
+      if (isTurnCancelled(conversationId)) {
+        cancelled = true;
+        terminated = true;
+        const row = await insertMessage({
+          conversationId,
+          role: "event",
+          content: `[CANCELLED] The human stopped this turn. No further work will run.`,
         });
         newMessages.push(row);
         break;
@@ -337,6 +363,10 @@ export async function runAgentTurn(opts: {
           status = "blocked";
           output = risk.reason;
           resultContent = `BLOCKED by safety layer: ${risk.reason}`;
+        } else if (isTurnCancelled(conversationId)) {
+          status = "cancelled";
+          output = "Turn cancelled by the human before this action ran.";
+          resultContent = `CANCELLED: ${output}`;
         } else {
           const recentCount = await countRecentActions();
           if (recentCount >= settings.maxActionsPerHour) {
@@ -459,7 +489,7 @@ export async function runAgentTurn(opts: {
     // Always end a working turn with a plain-language summary: if the last
     // assistant message was empty (e.g. it stopped on a tool call alone), make
     // one final no-tools completion asking for a summary.
-    if (ranTools && lastContentEmpty && Date.now() < deadline) {
+    if (ranTools && lastContentEmpty && Date.now() < deadline && !isTurnCancelled(conversationId)) {
       try {
         const summaryCompletion = await client.chat.completions.create({
           model: settings.modelName,
@@ -495,9 +525,15 @@ export async function runAgentTurn(opts: {
       }
     }
 
-    await finishSession(session, terminated ? "terminated" : "completed", terminated ? "time limit reached" : undefined);
+    await finishSession(
+      session,
+      cancelled || terminated ? "terminated" : "completed",
+      cancelled ? "cancelled by human" : terminated ? "time limit reached" : undefined,
+    );
+    cancelledConversations.delete(conversationId);
   } catch (err) {
     await finishSession(session, "failed", err instanceof Error ? err.message : String(err));
+    cancelledConversations.delete(conversationId);
     throw err;
   }
 

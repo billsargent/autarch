@@ -1,7 +1,7 @@
 // Fixture test for the context-compaction logic (src/lib/agent/compact.ts).
 // Verifies token estimation and the keep-window (what gets summarized vs kept).
 // Run with: npm run test:compact
-import { estimateTokens, totalHistoryTokens, selectKeepWindow } from "../src/lib/agent/compact";
+import { estimateTokens, totalHistoryTokens, selectKeepWindow, splitForCompaction } from "../src/lib/agent/compact";
 import { type HistoryRow } from "../src/lib/agent/messageHistory";
 
 let idCounter = 0;
@@ -42,6 +42,56 @@ check("kept are the newest ids", kept[0].id === many[8].id && kept[1].id === man
 // selectKeepWindow: always keeps at least the newest message even if it exceeds target
 const huge = [row({ role: "user", content: "q".repeat(4000) })]; // 1000 tokens
 check("always keeps newest", selectKeepWindow(huge, 100).length === 1);
+
+// ---------------------------------------------------------------------------
+// splitForCompaction boundary tests (regression for the tool-result drop bug):
+// if the keep/summarize boundary lands between an assistant tool_calls message
+// and its tool result, the leading tool row must be folded into the summarize
+// set so the outcome is not silently lost.
+// ---------------------------------------------------------------------------
+
+// Tool-call cluster straddling the boundary:
+//   ids: 1:user 2:assistant 3:assistant(tool_calls, LARGE args) 4:tool 5:user(newest)
+// target = 300: newest user (250) + tool (1) fit; the large assistant tool_calls
+// (~238) pushes past the target -> boundary lands between it and its tool result,
+// so keepRaw = [4:tool, 5:user] and the tool row must be folded into toSummarize.
+const toolCall = { id: "call_a", type: "function", function: { name: "run_shell_command", arguments: "x".repeat(900) } };
+const cluster = [
+  row({ role: "user", content: "x".repeat(1000) }), // 250 tokens
+  row({ role: "assistant", content: "y".repeat(400) }), // 100
+  row({ role: "assistant", content: "", toolCalls: [toolCall] }), // tool_calls ~238
+  row({ role: "tool", toolCallId: "call_a", toolName: "run_shell_command", toolArgs: { command: "x".repeat(900) }, content: "root" }), // 1
+  row({ role: "user", content: "z".repeat(1000) }), // 250 (newest)
+];
+const split = splitForCompaction(cluster, 300);
+check(
+  "boundary: leading tool row folded into toSummarize",
+  split.toSummarize.some((r) => r.role === "tool" && r.toolCallId === "call_a"),
+  JSON.stringify(split.toSummarize.map((r) => `${r.role}:${r.id}`)),
+);
+check(
+  "boundary: keep starts clean (no orphaned tool row)",
+  split.keep.length > 0 && split.keep[0].role !== "tool",
+  JSON.stringify(split.keep.map((r) => `${r.role}:${r.id}`)),
+);
+check(
+  "boundary: assistant tool_calls + tool result both summarized",
+  split.toSummarize.some((r) => r.role === "assistant" && Array.isArray(r.toolCalls)) &&
+    split.toSummarize.some((r) => r.role === "tool"),
+);
+check("boundary: newest user kept", split.keep.some((r) => r.role === "user" && r.content === "z".repeat(1000)));
+
+// Whole cluster fits in keep -> no tool rows folded (keep starts with a user).
+const splitBig = splitForCompaction(cluster, 1200);
+check(
+  "cluster fully kept: no fold",
+  splitBig.keep.length === cluster.length && splitBig.toSummarize.length === 0 && splitBig.keep[0].role === "user",
+  JSON.stringify(splitBig.keep.map((r) => `${r.role}:${r.id}`)),
+);
+
+// Nothing to summarize -> empty toSummarize.
+const splitTiny = splitForCompaction([row({ role: "user", content: "a".repeat(40) })], 1000);
+check("small history: everything kept", splitTiny.toSummarize.length === 0 && splitTiny.keep.length === 1);
 
 // buildPromptMessages is exercised in integration; the pure logic above is the
 // decision core.

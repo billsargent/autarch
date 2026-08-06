@@ -7,6 +7,8 @@ export type HistoryRow = {
   role: "system" | "user" | "assistant" | "tool" | "event";
   content: string | null;
   toolCallId?: string | null;
+  toolName?: string | null;
+  toolArgs?: unknown;
   toolCalls?: unknown;
 };
 

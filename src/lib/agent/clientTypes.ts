@@ -19,7 +19,7 @@ export interface ToolExecutionRow {
   input: unknown;
   summary: string | null;
   output: string | null;
-  status: "success" | "error" | "awaiting_approval" | "approved" | "denied" | "blocked" | "rate_limited";
+  status: "success" | "error" | "awaiting_approval" | "approved" | "denied" | "blocked" | "rate_limited" | "cancelled";
   riskLevel: "low" | "medium" | "high" | "critical" | "blocked";
   riskReason: string | null;
   requestedAt: string;

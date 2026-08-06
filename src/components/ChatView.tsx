@@ -165,10 +165,26 @@ export default function ChatView() {
     }
     const qs = params.toString();
     const res = await fetch(`/api/conversations/${id}${qs ? `?${qs}` : ""}`).then((r) => r.json());
+
+    let incoming: MessageRow[] = res.messages || [];
+    // If a `since` poll came back with a full page, keep fetching the remainder so
+    // no messages are missed between polls (guard caps the total).
+    if (!opts?.older && params.has("since") && incoming.length >= INITIAL_LIMIT) {
+      for (let guard = 0; guard < 10; guard++) {
+        const lastId = incoming[incoming.length - 1].id;
+        const p2 = new URLSearchParams();
+        p2.set("since", String(lastId));
+        p2.set("limit", String(INITIAL_LIMIT));
+        const r2 = await fetch(`/api/conversations/${id}?${p2.toString()}`).then((r) => r.json());
+        const more: MessageRow[] = r2.messages || [];
+        if (!more.length) break;
+        incoming = [...incoming, ...more];
+        if (more.length < INITIAL_LIMIT) break;
+      }
+    }
+
     if (seq !== loadSeq.current) return; // a newer load superseded this one
     setLoadingOlder(false);
-
-    const incoming: MessageRow[] = res.messages || [];
     const running = Boolean(res.running);
 
     if (opts?.older) {
@@ -268,7 +284,21 @@ export default function ChatView() {
   // Stable callbacks for memoized children: always call the latest `send`.
   const sendRef = useRef<(t: string) => void>(() => {});
   const onQuickAction = useCallback((q: string) => sendRef.current(q), []);
-  const onStop = useCallback(() => abortRef.current?.abort(), []);
+  const onStop = useCallback(async () => {
+    const cid = activeId;
+    if (cid) {
+      try {
+        await fetch("/api/chat/cancel", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ conversationId: cid }),
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    abortRef.current?.abort();
+  }, [activeId]);
   const onToggleTools = useCallback(() => setShowTools((v) => !v), []);
 
   async function send(text: string) {

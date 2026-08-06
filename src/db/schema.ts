@@ -93,7 +93,7 @@ export const toolExecutions = sqliteTable("tool_executions", {
   summary: text("summary"),
   output: text("output"),
   status: text("status", {
-    enum: ["success", "error", "awaiting_approval", "approved", "denied", "blocked", "rate_limited"],
+    enum: ["success", "error", "awaiting_approval", "approved", "denied", "blocked", "rate_limited", "cancelled"],
   })
     .notNull()
     .default("success"),

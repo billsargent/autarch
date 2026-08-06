@@ -10,7 +10,7 @@ type ChatMessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 // Rough token estimator (~4 chars/token for mixed English/code). Good enough
 // for deciding when to compact; exact counts aren't required.
 const CHAR_PER_TOKEN = 4;
-const PROMPT_OVERHEAD_TOKENS = 2500; // system prompt + framing + tools
+const PROMPT_OVERHEAD_TOKENS = 8000; // realistic system prompt + tools + framing
 const SUMMARY_BATCH_TOKENS = 30000;
 
 export function estimateTokens(text: string): number {
@@ -49,6 +49,28 @@ export function selectKeepWindow(rows: HistoryRow[], targetTokens: number): Hist
   return keep;
 }
 
+export interface CompactionSplit {
+  keep: HistoryRow[];
+  toSummarize: HistoryRow[];
+}
+
+// Decide what stays verbatim vs what gets summarized. Any leading tool-result
+// rows of the keep window are folded into the summarize set: they can only be
+// the results of assistant tool_calls that were just summarized (a tool row
+// always immediately follows its assistant tool_calls), and leaving them in
+// `keep` would orphan them — the sanitizer would drop them and the outcome
+// would be lost entirely. Exposed for testing.
+export function splitForCompaction(rows: HistoryRow[], targetTokens: number): CompactionSplit {
+  const keepRaw = selectKeepWindow(rows, targetTokens);
+  let i = 0;
+  while (i < keepRaw.length && keepRaw[i].role === "tool") i++;
+  const extraSummarize = keepRaw.slice(0, i);
+  const keep = keepRaw.slice(i);
+  const keepIds = new Set(keep.map((r) => r.id));
+  const toSummarize = [...rows.filter((r) => !keepIds.has(r.id)), ...extraSummarize];
+  return { keep, toSummarize };
+}
+
 export interface BuildOptions {
   conversationId: number;
   rows: HistoryRow[];
@@ -73,9 +95,7 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
   if (total + PROMPT_OVERHEAD_TOKENS <= maxContext) return full;
 
   // Keep the newest messages that fit within `target`; summarize everything older.
-  const keep = selectKeepWindow(rows, target);
-  const keepIds = new Set(keep.map((r) => r.id));
-  const toSummarize = rows.filter((r) => !keepIds.has(r.id));
+  const { keep, toSummarize } = splitForCompaction(rows, target);
   if (!toSummarize.length) return full;
 
   const newestToSummarizeId = toSummarize[toSummarize.length - 1].id;
@@ -110,13 +130,15 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
 }
 
 async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]): Promise<string> {
-  // Chunk input so a single call stays within limits; concatenate the results.
+  // Cluster-aware chunking: never split between an assistant tool_calls message
+  // and its tool result rows. A `tool` row always stays in the current chunk with
+  // its preceding assistant, so chunk boundaries only ever land after non-tool rows.
   const chunks: HistoryRow[][] = [];
   let cur: HistoryRow[] = [];
   let curTokens = 0;
   for (const r of rows) {
     const t = rowTokens(r);
-    if (cur.length && curTokens + t > SUMMARY_BATCH_TOKENS) {
+    if (cur.length && curTokens + t > SUMMARY_BATCH_TOKENS && r.role !== "tool") {
       chunks.push(cur);
       cur = [];
       curTokens = 0;
@@ -128,10 +150,31 @@ async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]
 
   const parts: string[] = [];
   for (const chunk of chunks) {
-    const text = historyToApiMessages(chunk)
-      .map((m) => {
-        const content = typeof m.content === "string" ? m.content : "";
-        return `${m.role}${m.role === "tool" && m.tool_call_id ? `(${m.tool_call_id})` : ""}: ${content}`;
+    // Serialize directly from rows so the summary can see WHICH tool ran with
+    // WHAT arguments (via historyToApiMessages the assistant tool_calls message
+    // has empty content and tool rows lose their name/args).
+    const text = chunk
+      .map((r) => {
+        const content = r.content ?? "";
+        if (r.role === "tool") {
+          const name = r.toolName ? `[${r.toolName}]` : "";
+          let args = "";
+          if (r.toolArgs) {
+            try {
+              args = ` args=${JSON.stringify(r.toolArgs)}`;
+            } catch {
+              /* ignore */
+            }
+          }
+          return `tool${name}${args}: ${content}`;
+        }
+        if (r.role === "assistant" && Array.isArray(r.toolCalls)) {
+          const calls = (r.toolCalls as Array<{ function?: { name?: string; arguments?: string } }>)
+            .map((c) => `${c.function?.name ?? "?"}(${c.function?.arguments ?? ""})`)
+            .join("; ");
+          return `assistant(tool_calls: ${calls})`;
+        }
+        return `${r.role}: ${content}`;
       })
       .join("\n");
     const completion = await client.chat.completions.create({
@@ -140,7 +183,7 @@ async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]
         {
           role: "system",
           content:
-            "You summarize a conversation excerpt into dense bullet points. Preserve: topics discussed, actions/tools run and their outcomes, decisions made, unresolved issues, pending approvals, and the current task state. Be concise but information-dense. No preamble.",
+            "You summarize a conversation excerpt into dense bullet points. Preserve: topics discussed, actions/tools run (including tool names and arguments) and their outcomes, decisions made, unresolved issues, pending approvals, and the current task state. Be concise but information-dense. No preamble.",
         },
         { role: "user", content: text },
       ],
