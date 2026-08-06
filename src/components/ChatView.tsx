@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { ConversationRow, MessageRow, ToolExecutionRow } from "@/lib/agent/clientTypes";
+import Markdown from "./Markdown";
 
 function toolCardStyle(content: string | null) {
   const c = content || "";
@@ -503,14 +504,14 @@ export default function ChatView() {
                 if (!m.content && !m.reasoning) return null;
                 return (
                   <div key={m.id} className="flex justify-start">
-                    <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-neutral-900 px-4 py-3 text-sm text-neutral-100">
+                    <div className="max-w-[85%] min-w-0 rounded-2xl rounded-bl-sm bg-neutral-900 px-4 py-3 text-sm text-neutral-100">
                       {m.reasoning && (
-                        <details className="mb-2">
+                        <details className="mb-2 rounded-lg border border-neutral-800 bg-neutral-950/60 px-3 py-2">
                           <summary className="cursor-pointer text-[11px] text-neutral-500">thinking…</summary>
-                          <p className="mt-1 whitespace-pre-wrap text-[11px] text-neutral-500">{m.reasoning}</p>
+                          <Markdown className="mt-1 text-[11px] text-neutral-500">{m.reasoning}</Markdown>
                         </details>
                       )}
-                      {m.content && <p className="whitespace-pre-wrap">{m.content}</p>}
+                      {m.content && <Markdown>{m.content}</Markdown>}
                     </div>
                   </div>
                 );
