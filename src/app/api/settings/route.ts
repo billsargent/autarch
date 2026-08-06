@@ -62,6 +62,9 @@ export async function PUT(req: Request) {
     "allowFrameworkMutations",
     "allowDestructiveShell",
     "allowProtectedSystemOps",
+    "maxContextTokens",
+    "compactTargetTokens",
+    "autoCompact",
   ];
   const patch: Record<string, unknown> = {};
   for (const key of allowedKeys) {

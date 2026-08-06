@@ -9,6 +9,8 @@ import { sql } from "drizzle-orm";
 export const conversations = sqliteTable("conversations", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull().default("New session"),
+  summary: text("summary"),
+  compactedThroughId: integer("compacted_through_id"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
@@ -182,5 +184,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   allowFrameworkMutations: integer("allow_framework_mutations", { mode: "boolean" }).notNull().default(false),
   allowDestructiveShell: integer("allow_destructive_shell", { mode: "boolean" }).notNull().default(false),
   allowProtectedSystemOps: integer("allow_protected_system_ops", { mode: "boolean" }).notNull().default(false),
+  maxContextTokens: integer("max_context_tokens").notNull().default(24000),
+  compactTargetTokens: integer("compact_target_tokens").notNull().default(9000),
+  autoCompact: integer("auto_compact", { mode: "boolean" }).notNull().default(true),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

@@ -535,6 +535,46 @@ export default function SettingsView() {
         </section>
 
         <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+          <h2 className="text-sm font-semibold">Context management</h2>
+          <p className="mt-1 text-xs text-neutral-500">
+            When a conversation grows large, older messages are folded into a cached summary so the model&apos;s context
+            window stays bounded and per-turn cost stays controlled. Your full history is always kept in the database.
+          </p>
+          <ToggleRow
+            label="Auto-compact long conversations"
+            desc="When the estimated context exceeds the max below, keep the most recent messages and summarize the rest."
+            checked={settings.autoCompact}
+            onToggle={(v) => save({ autoCompact: v })}
+          />
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <label className="text-xs text-neutral-400">
+              Max context tokens
+              <input
+                type="number"
+                defaultValue={settings.maxContextTokens}
+                onBlur={(e) => save({ maxContextTokens: Number(e.target.value) || 2000 })}
+                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
+              />
+              <span className="mt-1 block text-[10px] text-neutral-600">
+                Start summarizing once history exceeds this.
+              </span>
+            </label>
+            <label className="text-xs text-neutral-400">
+              Keep recent tokens
+              <input
+                type="number"
+                defaultValue={settings.compactTargetTokens}
+                onBlur={(e) => save({ compactTargetTokens: Number(e.target.value) || 500 })}
+                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
+              />
+              <span className="mt-1 block text-[10px] text-neutral-600">
+                How many of the newest messages to keep verbatim.
+              </span>
+            </label>
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
           <h2 className="text-sm font-semibold">Enabled tools</h2>
           <p className="mt-1 text-xs text-neutral-500">Turn off any capability you don&apos;t want the agent to have at all.</p>
           <div className="mt-3 space-y-2">

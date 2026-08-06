@@ -2,8 +2,8 @@ import { db } from "@/db";
 import { conversations, messages, toolExecutions, workSessions } from "@/db/schema";
 import { eq, asc, and, gte, inArray, sql as dsql } from "drizzle-orm";
 import type OpenAI from "openai";
-import { historyToApiMessages } from "./messageHistory";
 import { getDeepSeekClient } from "./deepseekClient";
+import { buildPromptMessages } from "./compact";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, executeTool } from "./tools";
@@ -190,7 +190,8 @@ export async function runAgentTurn(opts: {
     const tools = getEnabledToolDefinitions(settings.enabledTools as string[]);
 
     const historyRows = await loadHistory(conversationId);
-    const apiMessages: ChatMessageParam[] = [{ role: "system", content: systemPrompt }, ...historyToApiMessages(historyRows)];
+    const built = await buildPromptMessages({ conversationId, rows: historyRows, settings, client });
+    const apiMessages: ChatMessageParam[] = [{ role: "system", content: systemPrompt }, ...built];
 
     const maxSteps = Math.max(1, settings.maxAgentSteps);
     // Direct user chat: in conversation mode we DON'T expose tools at all (a tool

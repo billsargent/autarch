@@ -13,7 +13,8 @@
     "db:studio": "drizzle-kit studio",
     "worker": "tsx src/worker/index.ts",
     "backup": "tsx scripts/backup.ts",
-    "test:sanitizer": "tsx scripts/sanitize-test.ts"
+    "test:sanitizer": "tsx scripts/sanitize-test.ts",
+    "test:compact": "tsx scripts/compact-test.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",

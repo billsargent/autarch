@@ -77,6 +77,9 @@ export interface SettingsRow {
   allowFrameworkMutations: boolean;
   allowDestructiveShell: boolean;
   allowProtectedSystemOps: boolean;
+  maxContextTokens: number;
+  compactTargetTokens: number;
+  autoCompact: boolean;
   updatedAt: string;
 }
 

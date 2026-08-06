@@ -13,6 +13,8 @@ const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL DEFAULT 'New session',
+  summary TEXT,
+  compacted_through_id INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
@@ -140,6 +142,9 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   allow_framework_mutations INTEGER NOT NULL DEFAULT 0,
   allow_destructive_shell INTEGER NOT NULL DEFAULT 0,
   allow_protected_system_ops INTEGER NOT NULL DEFAULT 0,
+  max_context_tokens INTEGER NOT NULL DEFAULT 24000,
+  compact_target_tokens INTEGER NOT NULL DEFAULT 9000,
+  auto_compact INTEGER NOT NULL DEFAULT 1,
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 `;
@@ -171,6 +176,15 @@ if (!globalForDb.__agentLabSqlite) {
   }
   if (!existingCols("agent_settings").includes("tool_retries")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN tool_retries INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!existingCols("conversations").includes("summary")) {
+    sqlite.exec("ALTER TABLE conversations ADD COLUMN summary TEXT");
+    sqlite.exec("ALTER TABLE conversations ADD COLUMN compacted_through_id INTEGER");
+  }
+  if (!existingCols("agent_settings").includes("max_context_tokens")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN max_context_tokens INTEGER NOT NULL DEFAULT 24000");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN compact_target_tokens INTEGER NOT NULL DEFAULT 9000");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN auto_compact INTEGER NOT NULL DEFAULT 1");
   }
 
   globalForDb.__agentLabSqlite = sqlite;
