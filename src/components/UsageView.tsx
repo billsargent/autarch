@@ -9,6 +9,8 @@ interface BucketRow {
   total: number;
   cost: number;
   sessions: number;
+  cacheHit: number;
+  cacheMiss: number;
 }
 
 interface Totals {
@@ -17,6 +19,8 @@ interface Totals {
   total: number;
   cost: number;
   sessions: number;
+  cacheHit: number;
+  cacheMiss: number;
 }
 
 interface UsageData {
@@ -124,6 +128,7 @@ export default function UsageView() {
                 <th className="px-3 py-2 text-right font-medium">Completion</th>
                 <th className="px-3 py-2 text-right font-medium">Total tokens</th>
                 <th className="px-3 py-2 text-right font-medium">Cost</th>
+                <th className="px-3 py-2 text-right font-medium">Cache hit</th>
                 <th className="px-3 py-2 text-right font-medium">Sessions</th>
                 <th className="px-3 py-2" />
               </tr>
@@ -131,7 +136,7 @@ export default function UsageView() {
             <tbody className="divide-y divide-neutral-800 bg-neutral-950">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-neutral-500">
+                  <td colSpan={8} className="px-3 py-6 text-center text-neutral-500">
                     No usage recorded yet.
                   </td>
                 </tr>
@@ -143,6 +148,11 @@ export default function UsageView() {
                   <td className="px-3 py-2 text-right">{fmt(r.completion)}</td>
                   <td className="px-3 py-2 text-right font-semibold text-neutral-100">{fmt(r.total)}</td>
                   <td className="px-3 py-2 text-right">{fmtCost(r.cost)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {r.cacheHit + r.cacheMiss > 0
+                      ? `${Math.round((r.cacheHit / (r.cacheHit + r.cacheMiss)) * 100)}%`
+                      : "—"}
+                  </td>
                   <td className="px-3 py-2 text-right">{fmt(r.sessions)}</td>
                   <td className="w-28 px-3 py-2">
                     <Bar value={r.total} max={maxTotal} />

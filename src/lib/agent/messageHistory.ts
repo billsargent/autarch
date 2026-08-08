@@ -6,6 +6,7 @@ export type HistoryRow = {
   id: number;
   role: "system" | "user" | "assistant" | "tool" | "event";
   content: string | null;
+  reasoning?: string | null;
   toolCallId?: string | null;
   toolName?: string | null;
   toolArgs?: unknown;
@@ -74,6 +75,11 @@ export function historyToApiMessages(rows: HistoryRow[]): ChatMessageParam[] {
           role: "assistant",
           content: row.content ?? "",
           tool_calls: toolCalls,
+          // DeepSeek requires the assistant's reasoning_content to be passed back
+          // on tool-call turns (requests carrying `tools`), or the next request
+          // returns a 400. For plain (non-tool) assistant turns it is ignored by
+          // the API, so we deliberately omit it there to keep input tokens down.
+          ...(row.reasoning ? { reasoning_content: row.reasoning } : {}),
         } as ChatMessageParam);
         pendingIds = new Set(toolCalls.map((c) => c.id));
       } else {

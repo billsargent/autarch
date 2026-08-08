@@ -65,6 +65,10 @@ export async function PUT(req: Request) {
     "maxContextTokens",
     "compactTargetTokens",
     "autoCompact",
+    "thinkingEnabled",
+    "reasoningEffort",
+    "maxOutputTokens",
+    "cacheHitInputPricePerMTok",
   ];
   const patch: Record<string, unknown> = {};
   for (const key of allowedKeys) {

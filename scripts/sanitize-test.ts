@@ -4,7 +4,13 @@
 // response for each tool_call_id. Run with: npm run test:sanitizer
 import { historyToApiMessages, type HistoryRow } from "../src/lib/agent/messageHistory";
 
-type Msg = { role: string; content?: string; tool_calls?: unknown; tool_call_id?: string };
+type Msg = {
+  role: string;
+  content?: string;
+  tool_calls?: unknown;
+  tool_call_id?: string;
+  reasoning_content?: string;
+};
 
 // Throws unless every assistant(tool_calls) message is immediately followed by
 // tool responses covering each tool_call_id (with nothing in between).
@@ -49,7 +55,7 @@ function check(name: string, rows: HistoryRow[], expect: Msg[]) {
     failures++;
     return;
   }
-  const sig = (m: Msg) => `${m.role}:${(m.tool_call_id ?? m.content ?? "").slice(0, 32)}`;
+  const sig = (m: Msg) => `${m.role}:${m.reasoning_content ? "R:" : ""}${(m.tool_call_id ?? m.content ?? "").slice(0, 32)}`;
   const gotSig = got.map(sig).join(" | ");
   const expSig = expect.map(sig).join(" | ");
   if (gotSig !== expSig) {
@@ -72,6 +78,25 @@ check(
   [
     { role: "user", content: "hi" },
     { role: "assistant", tool_calls: [call("call_a")] },
+    { role: "tool", tool_call_id: "call_a", content: "done" },
+    { role: "assistant", content: "summary" },
+  ],
+);
+
+// 1b. Tool-call assistant rows keep their chain-of-thought. DeepSeek requires
+// reasoning_content to be passed back on tool turns (requests carrying `tools`);
+// plain assistant rows omit it.
+check(
+  "tool_calls assistant keeps reasoning_content",
+  [
+    row({ role: "user", content: "hi" }),
+    row({ role: "assistant", content: "", reasoning: "need to check the disk first", toolCalls: [call("call_a")] }),
+    row({ role: "tool", toolCallId: "call_a", content: "done" }),
+    row({ role: "assistant", content: "summary" }),
+  ],
+  [
+    { role: "user", content: "hi" },
+    { role: "assistant", reasoning_content: "need to check the disk first", tool_calls: [call("call_a")] },
     { role: "tool", tool_call_id: "call_a", content: "done" },
     { role: "assistant", content: "summary" },
   ],

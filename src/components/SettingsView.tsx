@@ -362,6 +362,53 @@ export default function SettingsView() {
                 : "Click 'Test & load models' to populate from the API."}
             </span>
           </label>
+          <div className="mt-3 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold text-neutral-300">Thinking mode (chain-of-thought)</p>
+                <p className="mt-0.5 text-[11px] text-neutral-500">
+                  DeepSeek runs CoT by default at high effort, spending output tokens on every step. Lower effort or
+                  disabling it cuts cost.
+                </p>
+              </div>
+              <button
+                onClick={() => save({ thinkingEnabled: !settings.thinkingEnabled })}
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-[11px] font-semibold ${
+                  settings.thinkingEnabled ? "bg-cyan-600 text-white" : "bg-neutral-700 text-neutral-300"
+                }`}
+              >
+                {settings.thinkingEnabled ? "ON" : "OFF"}
+              </button>
+            </div>
+            {settings.thinkingEnabled && (
+              <div className="mt-3 grid grid-cols-2 gap-4">
+                <label className="text-xs text-neutral-400">
+                  Reasoning effort
+                  <select
+                    value={settings.reasoningEffort}
+                    onChange={(e) => save({ reasoningEffort: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none"
+                  >
+                    <option value="low">low (cheapest)</option>
+                    <option value="high">high</option>
+                    <option value="max">max</option>
+                  </select>
+                  <span className="mt-1 block text-[10px] text-neutral-600">On v4-flash, low maps to low effort.</span>
+                </label>
+                <label className="text-xs text-neutral-400">
+                  Max output tokens / step
+                  <input
+                    type="number"
+                    step="100"
+                    defaultValue={settings.maxOutputTokens}
+                    onBlur={(e) => save({ maxOutputTokens: Number(e.target.value) || 256 })}
+                    className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none"
+                  />
+                  <span className="mt-1 block text-[10px] text-neutral-600">Caps reasoning + answer per model call.</span>
+                </label>
+              </div>
+            )}
+          </div>
           <label className="mt-3 block text-xs text-neutral-400">
             Extra system prompt instructions (optional)
             <textarea
@@ -493,9 +540,9 @@ export default function SettingsView() {
               />
             </label>
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-4">
+          <div className="mt-3 grid grid-cols-3 gap-4">
             <label className="text-xs text-neutral-400">
-              Input price / 1M tokens (USD)
+              Input price / 1M tokens (cache miss)
               <input
                 type="number"
                 step="0.01"
@@ -505,7 +552,7 @@ export default function SettingsView() {
               />
             </label>
             <label className="text-xs text-neutral-400">
-              Output price / 1M tokens (USD)
+              Output price / 1M tokens
               <input
                 type="number"
                 step="0.01"
@@ -513,6 +560,17 @@ export default function SettingsView() {
                 onBlur={(e) => save({ outputPricePerMTok: Number(e.target.value) || 0 })}
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
               />
+            </label>
+            <label className="text-xs text-neutral-400">
+              Input price / 1M tokens (cache hit)
+              <input
+                type="number"
+                step="0.0001"
+                defaultValue={settings.cacheHitInputPricePerMTok}
+                onBlur={(e) => save({ cacheHitInputPricePerMTok: Number(e.target.value) || 0 })}
+                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
+              />
+              <span className="mt-1 block text-[10px] text-neutral-600">DeepSeek caches prompt prefixes automatically.</span>
             </label>
           </div>
           <label className="mt-3 block text-xs text-neutral-400">

@@ -47,6 +47,8 @@ CREATE TABLE IF NOT EXISTS work_sessions (
   actions_used INTEGER NOT NULL DEFAULT 0,
   prompt_tokens INTEGER NOT NULL DEFAULT 0,
   completion_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_hit_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
   total_tokens INTEGER NOT NULL DEFAULT 0,
   cost_usd REAL NOT NULL DEFAULT 0,
   reason TEXT
@@ -115,7 +117,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE TABLE IF NOT EXISTS agent_settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   autonomy_mode TEXT NOT NULL DEFAULT 'manual',
-  model_name TEXT NOT NULL DEFAULT 'deepseek-chat',
+  model_name TEXT NOT NULL DEFAULT 'deepseek-v4-flash',
   max_agent_steps INTEGER NOT NULL DEFAULT 16,
   max_actions_per_hour INTEGER NOT NULL DEFAULT 120,
   command_timeout_sec INTEGER NOT NULL DEFAULT 30,
@@ -135,8 +137,8 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   min_gap_minutes INTEGER NOT NULL DEFAULT 10,
   max_sessions_per_day INTEGER NOT NULL DEFAULT 24,
   max_session_minutes INTEGER NOT NULL DEFAULT 10,
-  input_price_per_mtok REAL NOT NULL DEFAULT 0.27,
-  output_price_per_mtok REAL NOT NULL DEFAULT 1.1,
+  input_price_per_mtok REAL NOT NULL DEFAULT 0.14,
+  output_price_per_mtok REAL NOT NULL DEFAULT 0.28,
   unrestricted_mode INTEGER NOT NULL DEFAULT 0,
   allow_secret_reads INTEGER NOT NULL DEFAULT 0,
   allow_framework_mutations INTEGER NOT NULL DEFAULT 0,
@@ -145,6 +147,10 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   max_context_tokens INTEGER NOT NULL DEFAULT 24000,
   compact_target_tokens INTEGER NOT NULL DEFAULT 9000,
   auto_compact INTEGER NOT NULL DEFAULT 1,
+  thinking_enabled INTEGER NOT NULL DEFAULT 1,
+  reasoning_effort TEXT NOT NULL DEFAULT 'low',
+  max_output_tokens INTEGER NOT NULL DEFAULT 2048,
+  cache_hit_input_price_per_mtok REAL NOT NULL DEFAULT 0.0028,
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 `;
@@ -185,6 +191,16 @@ if (!globalForDb.__agentLabSqlite) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN max_context_tokens INTEGER NOT NULL DEFAULT 24000");
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN compact_target_tokens INTEGER NOT NULL DEFAULT 9000");
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN auto_compact INTEGER NOT NULL DEFAULT 1");
+  }
+  if (!existingCols("agent_settings").includes("thinking_enabled")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN thinking_enabled INTEGER NOT NULL DEFAULT 1");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN reasoning_effort TEXT NOT NULL DEFAULT 'low'");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN max_output_tokens INTEGER NOT NULL DEFAULT 2048");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN cache_hit_input_price_per_mtok REAL NOT NULL DEFAULT 0.0028");
+  }
+  if (!existingCols("work_sessions").includes("cache_hit_tokens")) {
+    sqlite.exec("ALTER TABLE work_sessions ADD COLUMN cache_hit_tokens INTEGER NOT NULL DEFAULT 0");
+    sqlite.exec("ALTER TABLE work_sessions ADD COLUMN cache_miss_tokens INTEGER NOT NULL DEFAULT 0");
   }
 
   globalForDb.__agentLabSqlite = sqlite;

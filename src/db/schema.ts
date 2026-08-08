@@ -53,6 +53,8 @@ export const workSessions = sqliteTable("work_sessions", {
   actionsUsed: integer("actions_used").notNull().default(0),
   promptTokens: integer("prompt_tokens").notNull().default(0),
   completionTokens: integer("completion_tokens").notNull().default(0),
+  cacheHitTokens: integer("cache_hit_tokens").notNull().default(0),
+  cacheMissTokens: integer("cache_miss_tokens").notNull().default(0),
   totalTokens: integer("total_tokens").notNull().default(0),
   costUsd: real("cost_usd").notNull().default(0),
   reason: text("reason"),
@@ -153,7 +155,7 @@ export const agentSettings = sqliteTable("agent_settings", {
   autonomyMode: text("autonomy_mode", { enum: ["manual", "balanced", "autonomous", "unrestricted"] })
     .notNull()
     .default("manual"),
-  modelName: text("model_name").notNull().default("deepseek-chat"),
+  modelName: text("model_name").notNull().default("deepseek-v4-flash"),
   maxAgentSteps: integer("max_agent_steps").notNull().default(16),
   maxActionsPerHour: integer("max_actions_per_hour").notNull().default(120),
   commandTimeoutSec: integer("command_timeout_sec").notNull().default(30),
@@ -177,8 +179,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   minGapMinutes: integer("min_gap_minutes").notNull().default(10),
   maxSessionsPerDay: integer("max_sessions_per_day").notNull().default(24),
   maxSessionMinutes: integer("max_session_minutes").notNull().default(10),
-  inputPricePerMTok: real("input_price_per_mtok").notNull().default(0.27),
-  outputPricePerMTok: real("output_price_per_mtok").notNull().default(1.1),
+  inputPricePerMTok: real("input_price_per_mtok").notNull().default(0.14),
+  outputPricePerMTok: real("output_price_per_mtok").notNull().default(0.28),
   unrestrictedMode: integer("unrestricted_mode", { mode: "boolean" }).notNull().default(false),
   allowSecretReads: integer("allow_secret_reads", { mode: "boolean" }).notNull().default(false),
   allowFrameworkMutations: integer("allow_framework_mutations", { mode: "boolean" }).notNull().default(false),
@@ -187,5 +189,9 @@ export const agentSettings = sqliteTable("agent_settings", {
   maxContextTokens: integer("max_context_tokens").notNull().default(24000),
   compactTargetTokens: integer("compact_target_tokens").notNull().default(9000),
   autoCompact: integer("auto_compact", { mode: "boolean" }).notNull().default(true),
+  thinkingEnabled: integer("thinking_enabled", { mode: "boolean" }).notNull().default(true),
+  reasoningEffort: text("reasoning_effort").notNull().default("low"),
+  maxOutputTokens: integer("max_output_tokens").notNull().default(2048),
+  cacheHitInputPricePerMTok: real("cache_hit_input_price_per_mtok").notNull().default(0.0028),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

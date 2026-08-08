@@ -18,17 +18,17 @@ function check(name: string, cond: boolean, detail?: string) {
   }
 }
 
-// estimateTokens: ~4 chars/token
+// estimateTokens: ~3.3 chars/token (per DeepSeek token_usage docs)
 check("estimateTokens empty", estimateTokens("") === 0);
-check("estimateTokens 'hello'", estimateTokens("hello") === 2); // ceil(5/4)
-check("estimateTokens 1000 chars", estimateTokens("a".repeat(1000)) === 250);
+check("estimateTokens 'hello'", estimateTokens("hello") === 2); // ceil(5/3.3)
+check("estimateTokens 1000 chars", estimateTokens("a".repeat(1000)) === 304); // ceil(1000/3.3)
 
 // totalHistoryTokens sums content across rows
 const rows = [
-  row({ role: "user", content: "a".repeat(400) }), // 100 tokens
-  row({ role: "assistant", content: "b".repeat(200) }), // 50 tokens
+  row({ role: "user", content: "a".repeat(400) }), // ceil(400/3.3)=122
+  row({ role: "assistant", content: "b".repeat(200) }), // ceil(200/3.3)=61
 ];
-check("totalHistoryTokens", totalHistoryTokens(rows) === 150);
+check("totalHistoryTokens", totalHistoryTokens(rows) === 183);
 
 // selectKeepWindow: under target -> everything kept
 check("keep all when small", selectKeepWindow([row({ role: "user", content: "x".repeat(400) })], 1000).length === 1);

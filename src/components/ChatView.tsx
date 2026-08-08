@@ -24,6 +24,8 @@ interface StreamEvent {
   output?: string;
   conversationId?: number;
   message?: string;
+  content?: string;
+  reasoning?: string;
 }
 
 // Last-seen message id per conversation, persisted in localStorage so unread
@@ -399,6 +401,14 @@ export default function ChatView() {
     switch (evt.type) {
       case "step_start":
         setLiveStatusByConvo((prev) => ({ ...prev, [convoId]: `working on step ${evt.step} of ${evt.maxSteps}…` }));
+        break;
+      case "model_stream":
+        // Live indicator while the model streams. Show visible answer text only
+        // (not the raw chain-of-thought).
+        setLiveStatusByConvo((prev) => ({
+          ...prev,
+          [convoId]: evt.content ? `generating… ${(evt.content || "").slice(0, 60)}` : "thinking…",
+        }));
         break;
       case "tool_start":
         setLiveByConvo((prev) => ({

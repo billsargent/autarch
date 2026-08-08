@@ -80,6 +80,10 @@ export interface SettingsRow {
   maxContextTokens: number;
   compactTargetTokens: number;
   autoCompact: boolean;
+  thinkingEnabled: boolean;
+  reasoningEffort: string;
+  maxOutputTokens: number;
+  cacheHitInputPricePerMTok: number;
   updatedAt: string;
 }
 

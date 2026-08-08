@@ -7,9 +7,10 @@ import { historyToApiMessages, type HistoryRow } from "./messageHistory";
 
 type ChatMessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
-// Rough token estimator (~4 chars/token for mixed English/code). Good enough
-// for deciding when to compact; exact counts aren't required.
-const CHAR_PER_TOKEN = 4;
+// Rough token estimator. DeepSeek docs (quick_start/token_usage) say ~1 English
+// char ≈ 0.3 token (≈3.3 chars/token). 4 chars/token under-estimated real usage
+// by ~18%, so compaction was triggering later than the real token budget.
+const CHAR_PER_TOKEN = 3.3;
 const PROMPT_OVERHEAD_TOKENS = 8000; // realistic system prompt + tools + framing
 const SUMMARY_BATCH_TOKENS = 30000;
 
@@ -188,6 +189,12 @@ async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]
         { role: "user", content: text },
       ],
       max_tokens: chunks.length > 1 ? 800 : 1000,
+      // Summarization doesn't need high-effort chain-of-thought; pin it low so
+      // compaction calls stay cheap.
+      reasoning_effort: "low",
+      thinking: { type: "enabled" },
+    } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
+      thinking?: { type: "enabled" | "disabled" };
     });
     const out = completion.choices[0]?.message?.content?.trim() ?? "";
     if (out) parts.push(out);

@@ -12,6 +12,8 @@ interface BucketRow {
   total: number;
   cost: number;
   sessions: number;
+  cacheHit: number;
+  cacheMiss: number;
 }
 
 interface Totals {
@@ -20,6 +22,8 @@ interface Totals {
   total: number;
   cost: number;
   sessions: number;
+  cacheHit: number;
+  cacheMiss: number;
 }
 
 function bucketize(expr: string, limit: number): BucketRow[] {
@@ -30,7 +34,9 @@ function bucketize(expr: string, limit: number): BucketRow[] {
         COALESCE(SUM(completion_tokens),0) AS completion,
         COALESCE(SUM(total_tokens),0) AS total,
         COALESCE(SUM(cost_usd),0) AS cost,
-        COUNT(*) AS sessions
+        COUNT(*) AS sessions,
+        COALESCE(SUM(cache_hit_tokens),0) AS cacheHit,
+        COALESCE(SUM(cache_miss_tokens),0) AS cacheMiss
        FROM work_sessions
        WHERE status != 'skipped'
        GROUP BY bucket
@@ -46,12 +52,14 @@ function bucketize(expr: string, limit: number): BucketRow[] {
     total: num(r.total),
     cost: num(r.cost),
     sessions: num(r.sessions),
+    cacheHit: num(r.cacheHit),
+    cacheMiss: num(r.cacheMiss),
   }));
 }
 
 function totals(sinceUnixSec?: number | null, prefixExpr?: string, prefixVal?: string): Totals {
   let sql =
-    "SELECT COALESCE(SUM(prompt_tokens),0) AS prompt, COALESCE(SUM(completion_tokens),0) AS completion, COALESCE(SUM(total_tokens),0) AS total, COALESCE(SUM(cost_usd),0) AS cost, COUNT(*) AS sessions FROM work_sessions WHERE status != 'skipped'";
+    "SELECT COALESCE(SUM(prompt_tokens),0) AS prompt, COALESCE(SUM(completion_tokens),0) AS completion, COALESCE(SUM(total_tokens),0) AS total, COALESCE(SUM(cost_usd),0) AS cost, COUNT(*) AS sessions, COALESCE(SUM(cache_hit_tokens),0) AS cacheHit, COALESCE(SUM(cache_miss_tokens),0) AS cacheMiss FROM work_sessions WHERE status != 'skipped'";
   const params: unknown[] = [];
   if (sinceUnixSec != null) {
     sql += " AND started_at >= ?";
@@ -69,6 +77,8 @@ function totals(sinceUnixSec?: number | null, prefixExpr?: string, prefixVal?: s
     total: num(r.total),
     cost: num(r.cost),
     sessions: num(r.sessions),
+    cacheHit: num(r.cacheHit),
+    cacheMiss: num(r.cacheMiss),
   };
 }
 

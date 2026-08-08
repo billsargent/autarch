@@ -11,6 +11,94 @@ import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
 
 type ChatMessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
+type DeepSeekThinking = { thinking?: { type: "enabled" | "disabled" } };
+type DeepSeekRequestParams = OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & DeepSeekThinking;
+
+// Apply token-cost controls to every model request: cap output per step and pin
+// thinking mode/effort. DeepSeek V4 defaults to thinking mode with high effort,
+// which spends a lot of output tokens on chain-of-thought on every step, so we
+// default to low effort and a bounded max_tokens. `thinking` is a DeepSeek-only
+// body field (not in the OpenAI SDK types); the SDK serializes it through.
+function modelRequestParams(
+  settings: AgentSettingsRow,
+  base: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+): DeepSeekRequestParams {
+  const params: DeepSeekRequestParams = {
+    ...base,
+    max_tokens: settings.maxOutputTokens,
+    thinking: settings.thinkingEnabled ? { type: "enabled" } : { type: "disabled" },
+  };
+  if (settings.thinkingEnabled) {
+    params.reasoning_effort = settings.reasoningEffort as "low" | "high" | "max";
+  }
+  return params;
+}
+
+interface StreamedMessage {
+  content: string;
+  reasoningContent: string;
+  toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] | null;
+  usage: UsageLike | undefined;
+  interrupted: boolean;
+}
+
+// Stream the main completion so a cancelled/timed-out turn can abort the request
+// mid-generation (saving the output tokens the model would otherwise keep
+// spending) and so the UI can show content as it arrives. Accumulates content,
+// reasoning_content, and tool_calls deltas; usage comes from the final chunk via
+// stream_options.include_usage. Breaking out of the async iterable makes the SDK
+// abort the underlying request.
+async function streamChatCompletion(
+  client: OpenAI,
+  settings: AgentSettingsRow,
+  base: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  isInterrupted: () => boolean,
+  onDelta?: (content: string, reasoning: string) => void,
+): Promise<StreamedMessage> {
+  const stream = await client.chat.completions.create({
+    ...modelRequestParams(settings, base),
+    stream: true,
+    stream_options: { include_usage: true },
+  } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming & DeepSeekThinking);
+
+  let content = "";
+  let reasoning = "";
+  let usage: UsageLike | undefined;
+  const toolAcc: Array<{ id?: string; type?: string; function: { name: string; arguments: string } }> = [];
+  let interrupted = false;
+
+  for await (const chunk of stream) {
+    if (isInterrupted()) {
+      interrupted = true;
+      // Early return aborts the request, so the provider stops generating and we
+      // stop being billed for the remaining output tokens.
+      break;
+    }
+    const delta = chunk.choices[0]?.delta;
+    if (delta) {
+      if (delta.content) content += delta.content;
+      const r = (delta as { reasoning_content?: string }).reasoning_content;
+      if (r) reasoning += r;
+      for (const tc of delta.tool_calls ?? []) {
+        const idx = tc.index ?? 0;
+        toolAcc[idx] = toolAcc[idx] ?? { function: { name: "", arguments: "" } };
+        if (tc.id) toolAcc[idx].id = tc.id;
+        if (tc.type) toolAcc[idx].type = tc.type;
+        if (tc.function?.name) toolAcc[idx].function.name += tc.function.name;
+        if (tc.function?.arguments) toolAcc[idx].function.arguments += tc.function.arguments;
+      }
+    }
+    if (chunk.usage) usage = chunk.usage as UsageLike;
+    onDelta?.(content, reasoning);
+  }
+
+  const toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] | null = toolAcc.length
+    ? (toolAcc as unknown as OpenAI.Chat.Completions.ChatCompletionMessageToolCall[])
+    : null;
+
+  return { content, reasoningContent: reasoning, toolCalls, usage, interrupted };
+}
+
 const RISK_RANK: Record<RiskLevel, number> = { low: 0, medium: 1, high: 2, critical: 3, blocked: 4 };
 
 function worseRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
@@ -65,6 +153,7 @@ export type AgentEvent =
   | { type: "session_start"; sessionId: number; toolsAvailable?: boolean; model?: string; chatMode?: string; toolsCount?: number }
   | { type: "step_start"; step: number; maxSteps: number }
   | { type: "model_reply"; step: number; content: string }
+  | { type: "model_stream"; step: number; content: string; reasoning: string }
   | { type: "tool_start"; tool: string; args: Record<string, unknown>; executionId: number }
   | { type: "tool_result"; tool: string; status: string; executionId: number; output?: string }
   | { type: "done"; conversationId: number }
@@ -78,6 +167,8 @@ export interface ActiveSession {
   actionsUsed: number;
   promptTokens: number;
   completionTokens: number;
+  cacheHitTokens: number;
+  cacheMissTokens: number;
   totalTokens: number;
   costUsd: number;
 }
@@ -104,28 +195,54 @@ async function beginSession(
     actionsUsed: 0,
     promptTokens: 0,
     completionTokens: 0,
+    cacheHitTokens: 0,
+    cacheMissTokens: 0,
     totalTokens: 0,
     costUsd: 0,
   };
 }
 
-type UsageLike = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+type UsageLike = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
+};
 
-function usageCost(usage: UsageLike | undefined, inputPrice: number, outputPrice: number): number {
+// DeepSeek prices prompt tokens at a ~50x discount when they hit the automatic
+// on-disk context cache. When the API reports cache-hit vs cache-miss tokens we
+// bill them at their own rates; otherwise fall back to billing all prompt tokens
+// at the (cache-miss) input price.
+function usageCost(
+  usage: UsageLike | undefined,
+  inputPrice: number,
+  outputPrice: number,
+  cacheHitInputPrice: number,
+): number {
   if (!usage) return 0;
-  const p = usage.prompt_tokens ?? 0;
+  const miss = usage.prompt_cache_miss_tokens ?? usage.prompt_tokens ?? 0;
+  const hit = usage.prompt_cache_hit_tokens ?? 0;
   const c = usage.completion_tokens ?? 0;
-  return (p / 1_000_000) * inputPrice + (c / 1_000_000) * outputPrice;
+  return (miss / 1_000_000) * inputPrice + (hit / 1_000_000) * cacheHitInputPrice + (c / 1_000_000) * outputPrice;
 }
 
-function accumulateUsage(session: ActiveSession, usage: UsageLike | undefined, inputPrice: number, outputPrice: number) {
+function accumulateUsage(
+  session: ActiveSession,
+  usage: UsageLike | undefined,
+  inputPrice: number,
+  outputPrice: number,
+  cacheHitInputPrice: number,
+) {
   if (!usage) return;
   const p = usage.prompt_tokens ?? 0;
   const c = usage.completion_tokens ?? 0;
   session.promptTokens += p;
   session.completionTokens += c;
+  session.cacheHitTokens += usage.prompt_cache_hit_tokens ?? 0;
+  session.cacheMissTokens += usage.prompt_cache_miss_tokens ?? 0;
   session.totalTokens += usage.total_tokens ?? p + c;
-  session.costUsd += usageCost(usage, inputPrice, outputPrice);
+  session.costUsd += usageCost(usage, inputPrice, outputPrice, cacheHitInputPrice);
 }
 
 async function finishSession(
@@ -142,6 +259,8 @@ async function finishSession(
       actionsUsed: session.actionsUsed,
       promptTokens: session.promptTokens,
       completionTokens: session.completionTokens,
+      cacheHitTokens: session.cacheHitTokens,
+      cacheMissTokens: session.cacheMissTokens,
       totalTokens: session.totalTokens,
       costUsd: Number(session.costUsd.toFixed(6)),
       reason: reason ?? null,
@@ -191,8 +310,9 @@ export async function runAgentTurn(opts: {
     maxDurationMinutes,
   });
 
-  const inputPrice = Number(settings.inputPricePerMTok) || 0.27;
-  const outputPrice = Number(settings.outputPricePerMTok) || 1.1;
+  const inputPrice = Number(settings.inputPricePerMTok) || 0.14;
+  const outputPrice = Number(settings.outputPricePerMTok) || 0.28;
+  const cacheHitPrice = Number(settings.cacheHitInputPricePerMTok) || 0.0028;
   const deadline = session.startedAt.getTime() + session.maxDurationMs;
 
   onEvent?.({ type: "session_start", sessionId: session.id });
@@ -260,20 +380,54 @@ export async function runAgentTurn(opts: {
 
       onEvent?.({ type: "step_start", step: step + 1, maxSteps });
 
-      const completion = await client.chat.completions.create({
-        model: settings.modelName,
-        messages: apiMessages,
-        tools: toolsAvailable ? tools : undefined,
-        tool_choice: toolsAvailable ? "auto" : undefined,
-      });
+      const streamed = await streamChatCompletion(
+        client,
+        settings,
+        {
+          model: settings.modelName,
+          messages: apiMessages,
+          tools: toolsAvailable ? tools : undefined,
+          tool_choice: toolsAvailable ? "auto" : undefined,
+        },
+        () => isTurnCancelled(conversationId) || Date.now() > deadline,
+        (content, reasoning) => {
+          // Live "thinking / generating" indicator in the UI while the model streams.
+          onEvent?.({ type: "model_stream", step: step + 1, content, reasoning });
+        },
+      );
 
-      const choice = completion.choices[0];
-      const rawMsg = choice.message as OpenAI.Chat.Completions.ChatCompletionMessage & {
-        reasoning_content?: string;
-      };
-      const usage = completion.usage as UsageLike | undefined;
-      accumulateUsage(session, usage, inputPrice, outputPrice);
-      const callCost = usageCost(usage, inputPrice, outputPrice);
+      // Cancelled / timed out mid-generation: abort the stream (done above) and
+      // stop the turn instead of paying for the rest of the generation.
+      if (streamed.interrupted) {
+        if (isTurnCancelled(conversationId)) {
+          cancelled = true;
+          terminated = true;
+          const row = await insertMessage({
+            conversationId,
+            role: "event",
+            content: `[CANCELLED] The human stopped this turn. No further work will run.`,
+          });
+          newMessages.push(row);
+        } else {
+          terminated = true;
+          const row = await insertMessage({
+            conversationId,
+            role: "event",
+            content: `[SESSION] Work session #${session.id} hit its ${maxDurationMinutes} minute time limit and was stopped.`,
+          });
+          newMessages.push(row);
+        }
+        break;
+      }
+
+      const rawMsg = {
+        content: streamed.content,
+        reasoning_content: streamed.reasoningContent,
+        tool_calls: streamed.toolCalls,
+      } as OpenAI.Chat.Completions.ChatCompletionMessage & { reasoning_content?: string };
+      const usage = streamed.usage;
+      accumulateUsage(session, usage, inputPrice, outputPrice, cacheHitPrice);
+      const callCost = usageCost(usage, inputPrice, outputPrice, cacheHitPrice);
       session.stepsUsed = step + 1;
 
       const assistantRow = await insertMessage({
@@ -293,7 +447,15 @@ export async function runAgentTurn(opts: {
       apiMessages.push({
         role: "assistant",
         content: rawMsg.content ?? "",
-        ...(rawMsg.tool_calls?.length ? { tool_calls: rawMsg.tool_calls } : {}),
+        ...(rawMsg.tool_calls?.length
+          ? {
+              tool_calls: rawMsg.tool_calls,
+              // DeepSeek requires the assistant's chain-of-thought to be sent back
+              // on tool-call turns (for requests carrying `tools`), or it returns a
+              // 400 on the next step/turn.
+              ...(rawMsg.reasoning_content ? { reasoning_content: rawMsg.reasoning_content } : {}),
+            }
+          : {}),
       } as ChatMessageParam);
 
       ranTools = ranTools || Boolean(rawMsg.tool_calls?.length);
@@ -459,16 +621,18 @@ export async function runAgentTurn(opts: {
           "[SYSTEM] Your turn was truncated — you hit the step limit. Briefly summarize what you just achieved and ask the human if they want you to continue the task. Reply in text only — do not call any tools.",
       });
       try {
-        const truncCompletion = await client.chat.completions.create({
-          model: settings.modelName,
-          messages: apiMessages,
-        });
+        const truncCompletion = await client.chat.completions.create(
+          modelRequestParams(settings, {
+            model: settings.modelName,
+            messages: apiMessages,
+          }),
+        );
         const tMsg = truncCompletion.choices[0].message as OpenAI.Chat.Completions.ChatCompletionMessage & {
           reasoning_content?: string;
         };
         const tUsage = truncCompletion.usage as UsageLike | undefined;
-        accumulateUsage(session, tUsage, inputPrice, outputPrice);
-        const tCost = usageCost(tUsage, inputPrice, outputPrice);
+        accumulateUsage(session, tUsage, inputPrice, outputPrice, cacheHitPrice);
+        const tCost = usageCost(tUsage, inputPrice, outputPrice, cacheHitPrice);
         const tRow = await insertMessage({
           conversationId,
           role: "assistant",
@@ -491,23 +655,25 @@ export async function runAgentTurn(opts: {
     // one final no-tools completion asking for a summary.
     if (ranTools && lastContentEmpty && Date.now() < deadline && !isTurnCancelled(conversationId)) {
       try {
-        const summaryCompletion = await client.chat.completions.create({
-          model: settings.modelName,
-          messages: [
-            ...apiMessages,
-            {
-              role: "user",
-              content:
-                "Give a brief plain-language summary of what you just did in this turn: the actions you took (including any tools) and their outcome. Reply with only the summary.",
-            },
-          ],
-        });
+        const summaryCompletion = await client.chat.completions.create(
+          modelRequestParams(settings, {
+            model: settings.modelName,
+            messages: [
+              ...apiMessages,
+              {
+                role: "user",
+                content:
+                  "Give a brief plain-language summary of what you just did in this turn: the actions you took (including any tools) and their outcome. Reply with only the summary.",
+              },
+            ],
+          }),
+        );
         const sMsg = summaryCompletion.choices[0].message as OpenAI.Chat.Completions.ChatCompletionMessage & {
           reasoning_content?: string;
         };
         const sUsage = summaryCompletion.usage as UsageLike | undefined;
-        accumulateUsage(session, sUsage, inputPrice, outputPrice);
-        const sCost = usageCost(sUsage, inputPrice, outputPrice);
+        accumulateUsage(session, sUsage, inputPrice, outputPrice, cacheHitPrice);
+        const sCost = usageCost(sUsage, inputPrice, outputPrice, cacheHitPrice);
         const sRow = await insertMessage({
           conversationId,
           role: "assistant",
