@@ -84,6 +84,11 @@ export default function ChatView() {
   const live = activeId ? liveByConvo[activeId] || [] : [];
   const liveStatus = activeId ? liveStatusByConvo[activeId] || null : null;
 
+  // The Send button should be disabled + Stop visible when either:
+  // 1) the user is actively sending a message (local), OR
+  // 2) the current conversation is running a job/agent turn (server-reported).
+  const busy = sending || Boolean(runningByConvo[activeId ?? 0]);
+
   const loadConversations = useCallback(async () => {
     const res = await fetch("/api/conversations").then((r) => r.json());
     let list: ConversationRow[] = res.conversations || [];
@@ -683,7 +688,7 @@ export default function ChatView() {
         )}
 
         <ChatComposer
-          sending={sending}
+          sending={busy}
           showTools={showTools}
           onToggleTools={onToggleTools}
           onSend={onQuickAction}
