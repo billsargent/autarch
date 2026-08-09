@@ -41,7 +41,7 @@ const QUICK_ACTIONS = [
 function fmtTime(iso: string | undefined) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleDateString([], { month: "short", day: "numeric" }) + ", " + d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
 // Compare the fields that affect rendering so identical content (e.g. from a

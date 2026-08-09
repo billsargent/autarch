@@ -319,18 +319,19 @@ export async function runAgentTurn(opts: {
 
   try {
     const client = getDeepSeekClient({ apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl });
+    const maxSteps = Math.max(1, settings.maxAgentSteps);
     const systemPrompt = await buildSystemPrompt(settings, {
       trigger,
       jobId: opts.jobId ?? null,
       conversationId,
+      maxDurationMinutes,
+      maxSteps,
     });
     const tools = getEnabledToolDefinitions(settings.enabledTools as string[]);
 
     const historyRows = await loadHistory(conversationId);
     const built = await buildPromptMessages({ conversationId, rows: historyRows, settings, client });
     const apiMessages: ChatMessageParam[] = [{ role: "system", content: systemPrompt }, ...built];
-
-    const maxSteps = Math.max(1, settings.maxAgentSteps);
     // Direct user chat: in conversation mode we DON'T expose tools at all (a tool
     // call becomes impossible); in agentic mode tools are always "auto" — the
     // chat-mode toggle is the single explicit control. Scheduled, approval, and

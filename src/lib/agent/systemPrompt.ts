@@ -10,6 +10,8 @@ export interface PromptScope {
   trigger?: "chat" | "approval" | "scheduled" | "report";
   jobId?: number | null;
   conversationId?: number | null;
+  maxDurationMinutes?: number;
+  maxSteps?: number;
 }
 
 export async function buildSystemPrompt(settings: AgentSettingsRow, scope: PromptScope = {}): Promise<string> {
@@ -157,7 +159,7 @@ CURRENT STATE (DYNAMIC — this section updates every turn)
 ${statusNotes}
 ${isWorkTurn ? `
 YOUR SCHEDULE (JOBS) — THIS WORK WINDOW
-- A scheduled work window just opened. Use your time budget wisely — prioritize the highest-value action; don't spin up long downloads or pointless loops.${jobBlock ? `\n- Active job:\n${jobBlock}` : "\n- (this work window has no job record)"}
+- A scheduled work window just opened. You have up to **${scope.maxDurationMinutes ?? settings.maxSessionMinutes} minutes** and **${scope.maxSteps ?? settings.maxAgentSteps} steps** (one model call = one step). Pace yourself — don't blow through your step budget on tiny actions. Use multi-step operations wisely: read broadly, then act.${jobBlock ? `\n- Active job:\n${jobBlock}` : "\n- (this work window has no job record)"}
 - Report your progress in this session (the job's home conversation) — don't scatter updates across other chats.
 ` : `
 FOCUSED CHAT
