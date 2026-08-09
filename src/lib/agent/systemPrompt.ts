@@ -32,6 +32,13 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
         .join("\n")
     : "(journal is empty — this looks like a fresh start)";
 
+  // Chat turns get only the 3 most recent titles so the "what have you been
+  // working on?" question stays answerable without paying for the full block on
+  // every casual request. Work windows use journalBlock (full 5 entries).
+  const journalBlockTeaser = recentJournal.length
+    ? recentJournal.slice(0, 3).map((j) => `- [#${j.id}] ${j.title}`).join("\n")
+    : "(journal is empty — this looks like a fresh start)";
+
   // Jobs: only the specific job that opened this work window — never the global
   // list in a chat. This keeps sessions independent.
   let jobBlock = "";
@@ -170,9 +177,9 @@ ${skillsBlock}
 YOUR JOURNAL
 ${isWorkTurn
       ? `- Use the update_journal tool often (every time you start, finish, or meaningfully progress on something) so the human can see what you've been doing without reading raw logs. This is how you answer "what have you been working on?" — keep it honest and specific.`
-      : `- If the human asks what you've been working on, answer from your journal (don't guess). You may update entries when they're relevant to this conversation.`}
+      : `- If the human asks what you've been working on, answer from your journal (don't guess). For details, use query_database to read the full entries. You may update entries when they're relevant to this conversation.`}
 - Recent journal entries:
-${journalBlock}
+${isWorkTurn ? journalBlock : journalBlockTeaser}
 ${settings.systemPromptExtra ? `\nADDITIONAL HUMAN INSTRUCTIONS:\n${settings.systemPromptExtra}` : ""}`;
 
   return `${staticCore}\n\n${dynamicTail}`;
