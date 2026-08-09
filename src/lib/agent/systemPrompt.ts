@@ -1,12 +1,22 @@
 import { db } from "@/db";
 import { journalEntries, jobs, goals } from "@/db/schema";
-import { desc, asc, eq } from "drizzle-orm";
+import { desc, asc, eq, or, isNull } from "drizzle-orm";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { workspaceSkillsDir } from "./config";
 import type { AgentSettingsRow } from "./settingsStore";
 
-export async function buildSystemPrompt(settings: AgentSettingsRow): Promise<string> {
+export interface PromptScope {
+  trigger?: "chat" | "approval" | "scheduled" | "report";
+  jobId?: number | null;
+  conversationId?: number | null;
+}
+
+export async function buildSystemPrompt(settings: AgentSettingsRow, scope: PromptScope = {}): Promise<string> {
+  const { trigger, jobId, conversationId } = scope;
+  // Work windows carry the job mandate; chat + approval continuations are "focused."
+  const isWorkTurn = trigger === "scheduled" || trigger === "report" || Boolean(jobId);
+
   const recentJournal = await db
     .select()
     .from(journalEntries)
@@ -22,27 +32,33 @@ export async function buildSystemPrompt(settings: AgentSettingsRow): Promise<str
         .join("\n")
     : "(journal is empty — this looks like a fresh start)";
 
-  const activeJobs = await db
-    .select()
-    .from(jobs)
-    .where(eq(jobs.enabled, true))
-    .orderBy(asc(jobs.nextRunAt))
-    .limit(10);
-  const jobsBlock = activeJobs.length
-    ? activeJobs
-        .map(
-          (j) =>
-            `- [#${j.id} ${j.kind}] ${j.name} — every ${j.intervalMinutes} min, up to ${j.maxDurationMinutes} min. Next: ${j.nextRunAt.toISOString()}.${j.instruction ? ` Instruction: ${j.instruction}` : ""}`,
-        )
-        .join("\n")
-    : "(no scheduled jobs yet — use schedule_job to create your own work windows)";
+  // Jobs: only the specific job that opened this work window — never the global
+  // list in a chat. This keeps sessions independent.
+  let jobBlock = "";
+  if (jobId) {
+    const jobRows = await db.select().from(jobs).where(eq(jobs.id, jobId)).limit(1);
+    if (jobRows.length) {
+      const j = jobRows[0];
+      jobBlock = `- [#${j.id} ${j.kind}] ${j.name} — every ${j.intervalMinutes} min, up to ${j.maxDurationMinutes} min. Next: ${j.nextRunAt.toISOString()}.${j.instruction ? ` Instruction: ${j.instruction}` : ""}`;
+    }
+  }
 
-  const activeGoals = await db.select().from(goals).orderBy(asc(goals.priority)).limit(10);
-  const goalsBlock = activeGoals.length
-    ? activeGoals
+  // Goals: scoped to this conversation. Work windows also see unbound "global"
+  // goals that drive autonomous initiative; focused turns see only bound goals.
+  const goalRows = isWorkTurn
+    ? conversationId
+      ? await db.select().from(goals).where(or(eq(goals.conversationId, conversationId), isNull(goals.conversationId))).orderBy(asc(goals.priority)).limit(10)
+      : await db.select().from(goals).where(isNull(goals.conversationId)).orderBy(asc(goals.priority)).limit(10)
+    : conversationId
+      ? await db.select().from(goals).where(eq(goals.conversationId, conversationId)).orderBy(asc(goals.priority)).limit(10)
+      : [];
+  const goalsBlock = goalRows.length
+    ? goalRows
         .map((g) => `- [#${g.id} ${g.status}] (priority ${g.priority}) ${g.title}${g.body ? ` — ${g.body}` : ""}`)
         .join("\n")
-    : "(goals board is empty — use manage_goal to set your own goals)";
+    : isWorkTurn
+      ? "(no goals in scope — use manage_goal to set some)"
+      : "(no goals assigned to this conversation)";
 
   // Reusable markdown playbooks the agent maintains in <workspace>/skills,
   // injected every session so expertise accumulates across sessions.
@@ -89,8 +105,9 @@ ${settings.unrestrictedMode ? `- Supervisor overrides ON: normally-blocked actio
 - "PENDING HUMAN APPROVAL" means NOT executed yet — don't assume success. Keep working or ask the human. If blocked/rejected, explain briefly and move on.
 
 BEHAVIOR
-- In work windows or when asked to act, DO — pick your top goal and make progress with tools; don't just plan.
-- In chat, prefer action over asking for anything below critical risk. If under-specified, state your assumption, take a safe first step, then adapt.
+- When asked to act or given a task, DO — make progress with tools; don't just plan.
+- In chat, answer the human's question first; act only on what they asked. Don't drift into jobs or goals they didn't mention.
+- If under-specified, state your assumption, take a safe first step, then adapt.
 - Use the sandbox workspace for experiments. Explain reasoning briefly; always end with a short 2–4 sentence summary.
 - When asked what you've worked on, answer from your journal — don't guess.
 
@@ -128,15 +145,20 @@ NOTIFICATIONS
   const dynamicTail = `
 CURRENT STATE (DYNAMIC — this section updates every turn)
 ${statusNotes}
-
-YOUR SCHEDULE (JOBS)
-- You can schedule recurring work windows for yourself with schedule_job. When one opens, you'll receive an event note "[SCHEDULED WORK] ..." and should get to work on the job's instruction (or your goals).
-- The human enforces limits: you may only start work so often (cooldown + daily cap), and each session has a time budget (up to the job/session's max minutes). Use your time wisely — prioritize the highest-value action; don't spin up long downloads or pointless loops.
-- Active jobs:
-${jobsBlock}
+${isWorkTurn ? `
+YOUR SCHEDULE (JOBS) — THIS WORK WINDOW
+- A scheduled work window just opened. Use your time budget wisely — prioritize the highest-value action; don't spin up long downloads or pointless loops.${jobBlock ? `\n- Active job:\n${jobBlock}` : "\n- (this work window has no job record)"}
+- Report your progress in this session (the job's home conversation) — don't scatter updates across other chats.
+` : `
+FOCUSED CHAT
+- You are in a conversation with the human. Answer what they asked, and use tools only for what they asked about.
+- Do NOT start scheduled jobs, chase unrelated goals, or take independent initiative on your own agenda right now — unless the human explicitly asks you to.
+`}
 
 YOUR GOALS
-- Maintain a goals board with manage_goal / list_goals. At the start of a work window, pick your next highest-priority in-progress or backlog goal and make progress on it.
+${isWorkTurn
+      ? `- Maintain a goals board with manage_goal / list_goals. At the start of a work window, pick your next highest-priority in-progress or backlog goal and make progress on it.`
+      : `- These are the goals assigned to this conversation. Reference them only if relevant to the human's question — don't start working on them unprompted.`}
 - Current goals:
 ${goalsBlock}
 
@@ -146,7 +168,9 @@ REUSABLE SKILLS
 ${skillsBlock}
 
 YOUR JOURNAL
-- Use the update_journal tool often (every time you start, finish, or meaningfully progress on something) so the human can see what you've been doing without reading raw logs. This is how you answer "what have you been working on?" — keep it honest and specific.
+${isWorkTurn
+      ? `- Use the update_journal tool often (every time you start, finish, or meaningfully progress on something) so the human can see what you've been doing without reading raw logs. This is how you answer "what have you been working on?" — keep it honest and specific.`
+      : `- If the human asks what you've been working on, answer from your journal (don't guess). You may update entries when they're relevant to this conversation.`}
 - Recent journal entries:
 ${journalBlock}
 ${settings.systemPromptExtra ? `\nADDITIONAL HUMAN INSTRUCTIONS:\n${settings.systemPromptExtra}` : ""}`;

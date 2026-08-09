@@ -133,6 +133,9 @@ export const goals = sqliteTable("goals", {
     .notNull()
     .default("backlog"),
   priority: integer("priority").notNull().default(3),
+  conversationId: integer("conversation_id").references(() => conversations.id, {
+    onDelete: "set null",
+  }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

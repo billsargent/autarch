@@ -128,6 +128,7 @@ export interface GoalRow {
   body: string | null;
   status: "backlog" | "in_progress" | "done" | "abandoned";
   priority: number;
+  conversationId: number | null;
   createdAt: string;
   updatedAt: string;
 }

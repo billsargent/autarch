@@ -8,7 +8,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const body = await req.json();
   const patch: Record<string, unknown> = {};
-  for (const key of ["name", "instruction", "kind", "enabled"]) {
+  for (const key of ["name", "instruction", "kind", "enabled", "conversationId"]) {
     if (key in body) patch[key] = body[key];
   }
   if ("intervalMinutes" in body) patch.intervalMinutes = Math.max(5, Number(body.intervalMinutes) || 60);

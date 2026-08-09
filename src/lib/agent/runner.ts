@@ -319,7 +319,11 @@ export async function runAgentTurn(opts: {
 
   try {
     const client = getDeepSeekClient({ apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl });
-    const systemPrompt = await buildSystemPrompt(settings);
+    const systemPrompt = await buildSystemPrompt(settings, {
+      trigger,
+      jobId: opts.jobId ?? null,
+      conversationId,
+    });
     const tools = getEnabledToolDefinitions(settings.enabledTools as string[]);
 
     const historyRows = await loadHistory(conversationId);

@@ -17,6 +17,7 @@ export async function POST(req: Request) {
       body: body.body ? String(body.body) : null,
       status: (body.status as "backlog" | "in_progress" | "done" | "abandoned") || "backlog",
       priority: Number(body.priority) || 3,
+      conversationId: body.conversationId ? Number(body.conversationId) : null,
     })
     .returning();
   return NextResponse.json({ goal: inserted[0] });

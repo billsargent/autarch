@@ -7,7 +7,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const body = await req.json();
   const patch: Record<string, unknown> = {};
-  for (const key of ["title", "body", "status", "priority"]) {
+  for (const key of ["title", "body", "status", "priority", "conversationId"]) {
     if (key in body) patch[key] = body[key];
   }
   const updated = await db

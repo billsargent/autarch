@@ -13,10 +13,16 @@ export default function JobsView() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [runs, setRuns] = useState<Record<number, WorkSessionRow[]>>({});
   const [editing, setEditing] = useState<JobRow | null>(null);
+  const [conversations, setConversations] = useState<{ id: number; title: string }[]>([]);
+  const [editConvId, setEditConvId] = useState<string>("");
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/jobs").then((r) => r.json());
-    setJobs(res.jobs || []);
+    const [jobsRes, convsRes] = await Promise.all([
+      fetch("/api/jobs").then((r) => r.json()),
+      fetch("/api/conversations").then((r) => r.json()),
+    ]);
+    setJobs(jobsRes.jobs || []);
+    setConversations(convsRes.conversations || []);
   }, []);
 
   useEffect(() => {
@@ -30,7 +36,7 @@ export default function JobsView() {
 
   async function saveJob() {
     if (!name.trim()) return;
-    const payload = { name, instruction, intervalMinutes, maxDurationMinutes, cron: cron.trim() || undefined };
+    const payload = { name, instruction, intervalMinutes, maxDurationMinutes, cron: cron.trim() || undefined, conversationId: editConvId || undefined };
     if (editing) {
       await fetch(`/api/jobs/${editing.id}`, {
         method: "PATCH",
@@ -55,6 +61,7 @@ export default function JobsView() {
     setIntervalMinutes(job.intervalMinutes);
     setMaxDurationMinutes(job.maxDurationMinutes);
     setCron(job.cron || "");
+    setEditConvId(job.conversationId ? String(job.conversationId) : "");
   }
 
   function cancelEdit() {
@@ -64,6 +71,7 @@ export default function JobsView() {
     setIntervalMinutes(60);
     setMaxDurationMinutes(10);
     setCron("");
+    setEditConvId("");
   }
 
   async function toggleRuns(jobId: number) {
@@ -145,6 +153,22 @@ export default function JobsView() {
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
               />
             </label>
+            <label className="block text-xs text-neutral-400">
+              Report session
+              <select
+                value={editConvId}
+                onChange={(e) => setEditConvId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none"
+              >
+                <option value="">Auto-create (new session)</option>
+                {conversations.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    #{c.id} {c.title.slice(0, 36)}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-[10px] text-neutral-600">Job reports land in this session.</span>
+            </label>
             <div className="flex items-center gap-2">
               <button
                 onClick={saveJob}
@@ -197,6 +221,7 @@ export default function JobsView() {
                   {j.lastStatus && (
                     <p className="mt-1 text-[11px]">
                       last run: <span className={j.lastStatus === "failed" ? "text-red-400" : "text-neutral-400"}>{j.lastStatus}</span>
+                      {j.conversationId ? <span className="ml-2 text-neutral-600">· reports to session #{j.conversationId}</span> : <span className="ml-2 text-neutral-600">· auto-creates session</span>}
                       {j.lastError && <span className="ml-2 text-red-400/80">({j.lastError})</span>}
                     </p>
                   )}

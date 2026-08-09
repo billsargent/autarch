@@ -16,10 +16,16 @@ export default function GoalsView() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [priority, setPriority] = useState(3);
+  const [convId, setConvId] = useState("");
+  const [conversations, setConversations] = useState<{ id: number; title: string }[]>([]);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/goals").then((r) => r.json());
-    setGoals(res.goals || []);
+    const [goalsRes, convsRes] = await Promise.all([
+      fetch("/api/goals").then((r) => r.json()),
+      fetch("/api/conversations").then((r) => r.json()),
+    ]);
+    setGoals(goalsRes.goals || []);
+    setConversations(convsRes.conversations || []);
   }, []);
 
   useEffect(() => {
@@ -36,10 +42,11 @@ export default function GoalsView() {
     await fetch("/api/goals", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title, body, priority }),
+      body: JSON.stringify({ title, body, priority, conversationId: convId || undefined }),
     });
     setTitle("");
     setBody("");
+    setConvId("");
     await load();
   }
 
@@ -94,6 +101,21 @@ export default function GoalsView() {
                   className="ml-2 w-20 rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm outline-none"
                 />
               </label>
+              <label className="text-xs text-neutral-400">
+                Session
+                <select
+                  value={convId}
+                  onChange={(e) => setConvId(e.target.value)}
+                  className="ml-2 rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm outline-none"
+                >
+                  <option value="">Global (work windows)</option>
+                  {conversations.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      #{c.id} {c.title.slice(0, 30)}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 onClick={createGoal}
                 disabled={!title.trim()}
@@ -130,6 +152,20 @@ export default function GoalsView() {
                     {GOAL_STATUSES.map((s) => (
                       <option key={s} value={s}>
                         {s}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={g.conversationId ?? ""}
+                    onChange={(e) =>
+                      update(g.id, { conversationId: e.target.value ? Number(e.target.value) : null })
+                    }
+                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-[11px] text-neutral-400 outline-none"
+                  >
+                    <option value="">Global</option>
+                    {conversations.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        #{c.id} {c.title.slice(0, 24)}
                       </option>
                     ))}
                   </select>

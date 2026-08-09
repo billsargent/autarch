@@ -269,6 +269,10 @@ export const ALL_TOOL_DEFINITIONS = [
           status: { type: "string", enum: ["backlog", "in_progress", "done", "abandoned"] },
           priority: { type: "number", description: "1 = highest priority. Default 3." },
           goalId: { type: "number", description: "Provide to update an existing goal." },
+          conversationId: {
+            type: "number",
+            description: "Optional. Bind this goal to a specific chat session (defaults to the current session on create). Leave unset to make it a global goal used in work windows.",
+          },
         },
         required: ["title"],
       },
@@ -534,7 +538,7 @@ export async function executeTool(
     case "cancel_job":
       return cancelJob(args);
     case "manage_goal":
-      return manageGoal(args);
+      return manageGoal(args, ctx);
     case "list_goals":
       return listGoals();
     case "notify_human":
@@ -836,17 +840,22 @@ async function cancelJob(args: Record<string, unknown>) {
 // Goals
 // ---------------------------------------------------------------------------
 
-async function manageGoal(args: Record<string, unknown>) {
+async function manageGoal(args: Record<string, unknown>, ctx?: ToolContext) {
   const title = String(args.title || "Untitled goal");
   const body = args.body ? String(args.body) : null;
   const status = (args.status as "backlog" | "in_progress" | "done" | "abandoned") || "backlog";
   const priority = Number(args.priority) || 3;
   const goalId = args.goalId ? Number(args.goalId) : undefined;
+  // Default to the current session so goals created in a chat are bound there.
+  const conversationId =
+    args.conversationId !== undefined ? Number(args.conversationId) || null : ctx?.conversationId ?? null;
 
   if (goalId) {
+    const updateValues: Record<string, unknown> = { title, body, status, priority, updatedAt: new Date() };
+    if ("conversationId" in args) updateValues.conversationId = conversationId;
     const updated = await db
       .update(goals)
-      .set({ title, body, status, priority, updatedAt: new Date() })
+      .set(updateValues)
       .where(eq(goals.id, goalId))
       .returning();
     if (updated.length) {
@@ -857,7 +866,7 @@ async function manageGoal(args: Record<string, unknown>) {
     }
     return { output: `Goal #${goalId} not found.`, summary: "goal update failed" };
   }
-  const inserted = await db.insert(goals).values({ title, body, status, priority }).returning();
+  const inserted = await db.insert(goals).values({ title, body, status, priority, conversationId }).returning();
   return {
     output: `Created goal #${inserted[0].id}: ${title} (${status}, priority ${priority})`,
     summary: `goal create #${inserted[0].id}`,

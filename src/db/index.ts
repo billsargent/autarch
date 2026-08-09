@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS goals (
   body TEXT,
   status TEXT NOT NULL DEFAULT 'backlog',
   priority INTEGER NOT NULL DEFAULT 3,
+  conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
@@ -201,6 +202,9 @@ if (!globalForDb.__agentLabSqlite) {
   if (!existingCols("work_sessions").includes("cache_hit_tokens")) {
     sqlite.exec("ALTER TABLE work_sessions ADD COLUMN cache_hit_tokens INTEGER NOT NULL DEFAULT 0");
     sqlite.exec("ALTER TABLE work_sessions ADD COLUMN cache_miss_tokens INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!existingCols("goals").includes("conversation_id")) {
+    sqlite.exec("ALTER TABLE goals ADD COLUMN conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL");
   }
 
   globalForDb.__agentLabSqlite = sqlite;
