@@ -20,12 +20,12 @@ export default function GoalsView() {
   const [conversations, setConversations] = useState<{ id: number; title: string }[]>([]);
 
   const load = useCallback(async () => {
-    const [goalsRes, convsRes] = await Promise.all([
-      fetch("/api/goals").then((r) => r.json()),
-      fetch("/api/conversations").then((r) => r.json()),
-    ]);
+    const goalsRes = await fetch("/api/goals").then((r) => r.json());
     setGoals(goalsRes.goals || []);
-    setConversations(convsRes.conversations || []);
+    fetch("/api/conversations")
+      .then((r) => r.json())
+      .then((d) => setConversations(d.conversations || []))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {

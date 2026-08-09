@@ -38,6 +38,12 @@ const QUICK_ACTIONS = [
   "Pick something interesting to learn about or build, log it in your journal, and get started.",
 ];
 
+function fmtTime(iso: string | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 // Compare the fields that affect rendering so identical content (e.g. from a
 // poll returning the same message objects) doesn't trigger a re-render.
 function sameMessage(a: MessageRow, b: MessageRow) {
@@ -59,6 +65,7 @@ function UserBubbleView({ m }: { m: MessageRow }) {
     <div className="flex justify-end">
       <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-blue-600 px-4 py-2 text-sm text-white break-words">
         {m.content}
+        {m.createdAt && <div className="mt-1 text-right text-[9px] text-blue-300/60">{fmtTime(m.createdAt)}</div>}
       </div>
     </div>
   );
@@ -70,6 +77,7 @@ function EventBubbleView({ m }: { m: MessageRow }) {
   return (
     <div className="mx-auto rounded-full border border-neutral-800 bg-neutral-900 px-3 py-1 text-[11px] text-neutral-400">
       {m.content}
+      {m.createdAt && <span className="ml-2 text-[9px] text-neutral-600">{fmtTime(m.createdAt)}</span>}
     </div>
   );
 }
@@ -88,6 +96,7 @@ function AssistantBubbleView({ m }: { m: MessageRow }) {
           </details>
         )}
         {m.content && <Markdown>{m.content}</Markdown>}
+        {m.createdAt && <div className="mt-2 text-right text-[9px] text-neutral-600">{fmtTime(m.createdAt)}</div>}
       </div>
     </div>
   );
@@ -107,6 +116,7 @@ function ToolBubbleView({ m }: { m: MessageRow }) {
         <p className="mb-1 font-mono text-[11px] text-neutral-500">{formatArgs(m.toolArgs)}</p>
       )}
       <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-snug">{m.content}</pre>
+      {m.createdAt && <div className="mt-1.5 text-[9px] text-neutral-600">{fmtTime(m.createdAt)}</div>}
     </div>
   );
 }

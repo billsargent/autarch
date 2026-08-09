@@ -15,14 +15,15 @@ export default function JobsView() {
   const [editing, setEditing] = useState<JobRow | null>(null);
   const [conversations, setConversations] = useState<{ id: number; title: string }[]>([]);
   const [editConvId, setEditConvId] = useState<string>("");
+  const [runningNow, setRunningNow] = useState<Set<number>>(new Set());
 
   const load = useCallback(async () => {
-    const [jobsRes, convsRes] = await Promise.all([
-      fetch("/api/jobs").then((r) => r.json()),
-      fetch("/api/conversations").then((r) => r.json()),
-    ]);
+    const jobsRes = await fetch("/api/jobs").then((r) => r.json());
     setJobs(jobsRes.jobs || []);
-    setConversations(convsRes.conversations || []);
+    fetch("/api/conversations")
+      .then((r) => r.json())
+      .then((d) => setConversations(d.conversations || []))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -95,6 +96,22 @@ export default function JobsView() {
   async function remove(job: JobRow) {
     await fetch(`/api/jobs/${job.id}`, { method: "DELETE" });
     await load();
+  }
+
+  async function runNow(job: JobRow) {
+    setRunningNow((prev) => new Set(prev).add(job.id));
+    try {
+      const res = await fetch(`/api/jobs/${job.id}/runs`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) alert(data.error || "Failed to start job");
+    } finally {
+      setRunningNow((prev) => {
+        const next = new Set(prev);
+        next.delete(job.id);
+        return next;
+      });
+      await load();
+    }
   }
 
   return (
@@ -232,6 +249,13 @@ export default function JobsView() {
                     className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800"
                   >
                     Edit
+                  </button>
+                  <button
+                    onClick={() => runNow(j)}
+                    disabled={runningNow.has(j.id)}
+                    className="rounded-lg border border-emerald-700 bg-emerald-950/30 px-3 py-1.5 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-900/40 disabled:opacity-50"
+                  >
+                    {runningNow.has(j.id) ? "Starting…" : "Run now"}
                   </button>
                   <button
                     onClick={() => toggleRuns(j.id)}

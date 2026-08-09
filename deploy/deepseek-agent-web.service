@@ -5,9 +5,9 @@ After=network.target
 [Service]
 Type=simple
 User=root
-# Adjust WorkingDirectory to wherever you deployed the repo on the machine.
 WorkingDirectory=/root/autarch
-# Build first:  cd /root/deepseek-root-lab && npm ci && npm run build
+# Build on every restart so pulled code + migrations are always applied.
+ExecStartPre=/usr/bin/npm run build
 ExecStart=/usr/bin/npm run start -- -H 0.0.0.0 -p 3000
 Restart=on-failure
 RestartSec=5
