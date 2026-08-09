@@ -37,19 +37,33 @@ export default function JobsView() {
 
   async function saveJob() {
     if (!name.trim()) return;
-    const payload = { name, instruction, intervalMinutes, maxDurationMinutes, cron: cron.trim() || undefined, conversationId: editConvId || undefined };
-    if (editing) {
-      await fetch(`/api/jobs/${editing.id}`, {
-        method: "PATCH",
+    const payload: Record<string, unknown> = {
+      name,
+      instruction,
+      intervalMinutes,
+      maxDurationMinutes,
+      // Always send cron so the server can clear it when the input is empty.
+      cron: cron.trim() || null,
+    };
+    if (editConvId) payload.conversationId = editConvId;
+    else payload.conversationId = null; // explicitly clear if deselected
+
+    const url = editing ? `/api/jobs/${editing.id}` : "/api/jobs";
+    const method = editing ? "PATCH" : "POST";
+    try {
+      const res = await fetch(url, {
+        method,
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
-    } else {
-      await fetch("/api/jobs", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || `Failed to save job (HTTP ${res.status})`);
+        return;
+      }
+    } catch (err) {
+      alert(`Failed to save job: ${err instanceof Error ? err.message : String(err)}`);
+      return;
     }
     cancelEdit();
     await load();

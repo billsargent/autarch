@@ -157,6 +157,7 @@ export const DEFAULT_ENABLED_TOOLS = [
   "download_file",
   "edit_file",
   "take_screenshot",
+  "web_search",
 ];
 
 export const MAX_OUTPUT_CHARS = 8000;

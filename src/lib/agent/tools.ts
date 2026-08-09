@@ -377,6 +377,22 @@ export const ALL_TOOL_DEFINITIONS = [
   {
     type: "function" as const,
     function: {
+      name: "web_search",
+      description:
+        "Search the web and return results with titles, URLs, and snippets. Use for research, fact-checking, or finding up-to-date information you don't already know.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "The search query." },
+          maxResults: { type: "number", description: "Max results to return (1-10). Default 5." },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
       name: "take_screenshot",
       description:
         "Capture a screenshot of the system's display (requires 'scrot' or ImageMagick 'import' to be installed). Saved to the sandbox workspace by default.",
@@ -463,6 +479,11 @@ export function evaluateToolRisk(
     }
     case "edit_file":
       return classifyFileOperation("write", String(args.path || ""), settings.workspaceDir, extraProtected, overrides);
+    case "web_search":
+      if (!settings.allowNetworkFetch) {
+        return { risk: "blocked", reason: "Outbound network fetches are disabled in settings." };
+      }
+      return { risk: "medium", reason: "Read-only web search query." };
     case "take_screenshot":
       return { risk: "low", reason: "Captures the display to an image file in the workspace." };
     default:
@@ -551,6 +572,8 @@ export async function executeTool(
       return downloadFile(args, settings.workspaceDir);
     case "edit_file":
       return editFile(args, settings.workspaceDir);
+    case "web_search":
+      return webSearch(args);
     case "take_screenshot":
       return takeScreenshot(args, settings.workspaceDir);
     default:
@@ -1033,6 +1056,34 @@ async function downloadFile(args: Record<string, unknown>, workspaceDir: string)
   }
 }
 
+async function webSearch(args: Record<string, unknown>) {
+  const query = String(args.query || "").trim();
+  if (!query) return { output: "No search query provided.", summary: "web search (empty query)" };
+  const maxResults = Math.min(Math.max(Number(args.maxResults) || 5, 1), 10);
+  try {
+    // Dynamic import so the module doesn't break if duck-duck-scrape isn't installed.
+    const { search } = await import("duck-duck-scrape");
+    const results = await search(query, { safeSearch: 0 });
+    const items = results.results.slice(0, maxResults);
+    if (!items.length) {
+      return { output: `No results found for "${query}".`, summary: `web search "${query}" (0 results)` };
+    }
+    const formatted = items
+      .map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description || "(no description)"}`)
+      .join("\n\n");
+    return {
+      output: truncate(`Web search results for "${query}":\n\n${formatted}`),
+      summary: `web search "${query}" (${items.length} results)`,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      output: `Web search failed: ${msg}`,
+      summary: "web search failed",
+    };
+  }
+}
+
 async function takeScreenshot(args: Record<string, unknown>, workspaceDir: string) {
   const dir = path.join(workspaceDir, "screenshots");
   await fs.mkdir(dir, { recursive: true });
@@ -1040,9 +1091,12 @@ async function takeScreenshot(args: Record<string, unknown>, workspaceDir: strin
   // Quote-escape so a path containing quotes can't break out of the shell string.
   const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
   const cmd = `scrot ${q(dest)} || import -window root ${q(dest)}`;
+  // Build the /api/files/ URL from the workspace-relative path so the model can embed immediately.
+  const relPath = path.relative(workspaceDir, dest).replace(/\\/g, "/");
+  const fileUrl = `/api/files/${relPath}`;
   try {
     await execAsync(cmd, { timeout: 15_000, shell: "/bin/bash" });
-    return { output: `Saved screenshot to ${dest}`, summary: "screenshot" };
+    return { output: `Saved screenshot to ${dest}\nEmbed with: ![screenshot](${fileUrl})`, summary: "screenshot" };
   } catch (err) {
     const e = err as { stderr?: string; message?: string };
     return {

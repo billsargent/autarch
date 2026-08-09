@@ -8,8 +8,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const body = await req.json();
   const patch: Record<string, unknown> = {};
-  for (const key of ["name", "instruction", "kind", "enabled", "conversationId"]) {
+  for (const key of ["name", "instruction", "kind", "enabled"]) {
     if (key in body) patch[key] = body[key];
+  }
+  // conversationId comes from a <select> as a string; normalize to number or null.
+  if ("conversationId" in body) {
+    const raw = body.conversationId;
+    patch.conversationId = raw === "" || raw === null || raw === undefined ? null : Number(raw);
   }
   if ("intervalMinutes" in body) patch.intervalMinutes = Math.max(5, Number(body.intervalMinutes) || 60);
   if ("maxDurationMinutes" in body) patch.maxDurationMinutes = Math.max(1, Number(body.maxDurationMinutes) || 10);

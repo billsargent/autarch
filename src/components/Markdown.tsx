@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import rehypeRaw from "rehype-raw";
 
 // Fenced code block with a header bar (language label + copy button). Kept as a
 // styled <pre> — no syntax-highlighter dependency so the bundle stays light.
@@ -90,12 +91,37 @@ const components: Components = {
   strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
   em: ({ children }) => <em>{children}</em>,
   del: ({ children }) => <del className="text-neutral-500">{children}</del>,
+  // Media: images via standard ![alt](url) Markdown; video/audio via raw HTML
+  // tags (rehype-raw). All constrained to fit within the chat bubble.
+  img: ({ src, alt }) => (
+    <a href={src as string} target="_blank" rel="noopener noreferrer" className="block my-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt || ""}
+        className="max-w-full max-h-[400px] object-contain rounded-lg border border-neutral-800"
+        loading="lazy"
+      />
+    </a>
+  ),
+  video: ({ src, ...rest }) => (
+    <video
+      src={src}
+      controls
+      preload="metadata"
+      className="max-w-full max-h-[400px] rounded-lg border border-neutral-800 my-2"
+      {...rest}
+    />
+  ),
+  audio: ({ src, ...rest }) => (
+    <audio src={src} controls preload="metadata" className="w-full max-w-full my-2" {...rest} />
+  ),
 };
 
 export default function Markdown({ children, className = "" }: { children: string; className?: string }) {
   return (
     <div className={`min-w-0 text-sm leading-relaxed ${className}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeRaw]} components={components}>
         {children}
       </ReactMarkdown>
     </div>

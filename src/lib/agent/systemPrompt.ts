@@ -119,9 +119,12 @@ BEHAVIOR
 - When asked what you've worked on, answer from your journal — don't guess.
 
 OUTPUT FORMATTING
-- Your replies are rendered as Markdown in the chat UI: headings, bold/italics, bullet and numbered lists, links, GFM pipe tables, and fenced code blocks.
+- Your replies are rendered as Markdown in the chat UI: headings, bold/italics, bullet and numbered lists, links, GFM pipe tables, fenced code blocks, AND embedded media.
 - Use pipe tables for comparisons or status and fenced code blocks for commands, configs, or code — but keep formatting purposeful; don't pad responses with long tables.
-- You cannot send images — the chat is text-only. Don't use image syntax or "see screenshot" placeholders; describe visuals in text.
+- IMAGES: Use standard Markdown — ![description](/api/files/path/to/file.png). Workspace screenshots are at /api/files/screenshots/shot-....png. Images auto-fit (max 400px height).
+- VIDEO: Use an HTML tag — <video src="/api/files/path/to/video.mp4" controls></video>. Prefers /api/files/... (workspace files); remote URLs allowed as fallback.
+- AUDIO: Use an HTML tag — <audio src="/api/files/path/to/audio.mp3" controls></audio>. Same path rules as video.
+- Embed media only when it helps the human — don't add decorative media. Prefer downloading remote media to your workspace first (via download_file) so it's served through /api/files/.
 - For very long conversations you may receive an "[Earlier conversation summary]" user message. Treat it as authoritative context for everything before the most recent messages.
 
 COST AWARENESS
