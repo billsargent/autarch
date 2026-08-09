@@ -10,6 +10,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  try {
   const body = await req.json();
   const intervalMinutes = Math.max(5, Number(body.intervalMinutes) || 60);
   const maxDurationMinutes = Math.max(1, Number(body.maxDurationMinutes) || 10);
@@ -32,4 +33,8 @@ export async function POST(req: Request) {
     })
     .returning();
   return NextResponse.json({ job: inserted[0] });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { nextCronRun } from "@/lib/agent/cron";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
   const { id } = await params;
   const body = await req.json();
   const patch: Record<string, unknown> = {};
@@ -39,6 +40,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .where(eq(jobs.id, Number(id)))
     .returning();
   return NextResponse.json({ job: updated[0] });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
