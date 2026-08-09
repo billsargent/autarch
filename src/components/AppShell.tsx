@@ -26,6 +26,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [paused, setPaused] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [notifs, setNotifs] = useState<NotificationRow[]>([]);
+  const [version, setVersion] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -42,6 +43,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         setPaused(Boolean(settingsRes.settings?.paused));
         setUnread(notifRes.unread?.length || 0);
         if (bellOpen) setNotifs(notifRes.unread || []);
+        // Fetch commit hash once on mount so the bottom of the sidebar shows the version.
+        if (!alive) return;
+        try {
+          const h = await fetch("/api/health").then((r) => r.json());
+          if (h.version) setVersion(h.version);
+        } catch { /* ignore */ }
       } catch {
         /* ignore */
       }
@@ -174,6 +181,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="border-t border-neutral-800 p-4 text-[11px] text-neutral-600">
           <p>Experimental. The agent runs with real shell/file/system access inside guardrails you configure.</p>
+          {version && <p className="mt-1 font-mono text-[10px] text-neutral-700">{version}</p>}
         </div>
       </aside>
       <main className="flex-1 overflow-hidden">{children}</main>
