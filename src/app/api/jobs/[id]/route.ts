@@ -18,6 +18,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if ("intervalMinutes" in body) patch.intervalMinutes = Math.max(5, Number(body.intervalMinutes) || 60);
   if ("maxDurationMinutes" in body) patch.maxDurationMinutes = Math.max(1, Number(body.maxDurationMinutes) || 10);
+  if ("reportSessionTitle" in body) {
+    const t = typeof body.reportSessionTitle === "string" ? body.reportSessionTitle.trim() : "";
+    patch.reportSessionTitle = t || null;
+  }
   if ("cron" in body) {
     const c = typeof body.cron === "string" ? body.cron.trim() : "";
     patch.cron = c || null;

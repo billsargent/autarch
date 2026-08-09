@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
   interval_minutes INTEGER NOT NULL DEFAULT 60,
   max_duration_minutes INTEGER NOT NULL DEFAULT 10,
+  report_session_title TEXT,
   cron TEXT,
   enabled INTEGER NOT NULL DEFAULT 1,
   next_run_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -205,6 +206,9 @@ if (!globalForDb.__agentLabSqlite) {
   }
   if (!existingCols("goals").includes("conversation_id")) {
     sqlite.exec("ALTER TABLE goals ADD COLUMN conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL");
+  }
+  if (!existingCols("jobs").includes("report_session_title")) {
+    sqlite.exec("ALTER TABLE jobs ADD COLUMN report_session_title TEXT");
   }
 
   globalForDb.__agentLabSqlite = sqlite;

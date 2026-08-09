@@ -95,6 +95,7 @@ export interface JobRow {
   conversationId: number | null;
   intervalMinutes: number;
   maxDurationMinutes: number;
+  reportSessionTitle: string | null;
   cron: string | null;
   enabled: boolean;
   nextRunAt: string;

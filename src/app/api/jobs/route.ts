@@ -25,6 +25,7 @@ export async function POST(req: Request) {
       kind: body.kind === "daily_report" ? "daily_report" : "interval",
       intervalMinutes,
       maxDurationMinutes,
+      reportSessionTitle: body.reportSessionTitle ? String(body.reportSessionTitle).trim() || null : null,
       cron: cron || null,
       enabled: body.enabled !== false,
       nextRunAt,

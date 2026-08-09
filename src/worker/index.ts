@@ -116,9 +116,10 @@ async function checkWorkAllowed(settings: AgentSettingsRow): Promise<{ allowed: 
 
 async function ensureJobConversation(job: typeof jobs.$inferSelect): Promise<number> {
   if (job.conversationId) return job.conversationId;
+  const title = job.reportSessionTitle || `Job: ${job.name}`;
   const inserted = await db
     .insert(conversations)
-    .values({ title: `Job: ${job.name}` })
+    .values({ title })
     .returning();
   await db
     .update(jobs)

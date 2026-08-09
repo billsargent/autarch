@@ -25,6 +25,7 @@ export const jobs = sqliteTable("jobs", {
   }),
   intervalMinutes: integer("interval_minutes").notNull().default(60),
   maxDurationMinutes: integer("max_duration_minutes").notNull().default(10),
+  reportSessionTitle: text("report_session_title"),
   cron: text("cron"),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   nextRunAt: integer("next_run_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),

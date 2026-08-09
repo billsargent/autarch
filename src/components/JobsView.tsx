@@ -10,6 +10,7 @@ export default function JobsView() {
   const [intervalMinutes, setIntervalMinutes] = useState(60);
   const [maxDurationMinutes, setMaxDurationMinutes] = useState(10);
   const [cron, setCron] = useState("");
+  const [reportSessionTitle, setReportSessionTitle] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [runs, setRuns] = useState<Record<number, WorkSessionRow[]>>({});
   const [editing, setEditing] = useState<JobRow | null>(null);
@@ -44,6 +45,7 @@ export default function JobsView() {
       maxDurationMinutes,
       // Always send cron so the server can clear it when the input is empty.
       cron: cron.trim() || null,
+      reportSessionTitle: reportSessionTitle.trim() || null,
     };
     if (editConvId) payload.conversationId = editConvId;
     else payload.conversationId = null; // explicitly clear if deselected
@@ -76,6 +78,7 @@ export default function JobsView() {
     setIntervalMinutes(job.intervalMinutes);
     setMaxDurationMinutes(job.maxDurationMinutes);
     setCron(job.cron || "");
+    setReportSessionTitle(job.reportSessionTitle || "");
     setEditConvId(job.conversationId ? String(job.conversationId) : "");
   }
 
@@ -86,6 +89,7 @@ export default function JobsView() {
     setIntervalMinutes(60);
     setMaxDurationMinutes(10);
     setCron("");
+    setReportSessionTitle("");
     setEditConvId("");
   }
 
@@ -200,6 +204,16 @@ export default function JobsView() {
               </select>
               <span className="mt-1 block text-[10px] text-neutral-600">Job reports land in this session.</span>
             </label>
+            <label className="block text-xs text-neutral-400">
+              Report session title
+              <input
+                value={reportSessionTitle}
+                onChange={(e) => setReportSessionTitle(e.target.value)}
+                placeholder="Custom name for auto-created sessions (optional)"
+                className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
+              />
+              <span className="mt-1 block text-[10px] text-neutral-600">Only used when "Auto-create" is selected above.</span>
+            </label>
             <div className="flex items-center gap-2">
               <button
                 onClick={saveJob}
@@ -252,7 +266,7 @@ export default function JobsView() {
                   {j.lastStatus && (
                     <p className="mt-1 text-[11px]">
                       last run: <span className={j.lastStatus === "failed" ? "text-red-400" : "text-neutral-400"}>{j.lastStatus}</span>
-                      {j.conversationId ? <span className="ml-2 text-neutral-600">· reports to session #{j.conversationId}</span> : <span className="ml-2 text-neutral-600">· auto-creates session</span>}
+                      {j.conversationId ? <span className="ml-2 text-neutral-600">· reports to session #{j.conversationId}</span> : <span className="ml-2 text-neutral-600">· auto-creates session{j.reportSessionTitle ? ` "${j.reportSessionTitle}"` : ""}</span>}
                       {j.lastError && <span className="ml-2 text-red-400/80">({j.lastError})</span>}
                     </p>
                   )}
