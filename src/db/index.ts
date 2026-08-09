@@ -210,6 +210,8 @@ if (!globalForDb.__agentLabSqlite) {
   if (!existingCols("jobs").includes("report_session_title")) {
     sqlite.exec("ALTER TABLE jobs ADD COLUMN report_session_title TEXT");
   }
+  // Clean up stale FK references (conversations deleted without cascade).
+  sqlite.exec("UPDATE jobs SET conversation_id = NULL WHERE conversation_id IS NOT NULL AND conversation_id NOT IN (SELECT id FROM conversations)");
 
   globalForDb.__agentLabSqlite = sqlite;
 }

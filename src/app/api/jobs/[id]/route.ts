@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { jobs } from "@/db/schema";
+import { jobs, conversations } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { nextCronRun } from "@/lib/agent/cron";
 
@@ -13,9 +13,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (key in body) patch[key] = body[key];
   }
   // conversationId comes from a <select> as a string; normalize to number or null.
+  // Guard against stale FK references (conversation was deleted without cascade).
   if ("conversationId" in body) {
     const raw = body.conversationId;
-    patch.conversationId = raw === "" || raw === null || raw === undefined ? null : Number(raw);
+    const num = raw === "" || raw === null || raw === undefined ? null : Number(raw);
+    if (num !== null && Number.isFinite(num)) {
+      // Verify the conversation still exists before applying the FK.
+      const conv = await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.id, num)).limit(1);
+      patch.conversationId = conv.length ? num : null;
+    } else {
+      patch.conversationId = null;
+    }
   }
   if ("intervalMinutes" in body) patch.intervalMinutes = Math.max(5, Number(body.intervalMinutes) || 60);
   if ("maxDurationMinutes" in body) patch.maxDurationMinutes = Math.max(1, Number(body.maxDurationMinutes) || 10);
