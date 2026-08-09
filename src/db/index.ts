@@ -128,6 +128,10 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   enabled_tools TEXT NOT NULL DEFAULT '["run_shell_command","read_file","write_file","list_directory","delete_path","get_system_status","list_processes","manage_package","manage_service","fetch_url","update_journal","schedule_job","list_jobs","cancel_job","manage_goal","list_goals","notify_human","query_database","download_file","edit_file","take_screenshot"]',
   extra_protected_paths TEXT NOT NULL DEFAULT '[]',
   system_prompt_extra TEXT,
+  static_core_prompt TEXT,
+  work_window_prompt TEXT,
+  focused_chat_prompt TEXT,
+  truncation_message TEXT,
   allow_network_fetch INTEGER NOT NULL DEFAULT 1,
   agent_name TEXT NOT NULL DEFAULT 'Root',
   api_key TEXT,
@@ -209,6 +213,12 @@ if (!globalForDb.__agentLabSqlite) {
   }
   if (!existingCols("jobs").includes("report_session_title")) {
     sqlite.exec("ALTER TABLE jobs ADD COLUMN report_session_title TEXT");
+  }
+  if (!existingCols("agent_settings").includes("static_core_prompt")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN static_core_prompt TEXT");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN work_window_prompt TEXT");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN focused_chat_prompt TEXT");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN truncation_message TEXT");
   }
   // Clean up stale FK references (conversations deleted without cascade).
   sqlite.exec("UPDATE jobs SET conversation_id = NULL WHERE conversation_id IS NOT NULL AND conversation_id NOT IN (SELECT id FROM conversations)");

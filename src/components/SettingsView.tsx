@@ -422,6 +422,59 @@ export default function SettingsView() {
         </section>
 
         <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+          <h2 className="text-sm font-semibold">System prompts</h2>
+          <p className="mt-1 text-xs text-neutral-500">
+            Customize the prompts sent to the model. Leave blank to use built-in defaults. Use <code className="text-neutral-400">{`{name}`}</code> for the agent name.
+          </p>
+          <div className="mt-3 space-y-3">
+            <label className="block text-xs text-neutral-400">
+              Static core (identity, environment, guardrails, behavior, output format, cost awareness)
+              <textarea
+                defaultValue={settings.staticCorePrompt || ""}
+                onBlur={(e) => save({ staticCorePrompt: e.target.value || null })}
+                rows={6}
+                className="mt-1 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 font-mono text-[11px] text-neutral-100 outline-none"
+                placeholder="(uses built-in default — identity, guardrails, behavior, formatting rules, cost + notification policy)"
+              />
+              <span className="mt-1 block text-[10px] text-neutral-600">{settings.staticCorePrompt ? `${settings.staticCorePrompt.length} chars` : "using default"}</span>
+            </label>
+            <label className="block text-xs text-neutral-400">
+              Work window prompt (scheduled jobs)
+              <textarea
+                defaultValue={settings.workWindowPrompt || ""}
+                onBlur={(e) => save({ workWindowPrompt: e.target.value || null })}
+                rows={4}
+                className="mt-1 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 font-mono text-[11px] text-neutral-100 outline-none"
+                placeholder="(uses built-in default — includes step/time budget and job details)"
+              />
+              <span className="mt-1 block text-[10px] text-neutral-600">{settings.workWindowPrompt ? `${settings.workWindowPrompt.length} chars` : "using default"}</span>
+            </label>
+            <label className="block text-xs text-neutral-400">
+              Focused chat prompt
+              <textarea
+                defaultValue={settings.focusedChatPrompt || ""}
+                onBlur={(e) => save({ focusedChatPrompt: e.target.value || null })}
+                rows={3}
+                className="mt-1 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 font-mono text-[11px] text-neutral-100 outline-none"
+                placeholder="(uses built-in default — answer questions, don't drift into jobs/goals)"
+              />
+              <span className="mt-1 block text-[10px] text-neutral-600">{settings.focusedChatPrompt ? `${settings.focusedChatPrompt.length} chars` : "using default"}</span>
+            </label>
+            <label className="block text-xs text-neutral-400">
+              Truncation message (shown when step limit is reached)
+              <textarea
+                defaultValue={settings.truncationMessage || ""}
+                onBlur={(e) => save({ truncationMessage: e.target.value || null })}
+                rows={2}
+                className="mt-1 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 font-mono text-[11px] text-neutral-100 outline-none"
+                placeholder="(uses built-in default — different for chat vs work windows)"
+              />
+              <span className="mt-1 block text-[10px] text-neutral-600">{settings.truncationMessage ? `${settings.truncationMessage.length} chars` : "using default"}</span>
+            </label>
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
           <h2 className="text-sm font-semibold">Autonomy mode</h2>
           <div className="mt-3 space-y-2">
             {(["manual", "balanced", "autonomous", "unrestricted"] as const).map((mode) => (

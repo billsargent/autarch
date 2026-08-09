@@ -59,6 +59,10 @@ export interface SettingsRow {
   enabledTools: string[];
   extraProtectedPaths: string[];
   systemPromptExtra: string | null;
+  staticCorePrompt: string | null;
+  workWindowPrompt: string | null;
+  focusedChatPrompt: string | null;
+  truncationMessage: string | null;
   allowNetworkFetch: boolean;
   agentName: string;
   apiKeySet: boolean;

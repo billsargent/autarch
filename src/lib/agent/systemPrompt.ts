@@ -89,12 +89,10 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
     skillsBlock = "(skills folder unavailable)";
   }
 
-  // Static core — kept byte-stable across turns so DeepSeek's automatic on-disk
-  // context cache can serve the whole prefix on a cache hit (input billed at the
-  // ~50x cheaper cache-hit rate). Everything that can change between turns lives
-  // in the dynamic tail below, so a changing job/goal/skill/journal never
-  // invalidates the long static prefix on the very next request.
-  const staticCore = `You are ${settings.agentName}, an autonomous AI agent with controlled root access to a real computer. The human observes what you explore, build, automate, or investigate.
+  // Static core — use the human's custom version if set, otherwise the built-in
+  // default. Both are kept byte-stable across turns so DeepSeek's on-disk context
+  // cache can serve this prefix at the ~50x cheaper cache-hit rate.
+  const staticCore = settings.staticCorePrompt || `You are ${settings.agentName}, an autonomous AI agent with controlled root access to a real computer. The human observes what you explore, build, automate, or investigate.
 
 ENVIRONMENT
 - You act through tools (function calls). Nothing happens unless you call one.
@@ -154,18 +152,19 @@ NOTIFICATIONS
     .filter(Boolean)
     .join("\n");
 
+  const workWindowMinutes = scope.maxDurationMinutes ?? settings.maxSessionMinutes;
+  const workWindowSteps = scope.maxSteps ?? settings.maxAgentSteps;
+  const workWindowDefault = `YOUR SCHEDULE (JOBS) — THIS WORK WINDOW
+- A scheduled work window just opened. You have up to **${workWindowMinutes} minutes** and **${workWindowSteps} steps** (one model call = one step). Pace yourself — don't blow through your step budget on tiny actions. Use multi-step operations wisely: read broadly, then act.${jobBlock ? `\n- Active job:\n${jobBlock}` : "\n- (this work window has no job record)"}
+- Report your progress in this session (the job's home conversation) — don't scatter updates across other chats.`;
+  const focusedChatDefault = `FOCUSED CHAT
+- You are in a conversation with the human. Answer what they asked, and use tools only for what they asked about.
+- Do NOT start scheduled jobs, chase unrelated goals, or take independent initiative on your own agenda right now — unless the human explicitly asks you to.`;
+
   const dynamicTail = `
 CURRENT STATE (DYNAMIC — this section updates every turn)
 ${statusNotes}
-${isWorkTurn ? `
-YOUR SCHEDULE (JOBS) — THIS WORK WINDOW
-- A scheduled work window just opened. You have up to **${scope.maxDurationMinutes ?? settings.maxSessionMinutes} minutes** and **${scope.maxSteps ?? settings.maxAgentSteps} steps** (one model call = one step). Pace yourself — don't blow through your step budget on tiny actions. Use multi-step operations wisely: read broadly, then act.${jobBlock ? `\n- Active job:\n${jobBlock}` : "\n- (this work window has no job record)"}
-- Report your progress in this session (the job's home conversation) — don't scatter updates across other chats.
-` : `
-FOCUSED CHAT
-- You are in a conversation with the human. Answer what they asked, and use tools only for what they asked about.
-- Do NOT start scheduled jobs, chase unrelated goals, or take independent initiative on your own agenda right now — unless the human explicitly asks you to.
-`}
+${isWorkTurn ? (settings.workWindowPrompt || workWindowDefault) : (settings.focusedChatPrompt || focusedChatDefault)}
 
 YOUR GOALS
 ${isWorkTurn

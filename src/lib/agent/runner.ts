@@ -319,7 +319,13 @@ export async function runAgentTurn(opts: {
 
   try {
     const client = getDeepSeekClient({ apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl });
-    const maxSteps = Math.max(1, settings.maxAgentSteps);
+    // Chat turns use the user's fixed maxAgentSteps setting. Work windows (scheduled
+    // or report) auto-scale steps from the time budget so a 45min job isn't choked
+    // by a 16-step default. Roughly 2 steps per minute (one step ≈ 30s model call + tool).
+    const isWorkWindow = trigger === "scheduled" || trigger === "report";
+    const maxSteps = isWorkWindow
+      ? Math.max(settings.maxAgentSteps, Math.ceil(maxDurationMinutes * 2))
+      : Math.max(1, settings.maxAgentSteps);
     const systemPrompt = await buildSystemPrompt(settings, {
       trigger,
       jobId: opts.jobId ?? null,
@@ -620,11 +626,11 @@ export async function runAgentTurn(opts: {
         content: `[TRUNCATED] Work session #${session.id} reached its step limit (${maxSteps} steps) and was stopped mid-task.`,
       });
       newMessages.push(truncEvent);
-      apiMessages.push({
-        role: "user",
-        content:
-          "[SYSTEM] Your turn was truncated — you hit the step limit. Briefly summarize what you just achieved and ask the human if they want you to continue the task. Reply in text only — do not call any tools.",
-      });
+      const defaultTrunc = isWorkWindow
+        ? "[SYSTEM] Your turn was truncated — you hit the step limit. Briefly note what you accomplished and what remains. The session will resume on the next scheduled run. Reply in text only — do not call any tools."
+        : "[SYSTEM] Your turn was truncated — you hit the step limit. Briefly summarize what you just achieved and ask the human if they want you to continue the task. Reply in text only — do not call any tools.";
+      const truncMsg = settings.truncationMessage || defaultTrunc;
+      apiMessages.push({ role: "user", content: truncMsg });
       try {
         const truncCompletion = await client.chat.completions.create(
           modelRequestParams(settings, {
