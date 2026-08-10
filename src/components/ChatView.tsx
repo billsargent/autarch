@@ -55,6 +55,7 @@ export default function ChatView() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTools, setShowTools] = useState(true);
+  const [hideChatTools, setHideChatTools] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [liveByConvo, setLiveByConvo] = useState<Record<number, LiveItem[]>>({});
@@ -307,6 +308,11 @@ export default function ChatView() {
     abortRef.current?.abort();
   }, [activeId]);
   const onToggleTools = useCallback(() => setShowTools((v) => !v), []);
+  const onToggleHideChatTools = useCallback(() => setHideChatTools((v) => !v), []);
+
+  // Filter tool messages from the chat stream when the user prefers a clean view
+  // (tool activity still appears in the live console below the chat).
+  const visibleMsgs = hideChatTools ? msgs.filter((m) => m.role !== "tool") : msgs;
 
   async function send(text: string) {
     if (!text.trim() || sending) return;
@@ -648,7 +654,7 @@ export default function ChatView() {
         )}
 
         <MessageList
-          msgs={msgs}
+          msgs={visibleMsgs}
           sending={sending}
           error={error}
           hasMore={hasMore}
@@ -691,6 +697,8 @@ export default function ChatView() {
           sending={busy}
           showTools={showTools}
           onToggleTools={onToggleTools}
+          hideChatTools={hideChatTools}
+          onToggleHideChatTools={onToggleHideChatTools}
           onSend={onQuickAction}
           onStop={onStop}
           onUploadClick={() => fileRef.current?.click()}

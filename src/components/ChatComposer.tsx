@@ -6,6 +6,8 @@ interface ChatComposerProps {
   sending: boolean;
   showTools: boolean;
   onToggleTools: () => void;
+  hideChatTools: boolean;
+  onToggleHideChatTools: () => void;
   onSend: (text: string) => void;
   onStop: () => void;
   onUploadClick: () => void;
@@ -17,6 +19,8 @@ export default function ChatComposer({
   sending,
   showTools,
   onToggleTools,
+  hideChatTools,
+  onToggleHideChatTools,
   onSend,
   onStop,
   onUploadClick,
@@ -48,11 +52,18 @@ export default function ChatComposer({
         />
         <div className="flex flex-col gap-2">
           <button
+            onClick={onToggleHideChatTools}
+            title="Show or hide tool messages in the chat stream (tool activity stays visible below)"
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800"
+          >
+            {hideChatTools ? "Show tools in chat" : "Hide tools in chat"}
+          </button>
+          <button
             onClick={onToggleTools}
             title="Show or hide the live tool activity console"
             className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800"
           >
-            {showTools ? "Hide tool actions" : "Show tool actions"}
+            {showTools ? "Hide live console" : "Show live console"}
           </button>
           <button
             onClick={onUploadClick}
