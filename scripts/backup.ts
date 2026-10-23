@@ -7,7 +7,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 
-const SRC = process.env.DB_PATH || path.join(process.cwd(), "data", "app.db");
+const SRC = process.env.DB_PATH || process.env.AUTARCH_DB_PATH || path.join(process.cwd(), "data", "app.db");
 const DEST_DIR = process.env.BACKUP_DIR || "/root/backups";
 
 async function main() {

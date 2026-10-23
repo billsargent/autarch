@@ -42,6 +42,10 @@ the local SQLite file `data/app.db`.
 > The `db:push` / `db:generate` scripts still exist for schema maintenance, but the app creates
 > its own schema at startup, so they are optional.
 
+To keep the database somewhere else (for example a throwaway copy while testing), set
+`AUTARCH_DB_PATH=/path/to/file.db` for both the web server and the worker. The safety layer
+protects that file the same way it protects `data/app.db`.
+
 ## What the agent can do
 
 The agent acts through **function-calling tools**. Every tool call is risk-classified

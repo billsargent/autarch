@@ -2,12 +2,11 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs";
+import { DB_PATH } from "./path";
 
 // Self-contained SQLite database — no environment variables required.
 // The DB file and tables are created automatically on first run.
-const DATA_DIR = path.join(process.cwd(), "data");
-fs.mkdirSync(DATA_DIR, { recursive: true });
-const DB_PATH = path.join(DATA_DIR, "app.db");
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversations (
