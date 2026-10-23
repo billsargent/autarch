@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getSettings } from "@/lib/agent/settingsStore";
-import { resolvePathSafe, isSecretPath } from "@/lib/agent/risk";
+import { resolvePathSafe, isSecretPath, isReallyWithin } from "@/lib/agent/risk";
 
 const MIME: Record<string, string> = {
   ".png": "image/png",
@@ -50,7 +50,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   const settings = await getSettings();
   const rel = segs.join("/");
   const resolved = resolvePathSafe(rel, settings.workspaceDir);
-  if (!isWithin(path.resolve(settings.workspaceDir), path.resolve(resolved))) {
+  // Real locations, so a symlink in the workspace can't serve files from
+  // elsewhere (#9).
+  if (!isWithin(path.resolve(settings.workspaceDir), path.resolve(resolved)) || !isReallyWithin(settings.workspaceDir, resolved)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (isSecretPath(resolved)) {

@@ -2,6 +2,7 @@ import { exec, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import fssync from "node:fs";
+import dns from "node:dns/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AgentSettingsRow } from "./settingsStore";
@@ -21,6 +22,7 @@ import {
   buildOverrides,
   invalidPackageArgs,
   UNIT_NAME,
+  addressKind,
   type RiskResult,
   type SuperviseOverrides,
 } from "./risk";
@@ -779,16 +781,68 @@ async function manageService(action: string, service: string) {
   return runFile("sudo", ["-n", "systemctl", action, service], 20);
 }
 
+// --- Network requests (#4) ----------------------------------------------------
+// The risk gate classifies the URL's host name; this re-checks where it really
+// points (DNS) and every redirect, so a "public" name that resolves to this
+// machine or the local network can't be used to reach the dashboard.
+
+class RefusedRequest extends Error {}
+
+async function checkDestination(url: string, allowPrivate: boolean): Promise<string | null> {
+  const r = classifyFetchUrl(url);
+  if (r.risk === "blocked") return r.reason;
+  if (r.risk === "critical" && !allowPrivate) return r.reason;
+  const host = new URL(url).hostname.replace(/^\[|\]$/g, "");
+  if (/^[\d.]+$/.test(host) || host.includes(":")) return null; // an address literal is already classified
+  let addresses: Array<{ address: string }> = [];
+  try {
+    addresses = await dns.lookup(host, { all: true });
+  } catch {
+    return null; // let the request itself report the DNS failure
+  }
+  for (const a of addresses) {
+    const kind = addressKind(a.address);
+    if (kind === "self") return `${host} resolves to this machine (${a.address}); requests to its own services are blocked.`;
+    if (kind === "private" && !allowPrivate) return `${host} resolves to a local-network address (${a.address}); that needs the human's approval.`;
+  }
+  return null;
+}
+
+async function safeFetch(url: string, init: RequestInit): Promise<Response> {
+  // A local-network URL only gets here after the human approved it.
+  const allowPrivate = classifyFetchUrl(url).risk === "critical";
+  let current = url;
+  for (let hop = 0; hop <= 5; hop++) {
+    const problem = await checkDestination(current, allowPrivate);
+    if (problem) throw new RefusedRequest(problem);
+    const res = await fetch(current, { ...init, redirect: "manual" });
+    const location = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && location) {
+      current = new URL(location, current).toString();
+      if (init.method && init.method !== "GET") throw new RefusedRequest("A POST request was redirected; not following it.");
+      continue;
+    }
+    return res;
+  }
+  throw new RefusedRequest("Too many redirects.");
+}
+
 async function fetchUrl(url: string, method: "GET" | "POST", body?: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
-    const res = await fetch(url, {
-      method,
-      body: method === "POST" ? body : undefined,
-      signal: controller.signal,
-      headers: { "user-agent": "deepseek-agent-framework/1.0" },
-    });
+    let res: Response;
+    try {
+      res = await safeFetch(url, {
+        method,
+        body: method === "POST" ? body : undefined,
+        signal: controller.signal,
+        headers: { "user-agent": "autarch-agent/1.0" },
+      });
+    } catch (err) {
+      if (err instanceof RefusedRequest) return { output: `Refused: ${err.message}`, summary: `${method} ${url} refused` };
+      throw err;
+    }
     const text = await res.text();
     const bytes = Buffer.byteLength(text, "utf-8");
     const clipped =
@@ -1088,11 +1142,13 @@ async function downloadFile(args: Record<string, unknown>, workspaceDir: string)
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), (Number(args.timeoutSec) || 30) * 1000);
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "user-agent": "deepseek-agent-framework/1.0" },
-    });
+    let res: Response;
+    try {
+      res = await safeFetch(url, { signal: controller.signal, headers: { "user-agent": "autarch-agent/1.0" } });
+    } catch (err) {
+      if (err instanceof RefusedRequest) return { output: `Refused: ${err.message}`, summary: `download ${url} refused` };
+      throw err;
+    }
     if (!res.ok) return { output: `HTTP ${res.status} ${res.statusText}`, summary: `download ${url} failed` };
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > MAX_DOWNLOAD_BYTES) {

@@ -3,6 +3,26 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — Closing the agent's escape routes
+
+- **The agent can't reach this machine's own services (#4).** `fetch_url` and `download_file`
+  block loopback in every spelling (`127.1`, `2130706433`, `[::ffff:127.0.0.1]`, `localhost.`,
+  this machine's name and addresses), check where a host name really resolves, and re-check every
+  redirect. Other local-network addresses need approval. Shell commands that call the dashboard's
+  control API or connect to its port are blocked.
+- **Symlinks can't smuggle paths (#9).** File checks follow links to their real location, so a
+  link in the workspace pointing at a secret or protected file is treated as that file;
+  `/api/files` won't serve through such links either. Secret paths are also matched with Windows
+  separators.
+- **Settings are validated (#11).** Every field has a type and a range or allowed values. The
+  workspace can't be `/`, a system folder, your home folder itself, or the framework's own folder.
+  Errors show on the Settings page.
+- **Custom system prompts now save.** Settings → System prompts showed them as saved, but the
+  server dropped all four fields.
+- **The framework's own code is protected (#12):** all of `src/` (including the guardrails),
+  `scripts/`, `deploy/` and `public/`. The shell check matches protected names as path tokens, so
+  `/tmp/mysrc` no longer counts as `src`.
+
 ## 2026-10-23 — Safety fixes
 
 - **Package and service tools can no longer run injected commands (#2).** Names are checked against

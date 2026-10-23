@@ -25,7 +25,13 @@ export const HARD_PROTECTED_PATHS: string[] = [
   path.join(PROJECT_ROOT, "tsconfig.json"),
   path.join(PROJECT_ROOT, "next.config.ts"),
   path.join(PROJECT_ROOT, "next.config.js"),
-  path.join(PROJECT_ROOT, "src", "db"),
+  // The framework's own code, including these guardrails, plus its scripts,
+  // deploy units and static art. An agent that could edit risk.ts could
+  // switch its own guardrails off (#12).
+  path.join(PROJECT_ROOT, "src"),
+  path.join(PROJECT_ROOT, "scripts"),
+  path.join(PROJECT_ROOT, "deploy"),
+  path.join(PROJECT_ROOT, "public"),
   path.join(PROJECT_ROOT, ".env"),
   path.join(PROJECT_ROOT, ".env.local"),
   path.join(PROJECT_ROOT, ".env.production"),

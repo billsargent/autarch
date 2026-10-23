@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSettings, updateSettings, type AgentSettingsRow } from "@/lib/agent/settingsStore";
 import { isDeepSeekConfigured } from "@/lib/agent/deepseekClient";
+import { validateSettingsPatch } from "@/lib/agent/settingsValidation";
 import {
   ALL_TOOL_DEFINITIONS,
 } from "@/lib/agent/tools";
@@ -49,6 +50,12 @@ export async function PUT(req: Request) {
     "enabledTools",
     "extraProtectedPaths",
     "systemPromptExtra",
+    // Custom prompts from Settings → System prompts. These were missing, so
+    // the page showed them as saved while the server dropped them.
+    "staticCorePrompt",
+    "workWindowPrompt",
+    "focusedChatPrompt",
+    "truncationMessage",
     "allowNetworkFetch",
     "agentName",
     "apiKey",
@@ -83,6 +90,8 @@ export async function PUT(req: Request) {
   if ((patch.unrestrictedMode === true || patch.autonomyMode === "unrestricted") && body.confirm !== true) {
     return NextResponse.json({ error: "Enabling unrestricted mode requires confirm: true." }, { status: 400 });
   }
-  const updated = await updateSettings(patch as Partial<AgentSettingsRow>);
+  const checked = validateSettingsPatch(patch, ALL_TOOL_DEFINITIONS.map((t) => t.function.name));
+  if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+  const updated = await updateSettings(checked.patch as Partial<AgentSettingsRow>);
   return NextResponse.json({ settings: publicSettings(updated) });
 }
