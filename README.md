@@ -65,6 +65,11 @@ To keep the database somewhere else (for example a throwaway copy while testing)
 `AUTARCH_DB_PATH=/path/to/file.db` for both the web server and the worker. The safety layer
 protects that file the same way it protects `data/app.db`.
 
+To open the dev server from another machine on your network, list that machine's hostname or IP
+in `ALLOWED_DEV_ORIGINS` (comma-separated) in `.env.local`. To run a second dev server next to
+the first (say, on a throwaway database), give it its own build folder:
+`NEXT_DIST_DIR=.next-test AUTARCH_DB_PATH=/tmp/test.db npx next dev -p 3123`.
+
 ## What the agent can do
 
 The agent acts through **function-calling tools**. Every tool call is risk-classified

@@ -3,6 +3,13 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — Dev server settings
+
+- **No network address in the repo (#48).** The hosts allowed to open the dev server from another
+  machine come from `ALLOWED_DEV_ORIGINS` (comma-separated), for example in `.env.local`.
+- **A second dev server can run alongside the first:** `NEXT_DIST_DIR=.next-test` gives it its
+  own build folder (useful for testing against a throwaway database).
+
 ## 2026-10-23 — One turn at a time, and a Stop that works
 
 - **One turn per conversation (#18).** A chat message, an approval follow-up, "Run now" and the
