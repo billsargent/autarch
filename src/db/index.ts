@@ -270,6 +270,9 @@ if (!globalForDb.__agentLabSqlite) {
       sqlite.exec(`ALTER TABLE ${table} ADD COLUMN agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL`);
     }
   }
+  if (!existingCols("agents").includes("paused_by")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN paused_by TEXT");
+  }
   if (!existingCols("conversations").includes("partner_agent_id")) {
     sqlite.exec("ALTER TABLE conversations ADD COLUMN partner_agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL");
   }

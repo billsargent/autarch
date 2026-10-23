@@ -3,6 +3,25 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — The Mayor's powers
+
+- **The Mayor can run the village (#58).** He has six tools of his own:
+  - give a villager a goal (`assign_goal`) or a recurring job (`schedule_job_for`);
+  - look over what a villager has been doing and spending (`review_agent`);
+  - raise a problem with you (`flag`, at most 5 an hour);
+  - pause one villager who's misbehaving or overspending, and let them work again
+    (`pause_agent` / `resume_agent`).
+- **Pauses stay under your control.** The Mayor has to say why he paused someone, and you're
+  told. He can only let villagers he paused work again; anyone you paused waits for you. The
+  Villagers page shows "paused by the Mayor".
+- **What stays yours has no tool at all:** approvals, settings, overrides, limits, the global
+  pause and dismissing anyone. The Mayor can't pause himself or the whole town. While he's
+  answering a neighbour's question he can't pause, resume or assign work, so no villager can
+  talk him into it.
+- **Only the Mayor ever gets these tools,** whatever a villager's tool list says. They're
+  checked again when they run.
+- Villagers are now told they can ask their neighbours things.
+
 ## 2026-10-24 — Neighbours talk
 
 - **Villagers can ask each other things (#57).** A new `ask_villager` tool lets a villager put a

@@ -4,6 +4,7 @@ import { asc, eq, ne } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { isCharacterKey, VILLAGER_COLORS } from "./villagerLooks";
 import { ABANDONED_AFTER_MS } from "./turnLock";
+import { isMayorTool } from "./mayorTools";
 
 // The villagers (#55). The Mayor is the first one: on an install from before
 // villagers existed, he is made from the old single agent's name and
@@ -59,8 +60,9 @@ export async function listVillagers(): Promise<AgentRow[]> {
 
 // The tools a villager may use: its own list, but never beyond the town's tool
 // policy (docs/town-charter.md: a villager never gets more than the town allows).
+// The Mayor's tools are his alone (#58).
 export function effectiveTools(agent: AgentRow, settings: AgentSettingsRow): string[] {
-  const town = (settings.enabledTools as string[]) || [];
+  const town = ((settings.enabledTools as string[]) || []).filter((t) => agent.isMayor || !isMayorTool(t));
   const own = agent.enabledTools as string[] | null;
   return own ? town.filter((t) => own.includes(t)) : town;
 }

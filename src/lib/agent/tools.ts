@@ -428,6 +428,101 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
+  // The Mayor's powers (#58): only the Mayor is ever given these.
+  {
+    type: "function" as const,
+    function: {
+      name: "assign_goal",
+      description: "Mayor only. Put a goal on a villager's goals board, for them to pick up in their work.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "The villager's name." },
+          title: { type: "string" },
+          body: { type: "string", description: "What done looks like, in a sentence or two." },
+          priority: { type: "number", description: "1 = highest. Default 3." },
+        },
+        required: ["to", "title"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "schedule_job_for",
+      description: "Mayor only. Give a villager a new recurring job (their own scheduled work window). It runs as them, on their budget.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "The villager's name." },
+          name: { type: "string", description: "Short name for the job." },
+          instruction: { type: "string", description: "What they should do in each work window." },
+          intervalMinutes: { type: "number", description: "How often, in minutes (min 5). Default 60." },
+          maxDurationMinutes: { type: "number", description: "Max minutes per run. Default 10." },
+          cron: { type: "string", description: "Optional 5-field cron expression; overrides intervalMinutes." },
+        },
+        required: ["to", "name", "instruction"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "review_agent",
+      description: "Mayor only. Read-only look at a villager: status, today's spending, recent work sessions and tool calls, open goals and jobs.",
+      parameters: {
+        type: "object",
+        properties: { name: { type: "string", description: "The villager's name." } },
+        required: ["name"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "flag",
+      description: "Mayor only. Raise a problem with the owner (a notification). For things they need to know or decide; a few an hour at most.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          body: { type: "string" },
+          severity: { type: "string", enum: ["info", "warning", "critical"] },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "pause_agent",
+      description: "Mayor only. Pause one villager who is misbehaving or burning budget: they stop what they're doing and can only chat. Never yourself, never the whole town. The owner is told why.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "The villager's name." },
+          reason: { type: "string", description: "Why, for the owner." },
+        },
+        required: ["name", "reason"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "resume_agent",
+      description: "Mayor only. Let a villager you paused work again. Villagers the owner paused stay paused until the owner says.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "The villager's name." },
+          reason: { type: "string" },
+        },
+        required: ["name"],
+      },
+    },
+  },
 ];
 
 export function getEnabledToolDefinitions(enabledTools: string[]) {
@@ -493,6 +588,16 @@ export function evaluateToolRisk(
       return { risk: "low", reason: "Posts a message into a chat session; no system access." };
     case "ask_villager":
       return { risk: "low", reason: "Asks another villager something; they answer on their own budget. No system access." };
+    case "assign_goal":
+    case "review_agent":
+    case "flag":
+      return { risk: "low", reason: "The Mayor's bookkeeping: goals, a read-only review, or a note to the owner." };
+    case "pause_agent":
+      return { risk: "low", reason: "The Mayor pausing one villager; stopping work is always safe, and the owner is told." };
+    case "schedule_job_for":
+      return { risk: "medium", reason: "The Mayor creating a recurring work schedule for a villager." };
+    case "resume_agent":
+      return { risk: "medium", reason: "The Mayor letting a villager he paused work (and spend) again." };
     case "query_database":
       return { risk: "medium", reason: "Read-only access to the app's own database (SELECT only)." };
     case "download_file": {
@@ -605,6 +710,13 @@ export async function executeTool(
       return postMessage(args, ctx);
     case "ask_villager":
       return (await import("./messaging")).askVillager(args, ctx);
+    case "assign_goal":
+    case "schedule_job_for":
+    case "review_agent":
+    case "flag":
+    case "pause_agent":
+    case "resume_agent":
+      return (await import("./mayor")).runMayorTool(tool, args, ctx);
     case "query_database":
       return queryDatabase(args);
     case "download_file":
@@ -893,7 +1005,7 @@ async function fetchUrl(url: string, method: "GET" | "POST", body?: string) {
 // Jobs
 // ---------------------------------------------------------------------------
 
-async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
+export async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
   const name = String(args.name || "Untitled job");
   const instruction = args.instruction ? String(args.instruction) : "";
   const intervalMinutes = Math.max(5, Number(args.intervalMinutes) || 60);

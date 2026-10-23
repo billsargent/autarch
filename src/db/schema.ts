@@ -26,6 +26,8 @@ export const agents = sqliteTable("agents", {
   home: text("home").notNull().default(""),
   isMayor: integer("is_mayor", { mode: "boolean" }).notNull().default(false),
   status: text("status", { enum: ["active", "paused", "dismissed"] }).notNull().default("active"),
+  // Who paused them (#58): the Mayor may only let villagers he paused work again.
+  pausedBy: text("paused_by", { enum: ["owner", "mayor"] }),
   // Limits (#60); empty = no cap of its own.
   dailyBudgetUsd: real("daily_budget_usd"),
   maxActionsPerHour: integer("max_actions_per_hour"),

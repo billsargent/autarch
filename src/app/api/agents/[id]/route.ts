@@ -23,7 +23,11 @@ export async function PATCH(req: Request, { params }: Params) {
   if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
   const [updated] = await db
     .update(agents)
-    .set({ ...checked.value, updatedAt: new Date() })
+    .set({
+      ...checked.value,
+      ...(checked.value.status ? { pausedBy: checked.value.status === "paused" ? ("owner" as const) : null } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(agents.id, agent.id))
     .returning();
   // Pausing stops what they're doing now, too.

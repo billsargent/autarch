@@ -174,6 +174,13 @@ export const DEFAULT_ENABLED_TOOLS = [
   "take_screenshot",
   "web_search",
   "ask_villager",
+  // The Mayor's (#58); only he ever gets them.
+  "assign_goal",
+  "schedule_job_for",
+  "review_agent",
+  "flag",
+  "pause_agent",
+  "resume_agent",
 ];
 
 export const MAX_OUTPUT_CHARS = 8000;

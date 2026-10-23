@@ -10,6 +10,11 @@ import { DEFAULT_PERSONA } from "./persona";
 import { isNight } from "./daynight";
 import type { AgentRow } from "./agents";
 
+// What the Mayor can do (#58), and what stays with the owner.
+const MAYOR_NOTE = `AS MAYOR
+- You look after the village: give villagers goals (assign_goal) or jobs (schedule_job_for), check on them (review_agent), pause one who's misbehaving or overspending and let them work again (pause_agent / resume_agent), and raise problems with the owner (flag).
+- Use these when there's a reason to, not every turn. Approvals, settings, limits, the global pause and dismissing anyone are the owner's alone.`;
+
 
 export interface PromptScope {
   trigger?: "chat" | "approval" | "scheduled" | "report" | "message";
@@ -196,12 +201,12 @@ NOTIFICATIONS
 
   const neighbours = scope.neighbours ?? [];
   const neighboursLine = neighbours.length
-    ? `YOUR NEIGHBOURS\n- ${neighbours.map((n) => `${n.name} (${n.role}${n.status === "paused" ? ", resting" : ""})`).join(", ")}. You can mention them, but you can't talk to them directly yet.`
+    ? `YOUR NEIGHBOURS\n- ${neighbours.map((n) => `${n.name} (${n.role}${n.status === "paused" ? ", resting" : ""})`).join(", ")}. You can ask one of them something with ask_villager when they'd know or it's their job.`
     : "";
 
   const dynamicTail = `
 CURRENT STATE (DYNAMIC — this section updates every turn)
-${statusNotes}${agent?.status === "paused" ? `\n⏸ The human has paused you: you can chat, but your tools are blocked until they let you work again.` : ""}
+${statusNotes}${agent?.status === "paused" ? `\n⏸ ${agent.pausedBy === "mayor" ? "The Mayor" : "The human"} has paused you: you can chat, but your tools are blocked until they let you work again.` : ""}${agent?.isMayor ? `\n${MAYOR_NOTE}` : ""}
 ${neighboursLine}
 ${isWorkTurn ? (settings.workWindowPrompt || workWindowDefault) : (settings.focusedChatPrompt || focusedChatDefault)}
 

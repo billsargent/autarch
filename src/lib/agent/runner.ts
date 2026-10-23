@@ -620,7 +620,7 @@ export async function runAgentTurn(opts: {
           resultContent = `PAUSED: ${output}`;
         } else if (villagerPaused) {
           status = "blocked";
-          output = `The human has paused ${agent.name}. No actions run while you're paused; you can still chat.`;
+          output = `${agent.pausedBy === "mayor" ? "The Mayor" : "The human"} has paused ${agent.name}. No actions run while you're paused; you can still chat.`;
           resultContent = `PAUSED: ${output}`;
         } else if (!unrestricted && !toolIsEnabled) {
           status = "blocked";

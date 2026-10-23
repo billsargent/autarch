@@ -193,6 +193,7 @@ export interface AgentRow {
   home: string;
   isMayor: boolean;
   status: "active" | "paused" | "dismissed";
+  pausedBy: "owner" | "mayor" | null;
   dailyBudgetUsd: number | null;
   maxActionsPerHour: number | null;
   createdAt: string;

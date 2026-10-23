@@ -57,7 +57,7 @@ gate, rate limits and activity log.
 | **Assign work** | Give a goal to a villager, or schedule a job for one. Reassign when someone is stuck. | Only to active villagers. A job must fit the villager's budget and the time windows. |
 | **Review** | Read any villager's sessions, tool calls and spending. | Read-only. |
 | **Flag** | Raise a notification to the owner about a problem. | Rate-limited. |
-| **Pause / resume a villager** | Stop a villager that is misbehaving or burning budget, then let it continue. | One villager at a time. Never the whole town, and never itself. |
+| **Pause / resume a villager** | Stop a villager that is misbehaving or burning budget, then let it continue. | One villager at a time. Never the whole town, and never itself. It must give a reason, which the owner sees. It can resume only villagers it paused; a villager the owner paused waits for the owner. While answering a neighbour's question it can't pause, resume or assign work. |
 | **Call a meeting** | Gather the awake villagers in the town hall (section 7). | Daytime only, with a meeting cost cap. |
 | **Hire** | Propose a new villager (section 4). | Population cap and town budget, and the hiring mode decides who approves. |
 

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
 import { DEFAULT_ENABLED_TOOLS, DEFAULT_WORKSPACE_DIR, PROJECT_ROOT } from "./config";
+import { MAYOR_TOOLS } from "./mayorTools";
 
 export type AgentSettingsRow = typeof agentSettings.$inferSelect;
 
@@ -34,7 +35,7 @@ function migrateSkillsDirOnce(workspaceDir: string) {
 // Tools added after an install was set up are offered to its tool policy once
 // (switched on), and remembered, so if the owner later switches one off it
 // stays off.
-const NEW_TOOLS_TO_OFFER = ["post_message", "ask_villager"];
+const NEW_TOOLS_TO_OFFER = ["post_message", "ask_villager", ...MAYOR_TOOLS];
 
 async function ensureMessagingEnabled(row: AgentSettingsRow): Promise<AgentSettingsRow> {
   if (messagingEnabled) return row;

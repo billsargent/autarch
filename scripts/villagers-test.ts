@@ -274,6 +274,61 @@ async function main() {
   check("not at night", (await askVillager({ to: "Bea", message: "hi" }, ctxCal)).output.includes("is asleep"), true);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
 
+  // --- the Mayor's powers (#58) ----------------------------------------------------
+  const { executeTool, ALL_TOOL_DEFINITIONS } = await import("../src/lib/agent/tools");
+  const { runMayorTool, FLAGS_PER_HOUR } = await import("../src/lib/agent/mayor");
+  const town = await getSettings();
+  const calRow = (await db.select().from(agents).where(eq(agents.id, cal.id)))[0];
+  check("nobody but the Mayor gets the Mayor's tools, even if listed for them", villagers.effectiveTools({ ...calRow, enabledTools: ["pause_agent", "read_file"] }, town), ["read_file"]);
+  check("…and nobody but the Mayor was offered them", fake.seen.filter((s) => !s.system.startsWith("You are Mayor Ada")).some((s) => s.tools.includes("pause_agent")), false);
+  check("a villager calling one anyway is refused when it runs", (await executeTool("pause_agent", { name: "Dot", reason: "x" }, town, ctxCal)).output, "Refused: only the Mayor can do that.");
+
+  fake.byAgent["Mayor Ada"] = [{ tools: [{ name: "assign_goal", args: { to: "cal", title: "Fix the bridge", priority: 2 } }] }, { text: "Cal has the bridge." }];
+  const { conversationId: mayorTalk } = await runAgentTurn({ userMessage: "someone should fix the bridge", agentId: mayor.id });
+  const mayorSaw = fake.seen.find((s) => s.system.startsWith("You are Mayor Ada") && s.stream)!;
+  check("the Mayor is offered his powers and told about them", [mayorSaw.tools.includes("pause_agent"), mayorSaw.system.includes("AS MAYOR")], [true, true]);
+  const bridge = (await db.select().from(goals).where(eq(goals.title, "Fix the bridge")))[0];
+  check("the Mayor can give a villager a goal", [bridge?.agentId, bridge?.priority, bridge?.conversationId], [cal.id, 2, null]);
+  check("…in a real turn, logged as his", (await db.select().from(toolExecutions).where(eq(toolExecutions.conversationId, mayorTalk))).map((e) => [e.tool, e.status, e.agentId]), [["assign_goal", "success", mayor.id]]);
+
+  const ctxMayor = { agentId: mayor.id, agentName: mayor.name, conversationId: mayorTalk };
+  const power = (tool: string, args: Record<string, unknown>, ctx: Record<string, unknown> = ctxMayor) => runMayorTool(tool, args, ctx).then((r) => r.output);
+  const jobOut = await power("schedule_job_for", { to: "Dot", name: "Water the beans", instruction: "Water them.", intervalMinutes: 120, jobId: bridge.id });
+  const beans = (await db.select().from(jobs).where(eq(jobs.name, "Water the beans")))[0];
+  check("the Mayor can schedule a job for a villager (always a new one, theirs)", [jobOut.startsWith("Scheduled for Dot: job #"), beans?.agentId, beans?.intervalMinutes], [true, dot.id, 120]);
+  check("work only goes to villagers who can take it", (await power("assign_goal", { to: "Ann", title: "x" })).includes("Ann is paused"), true);
+  check("…and who live here", (await power("assign_goal", { to: "Zed", title: "x" })).startsWith('Refused: nobody called "Zed"'), true);
+
+  const review = await power("review_agent", { name: "Cal" });
+  check("the Mayor can review a villager: spending, sessions and tool calls", [review.startsWith("Cal (Carpenter) — active"), review.includes("Spent today: $"), review.includes("- ask_villager [success"), review.includes("#" + bridge.id + " Fix the bridge")], [true, true, true, true]);
+
+  check("he can't pause himself", (await power("pause_agent", { name: "Mayor Ada", reason: "tired" })).startsWith("Refused: you can't pause yourself"), true);
+  check("…or the whole town", (await power("pause_agent", { name: "everyone", reason: "x" })).startsWith('Refused: nobody called "everyone"'), true);
+  check("…and has to say why", (await power("pause_agent", { name: "Dot" })).includes("say why"), true);
+  check("…and can't act on a neighbour's say-so while answering them", (await power("pause_agent", { name: "Dot", reason: "x" }, { ...ctxMayor, trigger: "message" })).includes("answering a neighbour"), true);
+  await power("pause_agent", { name: "Dot", reason: "Spending too much on searches." });
+  const dotNow = (await db.select().from(agents).where(eq(agents.id, dot.id)))[0];
+  check("the Mayor can pause one villager", [dotNow.status, dotNow.pausedBy], ["paused", "mayor"]);
+  const told = (await db.select().from(notifications).where(eq(notifications.title, "Mayor Ada paused Dot")))[0];
+  check("…and the owner is told why", told?.body, "Spending too much on searches.");
+  check("he can't let someone the owner paused work again", (await power("resume_agent", { name: "Ann" })).includes("only the owner can"), true);
+  await power("resume_agent", { name: "Dot" });
+  const dotBack = (await db.select().from(agents).where(eq(agents.id, dot.id)))[0];
+  check("…but can let someone he paused work again", [dotBack.status, dotBack.pausedBy], ["active", null]);
+  await power("pause_agent", { name: "Dot", reason: "again" });
+  await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { status: "active" }), { params: Promise.resolve({ id: String(dot.id) }) });
+  check("the owner can always let them work again", (await db.select().from(agents).where(eq(agents.id, dot.id)))[0].pausedBy, null);
+
+  for (let i = 0; i < FLAGS_PER_HOUR; i++) await power("flag", { title: `Problem ${i}` });
+  check("the Mayor can flag problems to the owner", (await db.select().from(notifications).where(eq(notifications.kind, "flag"))).length, FLAGS_PER_HOUR);
+  check("…a few an hour", (await power("flag", { title: "One more" })).includes(`flagged ${FLAGS_PER_HOUR} things`), true);
+
+  // What stays with the owner has no tool at all, and the back doors are shut.
+  check("no tool approves, changes settings, overrides, limits or the global pause, or dismisses", ALL_TOOL_DEFINITIONS.map((t) => t.function.name).filter((n) => /approv|setting|override|limit|budget|dismiss|global|unpause/i.test(n)), []);
+  check("the Mayor can't change settings through the database", (await executeTool("query_database", { sql: "UPDATE agent_settings SET paused = 0" }, town, ctxMayor)).output, "Only read-only SELECT queries are allowed.");
+  check("…or raise a budget", (await executeTool("query_database", { sql: "WITH x AS (SELECT 1) UPDATE agents SET daily_budget_usd = 99" }, town, ctxMayor)).output, "Only read-only SELECT queries are allowed.");
+  check("…or approve his own requests", (await executeTool("query_database", { sql: "SELECT 1; UPDATE tool_executions SET status = 'approved'" }, town, ctxMayor)).output, "Only read-only SELECT queries are allowed.");
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

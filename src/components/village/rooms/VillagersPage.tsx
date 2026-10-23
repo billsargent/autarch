@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { AgentRow, SettingsRow } from "@/lib/agent/clientTypes";
 import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 import { CHARACTER_KEYS, CHARACTER_LABELS, VILLAGER_COLORS } from "@/lib/agent/villagerLooks";
+import { isMayorTool } from "@/lib/agent/mayorTools";
 import { useVillagers, type VillagerInput } from "../../data/useVillagers";
 import { ConfirmDialog } from "../ParchmentDialog";
 import VillagerPortrait from "../VillagerPortrait";
@@ -16,7 +17,7 @@ const input = "mt-1 w-full rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 p
 const usd = (n: number) => `$${n.toFixed(n < 1 ? 3 : 2)}`;
 
 function doing(v: AgentRow, villagePaused: boolean): string {
-  if (v.status === "paused") return "Resting (paused)";
+  if (v.status === "paused") return v.pausedBy === "mayor" ? "Resting (paused by the Mayor)" : "Resting (paused)";
   if (villagePaused) return "Asleep (village paused)";
   if (v.waiting) return `Waiting on you (${v.waiting})`;
   if (v.working) return "Working";
@@ -144,7 +145,8 @@ function VillagerEditor({
   onSave: (patch: VillagerInput) => Promise<{ ok: true } | { ok: false; error: string }>;
   onCancel: () => void;
 }) {
-  const townTools = tools.filter((t) => settings.enabledTools.includes(t.name));
+  // The Mayor's own tools are only ever his (#58).
+  const townTools = tools.filter((t) => settings.enabledTools.includes(t.name) && (villager?.isMayor || !isMayorTool(t.name)));
   const [name, setName] = useState(villager?.name ?? "");
   const [role, setRole] = useState(villager?.role ?? "Villager");
   // Starts with the default personality written out, ready to edit.
