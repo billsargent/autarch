@@ -53,6 +53,7 @@ export async function PUT(req: Request) {
     // Custom prompts from Settings → System prompts. These were missing, so
     // the page showed them as saved while the server dropped them.
     "staticCorePrompt",
+    "persona",
     "workWindowPrompt",
     "focusedChatPrompt",
     "truncationMessage",

@@ -55,3 +55,29 @@ export const MOOD_BADGE: Record<Mood, string> = {
   idle: "☕",
   asleep: "💤",
 };
+
+// --- speech bubbles ---------------------------------------------------------------
+
+// How long a reply stays in the villager's speech bubble after it was said.
+export const BUBBLE_MS = 30_000;
+
+// What a villager says out loud: the first sentence of their last reply, as
+// plain words. Code, tables and lists aren't the kind of thing you say across
+// the village square, so they're left out; if nothing sayable is left, no bubble.
+export function bubbleLine(text: string, max = 80): string | null {
+  const prose = text
+    .replace(/```[\s\S]*?```/g, " ") // code blocks
+    .split("\n")
+    .filter((l) => !/^\s*(\||[-*+] |\d+\. |#|>|<)/.test(l)) // tables, lists, headings, quotes, html
+    .join(" ")
+    .replace(/`[^`]*`/g, "") // inline code
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1") // links and images → their text
+    .replace(/[*_~#>]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!prose) return null;
+  const first = prose.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? prose;
+  if (first.length <= max) return first;
+  const cut = first.slice(0, max - 1);
+  return `${cut.slice(0, cut.lastIndexOf(" ") > max / 2 ? cut.lastIndexOf(" ") : cut.length)}…`;
+}

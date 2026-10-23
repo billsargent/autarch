@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { DEFAULT_PERSONA } from "@/lib/agent/persona";
 import {
   AUTONOMY_INFO,
   AUTONOMY_MODES,
@@ -221,6 +222,21 @@ export default function SettingsView() {
               />
             </label>
           </div>
+          <label className="mt-3 block text-xs text-neutral-400">
+            Personality
+            <textarea
+              key={`persona:${settings.persona ?? ""}`}
+              defaultValue={settings.persona ?? ""}
+              onBlur={(e) => {
+                const v = e.target.value.trim() || null;
+                if (v !== (settings.persona ?? null)) save({ persona: v });
+              }}
+              rows={3}
+              placeholder={DEFAULT_PERSONA}
+              className="mt-1 w-full resize-y rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none"
+            />
+            <span className="mt-1 block text-[10px] text-neutral-600">Who the agent is, in your words. Empty = the default shown.</span>
+          </label>
           <div className="mt-3 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
             <p className="text-xs text-neutral-400">
               DeepSeek API key:{" "}

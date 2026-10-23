@@ -61,6 +61,7 @@ export interface SettingsRow {
   extraProtectedPaths: string[];
   systemPromptExtra: string | null;
   staticCorePrompt: string | null;
+  persona: string | null;
   workWindowPrompt: string | null;
   focusedChatPrompt: string | null;
   truncationMessage: string | null;

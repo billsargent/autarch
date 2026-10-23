@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   extra_protected_paths TEXT NOT NULL DEFAULT '[]',
   system_prompt_extra TEXT,
   static_core_prompt TEXT,
+  persona TEXT,
   work_window_prompt TEXT,
   focused_chat_prompt TEXT,
   truncation_message TEXT,
@@ -173,6 +174,13 @@ if (!globalForDb.__agentLabSqlite) {
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
   sqlite.pragma("busy_timeout = 5000");
+}
+
+// The schema and its upgrades run every time this module loads, not just when
+// the connection opens: a dev server keeps its connection across hot reloads,
+// and would otherwise miss columns added by new code. Each check is a quick
+// lookup.
+{
   sqlite.exec(SCHEMA_SQL);
 
   // Migrate pre-existing DBs that were created before these columns existed
@@ -215,6 +223,9 @@ if (!globalForDb.__agentLabSqlite) {
   }
   if (!existingCols("jobs").includes("report_session_title")) {
     sqlite.exec("ALTER TABLE jobs ADD COLUMN report_session_title TEXT");
+  }
+  if (!existingCols("agent_settings").includes("persona")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN persona TEXT");
   }
   if (!existingCols("agent_settings").includes("static_core_prompt")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN static_core_prompt TEXT");

@@ -3,6 +3,21 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — A villager, not a machine
+
+- **The agent has a personality (#101).** A new **Personality** setting (Identity, in Settings and
+  the Mayor's ledger) describes who the agent is in your words; empty means a warm,
+  down-to-earth villager.
+- **It talks like a person and stops reaching for tools.** The default prompt now asks for short,
+  plain replies without unrequested technical detail, and says most messages need no tools: use
+  one only for a task you asked for or a live fact it can't know, with as few calls as possible,
+  and never poke at the database, the journal or its own costs unless asked. (Before, one hello
+  could set off a dozen tool calls.) Scheduled work keeps its get-things-done instructions.
+- **The speech bubble says something short, then stops.** It shows the first plain sentence of the
+  latest reply (no code, tables or lists) for 30 seconds.
+- Database upgrades now also run when a dev server hot-reloads, so new columns arrive without a
+  restart.
+
 ## 2026-10-23 — The worker: opt-in free time, real cron checks, clean shutdown
 
 - **Nothing autonomous runs until you ask (#52).** New installs get the self-directed work window

@@ -16,6 +16,8 @@ export interface VillageData {
   openGoals: number;
   unread: number;
   lastSaid: string | null;
+  // When it was said (ms since epoch), so the bubble can fade after a while.
+  lastSaidAt: number | null;
 }
 
 const EMPTY: VillageData = {
@@ -30,6 +32,7 @@ const EMPTY: VillageData = {
   openGoals: 0,
   unread: 0,
   lastSaid: null,
+  lastSaidAt: null,
 };
 
 const POLL_MS = 5000;
@@ -60,10 +63,12 @@ export function useVillageData() {
       const focus = busy ?? list[0] ?? null;
 
       let lastSaid: string | null = null;
+      let lastSaidAt: number | null = null;
       if (focus) {
         const detail = await getJson<{ messages: MessageRow[] }>(`/api/conversations/${focus.id}?limit=8`);
         const said = [...(detail.messages ?? [])].reverse().find((m) => m.role === "assistant" && m.content?.trim());
         lastSaid = said?.content?.trim() ?? null;
+        lastSaidAt = said?.createdAt ? new Date(said.createdAt).getTime() : null;
       }
 
       setData({
@@ -78,6 +83,7 @@ export function useVillageData() {
         openGoals: (goals.goals ?? []).filter((g) => g.status === "backlog" || g.status === "in_progress").length,
         unread: notifs.unread?.length ?? 0,
         lastSaid,
+        lastSaidAt,
       });
     } catch {
       // Keep showing the last known state; the next poll will retry.

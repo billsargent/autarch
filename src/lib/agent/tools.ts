@@ -201,7 +201,7 @@ export const ALL_TOOL_DEFINITIONS = [
     function: {
       name: "update_journal",
       description:
-        "Log or update an entry in your own persistent journal describing what you are working on, exploring, or thinking about. Use this often so a human can see your progress and reasoning over time. This never requires approval.",
+        "Log or update an entry in your own persistent journal describing what you are working on, exploring, or thinking about, so the human can see your progress over time. Write one when you start or finish real work; in an ordinary chat, only when something worth remembering happened. This never requires approval.",
       parameters: {
         type: "object",
         properties: {
@@ -338,7 +338,7 @@ export const ALL_TOOL_DEFINITIONS = [
     function: {
       name: "query_database",
       description:
-        "Run a read-only SQL SELECT query against the app's own SQLite database (conversations, messages, tool_executions, journal_entries, jobs, work_sessions, goals, notifications, agent_settings). Great for self-observation and introspection. Only SELECT/WITH are allowed; anything else is blocked.",
+        "Run a read-only SQL SELECT query against the app's own SQLite database (conversations, messages, tool_executions, journal_entries, jobs, work_sessions, goals, notifications, agent_settings). Use it only when the human asks about these records (past sessions, spending, history) — not to check on yourself. Only SELECT/WITH are allowed; anything else is blocked.",
       parameters: {
         type: "object",
         properties: { sql: { type: "string", description: "A read-only SELECT query." } },

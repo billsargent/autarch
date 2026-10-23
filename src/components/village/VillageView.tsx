@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import "./village.css";
 import { villageFonts } from "./fonts";
 import { AGENT_CHARACTER, AGENT_COLORS, CHARACTERS, VILLAGE, type Place } from "./manifest";
-import { MOOD_BADGE, MOOD_PLACE, moodLabel, nextHangout, villagerMood } from "./villagerState";
+import { BUBBLE_MS, MOOD_BADGE, MOOD_PLACE, bubbleLine, moodLabel, nextHangout, villagerMood } from "./villagerState";
 import { useVillageData } from "./useVillageData";
 import SceneView from "./SceneView";
 import VillageHud from "./VillageHud";
@@ -13,11 +13,6 @@ import TalkDrawer from "./TalkDrawer";
 import ApprovalPrompt from "./ApprovalPrompt";
 import { ROOMS } from "./rooms";
 import { useDeferredApprovals } from "./useDeferredApprovals";
-
-function plain(text: string, max: number): string {
-  const flat = text.replace(/[#*_`>[\]]+/g, "").replace(/\s+/g, " ").trim();
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
-}
 
 export default function VillageView() {
   const router = useRouter();
@@ -45,6 +40,15 @@ export default function VillageView() {
   }, [mood]);
   const target = mood === "idle" && stroll ? stroll : home.door;
   const strolling = mood === "idle" && target !== home.door;
+
+  // The speech bubble shows the last thing said, briefly, then fades.
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
+  const said =
+    data.lastSaid && data.lastSaidAt && clock - data.lastSaidAt < BUBBLE_MS ? bubbleLine(data.lastSaid) : null;
 
   // Drawers, prompts, and the dialogs of outdoor things (the notice board).
   const [talking, setTalking] = useState(false);
@@ -123,7 +127,7 @@ export default function VillageView() {
             target,
             badge: MOOD_BADGE[mood],
             title: `${moodLabel(mood, data.agentName, strolling)} — click to talk`,
-            said: data.lastSaid ? plain(data.lastSaid, 90) : null,
+            said,
             asleep: mood === "asleep",
             hint: (
               <>

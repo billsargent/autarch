@@ -28,6 +28,7 @@ const RULES: Record<string, Rule> = {
   apiBaseUrl: { kind: "url" },
   systemPromptExtra: { kind: "text", max: 20000, nullable: true },
   staticCorePrompt: { kind: "text", max: 20000, nullable: true },
+  persona: { kind: "text", max: 4000, nullable: true },
   workWindowPrompt: { kind: "text", max: 20000, nullable: true },
   focusedChatPrompt: { kind: "text", max: 20000, nullable: true },
   truncationMessage: { kind: "text", max: 5000, nullable: true },

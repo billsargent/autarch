@@ -12,6 +12,7 @@ import {
 } from "../../data/useSettings";
 import { jobSchedule, useJobs } from "../../data/useJobs";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
+import { DEFAULT_PERSONA } from "@/lib/agent/persona";
 
 // The Mayor's ledger in the town hall: every setting, one page per section,
 // with the server's validation errors shown beside the field they belong to.
@@ -407,6 +408,25 @@ function IdentityPage({ s, settings }: { s: Settings; settings: SettingsRow }) {
           <input name="apiBaseUrl" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.deepseek.com" className={input} />
         </label>
       </div>
+      <label className="block text-xs font-semibold">
+        Personality
+        <textarea
+          name="persona"
+          key={`persona:${settings.persona ?? ""}`}
+          defaultValue={settings.persona ?? ""}
+          onBlur={(e) => {
+            const v = e.target.value.trim() || null;
+            if (v !== (settings.persona ?? null)) save({ persona: v });
+          }}
+          rows={3}
+          placeholder={DEFAULT_PERSONA}
+          className={`${input} resize-y`}
+        />
+        <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">
+          Who {settings.agentName} is, in your words: how they talk and what they’re like. Leave it empty for the friendly villager shown.
+        </span>
+        <FieldError msg={s.fieldErrors.persona} />
+      </label>
       <div className="rounded border-2 border-[#d8c49a] p-3">
         <p className="text-xs">
           DeepSeek API key:{" "}

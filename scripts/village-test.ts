@@ -5,7 +5,7 @@ import { CELL, stampRect, unionRect, validateScene, validateStamps } from "../sr
 import { ALL_SCENES, INTERIORS } from "../src/components/village/scenes";
 import { ROOM_ACTIONS } from "../src/components/village/rooms/actions";
 import { nearestWaypoint, shortestPath, type Edge, type Waypoint } from "../src/components/village/path";
-import { MOOD_PLACE, nextHangout, villagerMood } from "../src/components/village/villagerState";
+import { MOOD_PLACE, bubbleLine, nextHangout, villagerMood } from "../src/components/village/villagerState";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -103,6 +103,17 @@ check(
   [],
 );
 check("nothing going on means idle", villagerMood({ paused: false, running: false, pendingApprovals: 0 }), "idle");
+
+// --- speech bubbles -----------------------------------------------------------
+check("a bubble is the first sentence", bubbleLine("Morning! The disk looks fine. More below."), "Morning!");
+check("markdown is dropped", bubbleLine("**Done** — I tidied the [notes](/api/files/notes/a.md)."), "Done — I tidied the notes.");
+check(
+  "code, tables and lists aren't said aloud",
+  bubbleLine(["```sh", "df -h", "```", "| a | b |", "- one", "All good here."].join("\n")),
+  "All good here.",
+);
+check("a reply that's only code has no bubble", bubbleLine(["```", "SELECT 1;", "```"].join("\n")), null);
+check("long sentences are cut at a word", bubbleLine("a ".repeat(60).trim() + "."), `${"a ".repeat(39).trim()}…`);
 
 // --- JSX text the compiler mangles ---------------------------------------------
 // In this build, JSX text that starts with a space right after a tag or {…}

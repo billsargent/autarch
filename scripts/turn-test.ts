@@ -32,6 +32,7 @@ type Reply =
 
 const script: Reply[] = [];
 const seen: Array<{ stream: boolean }> = [];
+let lastSystemPrompt = "";
 
 function chunk(delta: Record<string, unknown>, extra: Record<string, unknown> = {}) {
   return `data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", choices: [{ index: 0, delta }], ...extra })}\n\n`;
@@ -44,6 +45,7 @@ const server = http.createServer((req, res) => {
     const parsed = JSON.parse(body || "{}");
     const stream = Boolean(parsed.stream);
     seen.push({ stream });
+    if (stream && parsed.messages?.[0]?.role === "system") lastSystemPrompt = parsed.messages[0].content;
     const reply = script.shift() ?? { text: "ok" };
     const usage = { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 };
     if (!stream) {
@@ -238,6 +240,19 @@ async function main() {
   check("…and frees the conversation", lock.isConversationBusy(t5), false);
   check("…recording it as stopped, not completed", (await db.select().from(workSessions).where(eq(workSessions.conversationId, t5)))[0].status, "terminated");
   check("…with no empty reply saved", t5msgs.some((m) => m.role === "assistant"), false);
+
+  // --- personality and tool restraint in the prompt the model gets ----------------
+  const { DEFAULT_PERSONA } = await import("../src/lib/agent/persona");
+  const p1 = await conv();
+  script.push({ text: "Hello there!" });
+  await runAgentTurn({ conversationId: p1, userMessage: "hi" });
+  check("the default personality reaches the model", lastSystemPrompt.includes(DEFAULT_PERSONA), true);
+  check("…with the tool-restraint rules", lastSystemPrompt.includes("Most messages need no tools at all"), true);
+  check("…and no nudge to query the database about itself", /inspect your own usage|self-observation/.test(lastSystemPrompt), false);
+  await updateSettings({ persona: "A grumpy old fisherman who loves puns." });
+  script.push({ text: "Hmph." });
+  await runAgentTurn({ conversationId: p1, userMessage: "hello again" });
+  check("a custom personality replaces the default", [lastSystemPrompt.includes("grumpy old fisherman"), lastSystemPrompt.includes(DEFAULT_PERSONA)], [true, false]);
 
   server.close();
   try {

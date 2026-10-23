@@ -177,6 +177,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   extraProtectedPaths: text("extra_protected_paths", { mode: "json" }).notNull().default(sql`('[]')`),
   systemPromptExtra: text("system_prompt_extra"),
   staticCorePrompt: text("static_core_prompt"),
+  // The agent's personality, in the owner's words. Empty = the default.
+  persona: text("persona"),
   workWindowPrompt: text("work_window_prompt"),
   focusedChatPrompt: text("focused_chat_prompt"),
   truncationMessage: text("truncation_message"),
