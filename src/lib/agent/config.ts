@@ -4,6 +4,7 @@
 // from being damaged by the agent. Users can add *extra* protected paths via
 // settings, but these core protections can never be removed from the UI.
 
+import os from "node:os";
 import path from "node:path";
 import { AUTH_FILE, DB_FILES } from "../../db/path";
 
@@ -136,9 +137,11 @@ export const PROTECTED_PROCESS_NAMES: string[] = [
   "npm",
 ];
 
-// Persistent by default — /tmp is wiped on reboot. Existing installs are
-// auto-migrated to this value by settingsStore.getSettings().
-export const DEFAULT_WORKSPACE_DIR = "/root/agent-workspace";
+// In the home folder of the user the server runs as (/root/agent-workspace
+// when that's root), so it's always writable. Persistent — /tmp is wiped on
+// reboot; installs from before that are auto-migrated by
+// settingsStore.getSettings(). Existing installs keep their setting.
+export const DEFAULT_WORKSPACE_DIR = path.join(os.homedir(), "agent-workspace");
 
 // The agent's reusable markdown playbooks live INSIDE the workspace so the agent
 // can write them at low risk and everything agent-facing stays in one place.

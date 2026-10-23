@@ -1,0 +1,24 @@
+[Unit]
+Description=Autarch - web dashboard (Next.js production server)
+After=network.target
+
+[Service]
+Type=simple
+# An ordinary user, not root. It gets sudo through /etc/sudoers.d/autarch
+# (deploy/autarch-sudoers); the dashboard still asks you before any sudo runs.
+User=autarch
+Group=autarch
+WorkingDirectory=/home/autarch/autarch
+# Build on every restart so pulled code + migrations are always applied.
+ExecStartPre=/usr/bin/npm run build
+# Listens on every interface so the dashboard is reachable on the local network
+# (sign-in protects it). Don't forward this port to the internet.
+ExecStart=/usr/bin/npm run start -- -H 0.0.0.0 -p 3000
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+# The worker (autarch-worker.service) shares data/app.db with this server.
+# WAL mode handles concurrent access; keep both units in the same directory.
+
+[Install]
+WantedBy=multi-user.target

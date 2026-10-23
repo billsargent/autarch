@@ -3,6 +3,19 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — Running as an ordinary user
+
+- **The services run as an `autarch` user, not root (#13).** The units are renamed
+  `autarch-web`, `autarch-worker` (new; it wasn't shipped before) and `autarch-backup`, and
+  all of them run from `/home/autarch/autarch`. `deploy/autarch-sudoers` gives the user
+  passwordless `sudo`, so the agent's `sudo` commands work; each one still waits for your
+  approval. `deploy/README.md` covers a fresh install and moving an existing root install.
+- **The dashboard listens on the local network (#3)**, protected by sign-in.
+- **Backups are pruned (#45):** backups older than 14 days are deleted after each nightly run
+  (`BACKUP_KEEP_DAYS`), and they go to `~/backups` by default.
+- **New installs put the agent's workspace in the server user's home folder**
+  (`~/agent-workspace`), so it's always writable. Existing installs keep their setting.
+
 ## 2026-10-23 — The workshop and the notice board
 
 - **The workshop (#89).** Click the workshop in the village to go inside. Each job is a slip on the

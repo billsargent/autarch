@@ -1,0 +1,16 @@
+[Unit]
+Description=Autarch - background worker (scheduled jobs and work windows)
+After=network.target autarch-web.service
+
+[Service]
+Type=simple
+User=autarch
+Group=autarch
+WorkingDirectory=/home/autarch/autarch
+ExecStart=/usr/bin/npm run worker
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

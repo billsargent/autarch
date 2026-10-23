@@ -166,15 +166,20 @@ responsible for anything the agent does in this mode.
 
 - **The risk classifier is a guide for the agent, not a sandbox.** It reads tool arguments
   and shell commands and decides what needs approval. A determined process can find
-  shell spellings it doesn't recognise. The real boundary is the operating system: run the
-  web server and the worker as an **ordinary user** that owns only the workspace, not as root,
-  and give that user `sudo` only for what you'd approve anyway.
+  shell spellings it doesn't recognise.
+- **The shipped setup runs as an ordinary user with passwordless `sudo`**
+  (`deploy/README.md`). Every `sudo` command the classifier sees is critical and waits for your
+  approval, and the service user can't touch other users' files without `sudo`. The cost:
+  a command that hides `sudo` from the classifier (inside a script or an interpreter, say)
+  would run as root without asking. To close that gap, replace `NOPASSWD: ALL` in
+  `/etc/sudoers.d/autarch` with the specific commands you're happy for it to run.
 - **Approvals are the human's.** No agent can approve its own requests, change settings or
   overrides, or lift the pause: the dashboard's control API needs a signed-in session, and
   the agent's tools can't read the session secret or reach the dashboard's port.
-- **The dashboard is a remote control for the machine.** Keep it behind sign-in (above), don't
-  expose it to the internet directly, and put HTTPS in front of it (a reverse proxy) if you
-  open it beyond this machine, so the session cookie isn't sent in the clear.
+- **The dashboard is a remote control for the machine.** It listens on the local network and
+  is protected by sign-in (above). Don't forward its port to the internet; to reach it from
+  outside, use a VPN or a reverse proxy with HTTPS, so the session cookie isn't sent in the
+  clear.
 - **Model output is untrusted.** Chat markdown is sanitized, files from the workspace are
   served as plain text or downloads, and the agent's web fetches can't reach local services.
 
