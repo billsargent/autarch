@@ -189,9 +189,9 @@ responsible for anything the agent does in this mode.
 
 ## The village
 
-`/village` shows the agent as a villager in a small pixel-art town, walking between buildings
-according to what it's doing, with approvals popping up at the town hall. Some places already
-work in-world, with the same features as their Command Center page:
+Home (`/`) is a small pixel-art town where the agent lives as a villager, walking between
+buildings according to what it's doing, with approvals popping up wherever you are. Every
+place works in-world, with the same features as its classic Command Center page:
 
 - **Library:** skills are books on the shelves; new ones are written at the desk.
 - **Workshop:** jobs are slips on the job board; new ones are set up at the workbench.
@@ -202,9 +202,11 @@ work in-world, with the same features as their Command Center page:
 - **Town hall:** the clerk's desk (approvals), the records cabinet (recent decisions) and the
   Mayor's ledger (every setting).
 - **Cottage:** the armchair by the hearth (the full chat) and the diary (the journal).
+- **Mailbox:** the agent's notifications.
 
-Every Command Center page now has a room with the same features. Clicking the villager (or
-pressing T) opens a quick chat drawer anywhere in the village. Every scene (the village and each room) is
+The classic pages are still there: **Command Center** in the village bar opens them (the chat is
+at `/chat`). Clicking the villager (or pressing T) opens a quick chat drawer anywhere in the
+village. Every scene (the village and each room) is
 described in `src/components/village/scenes/`, and `npm run village:map` builds its art.
 
 Village art: "Serene Village" by [LimeZu](https://limezu.itch.io/serenevillage) (CC BY 4.0) and

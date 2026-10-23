@@ -76,13 +76,15 @@ export default function VillageView() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  function openAction(act: string) {
+    setTalking(false);
+    setAction(act);
+    setOpened((n) => n + 1);
+  }
+
   function openPlace(p: Place) {
     if (p.interior) router.push(`/village/${p.interior}`);
-    else if (p.action) {
-      setTalking(false);
-      setAction(p.action);
-      setOpened((n) => n + 1);
-    }
+    else if (p.action) openAction(p.action);
     else if (p.href) router.push(p.href);
   }
 
@@ -98,6 +100,7 @@ export default function VillageView() {
         paused={data.paused}
         onShowApprovals={() => setDeferred([])}
         onTogglePause={togglePause}
+        onShowMail={() => openAction("mail.open")}
       />
 
       <SceneView

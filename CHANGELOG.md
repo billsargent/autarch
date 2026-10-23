@@ -3,6 +3,15 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — The village is Home
+
+- **Home (`/`) is the village (#97).** Signing in lands there. The classic pages are all still
+  available through **Command Center** in the village bar (the chat moved to `/chat`); old
+  `/village` links go Home, and "Leave" in a room goes Home.
+- **The mailbox** by the cottages holds the agent's notifications: new letters first (with their
+  urgency), mark one or all as read, and earlier letters below. The ✉ button in the village bar
+  opens it; it used to go to the Approvals page.
+
 ## 2026-10-23 — The Mayor's ledger
 
 - **Every setting is in the town hall (#96).** The Mayor's ledger (the bookcase in the town hall)

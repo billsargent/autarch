@@ -7,8 +7,8 @@ import type { NotificationRow } from "@/lib/agent/clientTypes";
 import { signOut } from "@/lib/signOut";
 
 const NAV = [
-  { href: "/village", label: "Village", icon: "🏡" },
-  { href: "/", label: "Chat", icon: "💬" },
+  { href: "/", label: "Village", icon: "🏡" },
+  { href: "/chat", label: "Chat", icon: "💬" },
   { href: "/journal", label: "Journal", icon: "📓" },
   { href: "/skills", label: "Skills", icon: "🧠" },
   { href: "/jobs", label: "Jobs", icon: "🗓️" },
@@ -22,8 +22,9 @@ const NAV = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // The village and its rooms are their own full-screen world with their own top bar.
-  if (pathname === "/village" || pathname.startsWith("/village/") || pathname === "/login") {
+  // The village (Home) and its rooms are their own full-screen world with
+  // their own top bar.
+  if (pathname === "/" || pathname === "/village" || pathname.startsWith("/village/") || pathname === "/login") {
     return <div className="h-screen w-screen overflow-hidden">{children}</div>;
   }
   return <CommandCenterShell pathname={pathname}>{children}</CommandCenterShell>;

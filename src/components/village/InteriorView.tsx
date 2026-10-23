@@ -61,7 +61,7 @@ export default function InteriorView({ sceneId, startAction }: { sceneId: string
   return (
     <div className={`${villageFonts} village-root flex h-full w-full flex-col`}>
       <div className="village-hud relative z-20 flex items-center gap-2 px-3 py-2">
-        <Link href="/village" className="village-btn px-3 py-1.5 text-xs" aria-label="Leave and go back to the village">
+        <Link href="/" className="village-btn px-3 py-1.5 text-xs" aria-label="Leave and go back to the village">
           ← Leave
         </Link>
         <h1 className="village-pixel min-w-0 flex-1 truncate text-sm text-[#fff6e0]">{scene.title}</h1>

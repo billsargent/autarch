@@ -7,7 +7,7 @@ import { villageFonts } from "./village/fonts";
 
 // Only same-site paths, so a crafted link can't bounce you elsewhere after signing in.
 function safeNext(next: string | null): string {
-  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/village";
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/";
 }
 
 // The town gate: sign in, or on first run choose the owner password using

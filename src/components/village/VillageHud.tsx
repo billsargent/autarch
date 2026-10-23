@@ -13,6 +13,7 @@ interface VillageHudProps {
   paused: boolean;
   onShowApprovals: () => void;
   onTogglePause: () => void;
+  onShowMail: () => void;
 }
 
 function Chip({ label, value, dot }: { label: string; value: string; dot: string }) {
@@ -44,9 +45,9 @@ export default function VillageHud(p: VillageHudProps) {
             ❗ {p.waiting} waiting on you
           </button>
         )}
-        <Link href="/approvals" className="village-btn px-3 py-1.5 text-xs" title="Notifications and approvals">
+        <button onClick={p.onShowMail} className="village-btn px-3 py-1.5 text-xs" title="The mailbox: notifications" aria-label={`Mailbox, ${p.unread} unread`}>
           ✉ {p.unread}
-        </Link>
+        </button>
         <button
           onClick={p.onTogglePause}
           className="village-btn px-3 py-1.5 text-xs"
@@ -57,7 +58,7 @@ export default function VillageHud(p: VillageHudProps) {
         <button disabled className="village-btn px-3 py-1.5 text-xs" title="Coming with meetings (#81)">
           Call meeting
         </button>
-        <Link href="/" className="village-btn village-btn-primary px-3 py-1.5 text-xs">
+        <Link href="/chat" className="village-btn village-btn-primary px-3 py-1.5 text-xs" title="The classic pages">
           Command Center
         </Link>
         <button onClick={signOut} className="village-btn px-3 py-1.5 text-xs" title="Sign out of the dashboard">
