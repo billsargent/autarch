@@ -215,6 +215,10 @@ place works in-world, with the same features as its classic Command Center page:
 - **Cottage:** the armchair by the hearth (the full chat) and the diary (the journal).
 - **Mailbox:** the agent's notifications.
 
+**Villagers.** The village can have several agents. Each has their own name, personality, look,
+model, tools (within the town's tool policy), budget and cottage, and goes about their own work.
+Add and manage them in the Mayor's ledger → Villagers. Your original agent is the Mayor.
+
 The classic pages are still there: **Command Center** in the village bar opens them (the chat is
 at `/chat`). Clicking the villager (or pressing T) opens a quick chat drawer anywhere in the
 village. Every scene (the village and each room) is

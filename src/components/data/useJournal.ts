@@ -14,15 +14,16 @@ export const JOURNAL_ICON: Record<string, string> = {
   system: "🗒️",
 };
 
-export function useJournal() {
+// `agentId`: one villager's diary; without it, every entry (the Journal page).
+export function useJournal(agentId?: number | null) {
   const [entries, setEntries] = useState<JournalEntryRow[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   const reload = useCallback(async () => {
-    const res = await fetch("/api/journal").then((r) => r.json());
+    const res = await fetch(agentId ? `/api/journal?agent=${agentId}` : "/api/journal").then((r) => r.json());
     setEntries(res.entries || []);
     setLoaded(true);
-  }, []);
+  }, [agentId]);
 
   useEffect(() => {
     const first = setTimeout(reload, 0);
@@ -40,11 +41,11 @@ export function useJournal() {
       await fetch("/api/journal", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, body, category: "system", status: "open" }),
+        body: JSON.stringify({ title, body, category: "system", status: "open", agentId }),
       });
       await reload();
     },
-    [reload],
+    [reload, agentId],
   );
 
   const setStatus = useCallback(

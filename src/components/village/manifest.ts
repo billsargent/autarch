@@ -5,6 +5,7 @@
 import { CELL, STAMPS, stampRect, unionRect, type SceneLayout } from "./scene";
 import { INTERIORS, VILLAGE_SCENE } from "./scenes";
 import type { Edge, Waypoint } from "./path";
+import { CHARACTER_KEYS, isCharacterKey, type CharacterKey } from "@/lib/agent/villagerLooks";
 
 export interface Place {
   id: string;
@@ -84,21 +85,12 @@ export const SPRITE = {
   walkFrames: 4,
 };
 
-export const CHARACTERS = {
-  woman: "/village/characters/woman.png",
-  villager: "/village/characters/villager.png",
-  villager2: "/village/characters/villager2.png",
-  villager3: "/village/characters/villager3.png",
-  villager4: "/village/characters/villager4.png",
-  oldwoman: "/village/characters/oldwoman.png",
-  inspector: "/village/characters/inspector.png",
-  // Reserved for the Mayor (#58).
-  master: "/village/characters/master.png",
-  // Reserved for a possible night watch (docs/town-charter.md).
-  knight: "/village/characters/knight.png",
-} as const;
+// Sprite sheet for each villager look (src/lib/agent/villagerLooks.ts). The
+// Mayor wears the elder's robes; the knight is meant for a night watch.
+export const CHARACTERS: Record<CharacterKey, string> = Object.fromEntries(
+  CHARACTER_KEYS.map((k) => [k, `/village/characters/${k}.png`]),
+) as Record<CharacterKey, string>;
 
-export const AGENT_CHARACTER: keyof typeof CHARACTERS = "woman";
-
-// Each agent gets its own color (name tag, chat drawer accents).
-export const AGENT_COLORS = ["#d9643a", "#4f86c6", "#5f8a3c", "#9b59b6", "#e3b04b"];
+export function spriteFor(character: string): string {
+  return isCharacterKey(character) ? CHARACTERS[character] : CHARACTERS.villager;
+}

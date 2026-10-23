@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import type { JobRow, WorkSessionRow } from "@/lib/agent/clientTypes";
 import { EMPTY_JOB, jobInput, jobSchedule, useJobs, type JobInput, type JobResult } from "../../data/useJobs";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
+import VillagerPortrait from "../VillagerPortrait";
+import { useVillagers } from "../../data/useVillagers";
+import type { AgentRow } from "@/lib/agent/clientTypes";
 import type { RoomProps } from "./types";
 
 // The workshop: each job is a slip on the job board; new jobs are set up at
@@ -30,6 +33,7 @@ function statusColor(status: string | null): string {
 
 export default function WorkshopRoom({ action, onClose }: RoomProps) {
   const jobsApi = useJobs();
+  const { villagers, byId } = useVillagers(15000);
   const { jobs, loaded } = jobsApi;
   const [view, setView] = useState<View>(() => (action === "jobs.new" ? { kind: "bench" } : { kind: "board" }));
   const toBoard = () => setView({ kind: "board" });
@@ -42,6 +46,7 @@ export default function WorkshopRoom({ action, onClose }: RoomProps) {
         key={view.id ?? "new"}
         job={job}
         conversations={jobsApi.conversations}
+        villagers={villagers}
         onSave={async (input) => {
           const res = await jobsApi.save(input, job?.id);
           if (res.ok && job) setView({ kind: "slip", id: job.id, note: "Saved." });
@@ -66,6 +71,7 @@ export default function WorkshopRoom({ action, onClose }: RoomProps) {
         job={job}
         note={view.note}
         conversations={jobsApi.conversations}
+        owner={byId(job.agentId)}
         onRunNow={() => jobsApi.runNow(job)}
         onToggle={() => jobsApi.setEnabled(job, !job.enabled)}
         onEdit={() => setView({ kind: "bench", id: job.id })}
@@ -119,7 +125,13 @@ export default function WorkshopRoom({ action, onClose }: RoomProps) {
                 <span className="block text-[11px] text-[#6b4a2e]">
                   {j.enabled ? `${jobSchedule(j)} · next ${when(j.nextRunAt)}` : "Paused — taken down from the schedule"}
                 </span>
-                <span className="mt-0.5 flex flex-wrap gap-1 text-[11px]">
+                <span className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px]">
+                  {byId(j.agentId) && (
+                    <span className="flex items-center gap-1 text-[#6b4a2e]">
+                      <VillagerPortrait character={byId(j.agentId)!.character} color={byId(j.agentId)!.color} size={14} />
+                      {byId(j.agentId)!.name}
+                    </span>
+                  )}
                   {KIND_BADGE[j.kind] && <span className="rounded bg-[#dbe7f3] px-1.5 text-[#2f4f7a]">{KIND_BADGE[j.kind]}</span>}
                   {j.lastStatus && <span className={statusColor(j.lastStatus)}>last run: {j.lastStatus}</span>}
                 </span>
@@ -147,6 +159,7 @@ function Slip({
   job,
   note,
   conversations,
+  owner,
   onRunNow,
   onToggle,
   onEdit,
@@ -158,6 +171,7 @@ function Slip({
   job: JobRow;
   note?: string;
   conversations: { id: number; title: string }[];
+  owner: AgentRow | null;
   onRunNow: () => Promise<JobResult>;
   onToggle: () => Promise<void>;
   onEdit: () => void;
@@ -233,6 +247,17 @@ function Slip({
       }
     >
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+        <dt className="text-xs font-semibold text-[#6b4a2e]">Done by</dt>
+        <dd className="flex items-center gap-1.5">
+          {owner ? (
+            <>
+              <VillagerPortrait character={owner.character} color={owner.color} size={16} />
+              {owner.name}
+            </>
+          ) : (
+            "—"
+          )}
+        </dd>
         <dt className="text-xs font-semibold text-[#6b4a2e]">Status</dt>
         <dd>
           {job.enabled ? "On the schedule" : "Paused"}
@@ -334,12 +359,14 @@ function History({
 function JobEditor({
   job,
   conversations,
+  villagers,
   onSave,
   onBack,
   onClose,
 }: {
   job?: JobRow;
   conversations: { id: number; title: string }[];
+  villagers: AgentRow[];
   onSave: (input: JobInput) => Promise<JobResult>;
   onBack: () => void;
   onClose: () => void;
@@ -386,7 +413,18 @@ function JobEditor({
         />
       </label>
       <label className="mt-3 block text-xs font-semibold">
-        What should the agent do each time?
+        Who does it
+        <select name="agentId" value={form.agentId} onChange={(e) => set({ agentId: e.target.value })} className={field}>
+          {!form.agentId && <option value="">The Mayor</option>}
+          {villagers.map((v) => (
+            <option key={v.id} value={String(v.id)}>
+              {v.name} ({v.role})
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="mt-3 block text-xs font-semibold">
+        What should they do each time?
         <textarea
           name="instruction"
           value={form.instruction}

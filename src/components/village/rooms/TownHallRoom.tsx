@@ -5,6 +5,9 @@ import type { ToolExecutionRow } from "@/lib/agent/clientTypes";
 import { formatToolInput, useApprovals, type Decision } from "../../data/useApprovals";
 import ParchmentDialog from "../ParchmentDialog";
 import MayorsLedger from "./MayorsLedger";
+import VillagerPortrait from "../VillagerPortrait";
+import { useVillagers } from "../../data/useVillagers";
+import type { AgentRow } from "@/lib/agent/clientTypes";
 import { RISK_WORDS, STATUS_WORDS } from "../tones";
 import type { RoomProps } from "./types";
 
@@ -19,6 +22,7 @@ export default function TownHallRoom({ action, onClose }: RoomProps) {
 
 function Approvals({ action, onClose }: RoomProps) {
   const { pending, decided, loaded, decide } = useApprovals();
+  const { byId } = useVillagers(15000);
   const [view, setView] = useState<"desk" | "records">(action === "approvals.records" ? "records" : "desk");
 
   if (view === "records") {
@@ -42,6 +46,7 @@ function Approvals({ action, onClose }: RoomProps) {
             const status = STATUS_WORDS[r.status] ?? { label: r.status, tone: "#6b4a2e" };
             return (
               <li key={r.id} className="flex flex-wrap items-center gap-x-3 px-3 py-1.5 text-xs">
+                {byId(r.agentId) && <span className="text-[#6b4a2e]">{byId(r.agentId)!.name}:</span>}
                 <span className="font-mono font-semibold">{r.tool}</span>
                 <span className="font-semibold" style={{ color: status.tone }}>
                   {status.label}
@@ -77,14 +82,22 @@ function Approvals({ action, onClose }: RoomProps) {
       )}
       <ul className="space-y-3">
         {pending.map((p) => (
-          <Request key={p.id} p={p} onDecide={(d, note) => decide(p.id, d, note)} />
+          <Request key={p.id} p={p} asker={byId(p.agentId)} onDecide={(d, note) => decide(p.id, d, note)} />
         ))}
       </ul>
     </ParchmentDialog>
   );
 }
 
-function Request({ p, onDecide }: { p: ToolExecutionRow; onDecide: (d: Decision, note?: string) => Promise<{ ok: true } | { ok: false; error: string }> }) {
+function Request({
+  p,
+  asker,
+  onDecide,
+}: {
+  p: ToolExecutionRow;
+  asker: AgentRow | null;
+  onDecide: (d: Decision, note?: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+}) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +115,15 @@ function Request({ p, onDecide }: { p: ToolExecutionRow; onDecide: (d: Decision,
   return (
     <li className="rounded border-2 border-[#3b2716] bg-[#fffaf0] p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-mono text-sm font-semibold">{p.tool}</span>
+        <span className="flex items-center gap-2 text-sm">
+          {asker && (
+            <>
+              <VillagerPortrait character={asker.character} color={asker.color} size={20} />
+              <span className="font-semibold">{asker.name} asks to use</span>
+            </>
+          )}
+          <span className="font-mono font-semibold">{p.tool}</span>
+        </span>
         <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: risk.tone }}>
           <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: risk.tone }} />
           {risk.label}

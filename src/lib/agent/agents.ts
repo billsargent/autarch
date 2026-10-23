@@ -3,6 +3,7 @@ import { agents } from "@/db/schema";
 import { asc, eq, ne } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { isCharacterKey, VILLAGER_COLORS } from "./villagerLooks";
+import { ABANDONED_AFTER_MS } from "./turnLock";
 
 // The villagers (#55). The Mayor is the first one: on an install from before
 // villagers existed, he is made from the old single agent's name and
@@ -209,7 +210,13 @@ export function villagerStates(ids: number[], now = new Date()): Map<number, Vil
   const out = new Map<number, VillagerState>();
   const today = startOfToday(now);
   for (const id of ids) {
-    const working = Boolean(sqlite.prepare("SELECT 1 FROM work_sessions WHERE agent_id = ? AND status = 'running' LIMIT 1").get(id));
+    // A running turn whose heartbeat went quiet belonged to a process that
+    // stopped; it doesn't count (the turn lock lets go of it too).
+    const working = Boolean(
+      sqlite
+        .prepare("SELECT 1 FROM work_sessions WHERE agent_id = ? AND status = 'running' AND COALESCE(heartbeat_at, started_at) >= ? LIMIT 1")
+        .get(id, Math.floor((now.getTime() - ABANDONED_AFTER_MS) / 1000)),
+    );
     const waiting = (sqlite.prepare("SELECT COUNT(*) AS n FROM tool_executions WHERE agent_id = ? AND status = 'awaiting_approval'").get(id) as { n: number }).n;
     const spent = (sqlite.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS c FROM work_sessions WHERE agent_id = ? AND started_at >= ?").get(id, today) as { c: number }).c;
     const focus = sqlite

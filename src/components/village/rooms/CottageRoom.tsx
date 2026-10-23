@@ -13,14 +13,14 @@ import type { RoomProps } from "./types";
 // the diary on the desk is the journal. Same data and actions as the Chat and
 // Journal pages (useChat, useJournal).
 
-export default function CottageRoom({ action, onClose }: RoomProps) {
-  return action === "journal.open" ? <Diary onClose={onClose} /> : <Parlour onClose={onClose} />;
+export default function CottageRoom({ action, agentId, onClose }: RoomProps) {
+  return action === "journal.open" ? <Diary agentId={agentId ?? null} onClose={onClose} /> : <Parlour agentId={agentId ?? null} onClose={onClose} />;
 }
 
 // --- the armchair: talking ------------------------------------------------------
 
-function Parlour({ onClose }: { onClose: () => void }) {
-  const chat = useChat();
+function Parlour({ agentId, onClose }: { agentId: number | null; onClose: () => void }) {
+  const chat = useChat({ agentId });
   const { conversations, activeId, runningByConvo, unreadByConvo, chatMode, agentName } = chat;
   const active = conversations.find((c) => c.id === activeId);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -266,8 +266,8 @@ const STATUS_LABEL: Record<JournalEntryRow["status"], { text: string; tone: stri
   abandoned: { text: "abandoned", tone: "#9a2a4a" },
 };
 
-function Diary({ onClose }: { onClose: () => void }) {
-  const { entries, loaded, addNote, setStatus, remove } = useJournal();
+function Diary({ agentId, onClose }: { agentId: number | null; onClose: () => void }) {
+  const { entries, loaded, addNote, setStatus, remove } = useJournal(agentId);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [deleting, setDeleting] = useState<JournalEntryRow | null>(null);

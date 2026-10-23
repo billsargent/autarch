@@ -4,20 +4,29 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Markdown from "../Markdown";
 import { useConversation } from "./useConversation";
+import VillagerPortrait from "./VillagerPortrait";
+import type { AgentRow } from "@/lib/agent/clientTypes";
 
 interface TalkDrawerProps {
-  agentName: string;
-  color: string;
-  conversations: Array<{ id: number; title: string }>;
-  initialConversationId: number | null;
+  villager: AgentRow;
   onClose: () => void;
 }
 
-// Side drawer for talking to a villager without leaving the village.
-export default function TalkDrawer({ agentName, color, conversations, initialConversationId, onClose }: TalkDrawerProps) {
-  const [conversationId, setConversationId] = useState<number | null>(initialConversationId);
+// Side drawer for talking to a villager without leaving the village: their
+// conversations, and new ones with them.
+export default function TalkDrawer({ villager, onClose }: TalkDrawerProps) {
+  const { name: agentName, color } = villager;
+  const [conversationId, setConversationId] = useState<number | null>(villager.focusConversationId);
+  const [conversations, setConversations] = useState<Array<{ id: number; title: string }>>([]);
   const [input, setInput] = useState("");
-  const { messages, sending, status, error, send, stop } = useConversation(conversationId);
+  const { messages, sending, status, error, send, stop } = useConversation(conversationId, villager.id);
+
+  useEffect(() => {
+    fetch(`/api/conversations?agent=${villager.id}`)
+      .then((r) => r.json())
+      .then((d) => setConversations((d.conversations ?? []).map((c: { id: number; title: string }) => ({ id: c.id, title: c.title }))))
+      .catch(() => {});
+  }, [villager.id, conversationId]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const visible = messages.filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim());
 
@@ -34,7 +43,11 @@ export default function TalkDrawer({ agentName, color, conversations, initialCon
   }
 
   async function newChat() {
-    const created = await fetch("/api/conversations", { method: "POST" }).then((r) => r.json());
+    const created = await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ agentId: villager.id }),
+    }).then((r) => r.json());
     if (created.conversation?.id) setConversationId(created.conversation.id);
   }
 
@@ -44,10 +57,10 @@ export default function TalkDrawer({ agentName, color, conversations, initialCon
       aria-label={`Talk to ${agentName}`}
     >
       <header className="flex items-center gap-3 border-b-4 border-[#3b2716] bg-[#6b4a2e] px-4 py-3 text-[#f4ead5]">
-        <span className="h-4 w-4 rounded-sm border-2 border-[#3b2716]" style={{ background: color }} />
+        <VillagerPortrait character={villager.character} color={color} size={24} />
         <h2 className="village-pixel flex-1 text-sm">Talking with {agentName}</h2>
         <Link
-          href="/village/cottage?open=chat.open"
+          href={`/village/cottage?agent=${villager.id}&open=chat.open`}
           className="village-btn px-2 py-1 text-xs"
           title="Every conversation, tool messages, uploads and live activity"
         >

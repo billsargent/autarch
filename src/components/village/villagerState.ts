@@ -43,10 +43,20 @@ export function moodLabel(mood: Mood, name: string, strolling = false): string {
     case "waiting":
       return `${name} is waiting at the town hall for your okay`;
     case "asleep":
-      return `${name} is asleep — the village is paused`;
+      return `${name} is resting at home`;
     default:
       return `${name} is relaxing at home`;
   }
+}
+
+// Sideways offsets (scene px) so villagers headed for the same spot stand side
+// by side instead of on top of each other: [0], [-28, 28], [-56, 0, 56], …
+export function standOffsets(targets: string[], gap = 56): number[] {
+  const groups = new Map<string, number[]>();
+  targets.forEach((t, i) => groups.set(t, [...(groups.get(t) ?? []), i]));
+  const out = targets.map(() => 0);
+  for (const idx of groups.values()) idx.forEach((i, k) => (out[i] = (k - (idx.length - 1) / 2) * gap));
+  return out;
 }
 
 export const MOOD_BADGE: Record<Mood, string> = {

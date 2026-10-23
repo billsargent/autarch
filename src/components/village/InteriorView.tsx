@@ -4,9 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import "./village.css";
 import { villageFonts } from "./fonts";
-import { AGENT_CHARACTER, AGENT_COLORS, CHARACTERS, VILLAGE, interiorManifest } from "./manifest";
-import { MOOD_BADGE, MOOD_PLACE, moodLabel, villagerMood } from "./villagerState";
-import { useVillageData } from "./useVillageData";
+import { VILLAGE, interiorManifest, spriteFor } from "./manifest";
+import { MOOD_BADGE, MOOD_PLACE, moodLabel, standOffsets, villagerMood } from "./villagerState";
+import { snapshotOf, useVillageData } from "./useVillageData";
 import SceneView, { type VillagerSpec } from "./SceneView";
 import ApprovalPrompt from "./ApprovalPrompt";
 import ParchmentDialog from "./ParchmentDialog";
@@ -14,17 +14,21 @@ import { ROOMS } from "./rooms";
 import { useDeferredApprovals } from "./useDeferredApprovals";
 
 // A building's interior: the room's art, its furniture as hotspots, and the
-// room's dialogs. The agent is shown here only when its real state puts it in
-// this building.
-export default function InteriorView({ sceneId, startAction }: { sceneId: string; startAction?: string }) {
+// room's dialogs. Villagers are shown here only when what they're really doing
+// puts them in this building. A cottage belongs to one villager (`agentId`):
+// its dialogs are theirs, and it's where they relax.
+export default function InteriorView({ sceneId, startAction, agentId }: { sceneId: string; startAction?: string; agentId?: number | null }) {
   const scene = interiorManifest(sceneId)!;
   const Room = ROOMS[sceneId];
   const building = VILLAGE.places.find((p) => p.interior === sceneId);
-  const { data, refresh } = useVillageData();
+  const { data, refresh, mayor } = useVillageData();
+  const isCottage = sceneId === "cottage";
+  const owner = isCottage ? (data.villagers.find((v) => v.id === agentId) ?? mayor) : null;
+  const title = owner ? `${owner.name}'s cottage` : scene.title;
 
-  const mood = villagerMood({ paused: data.paused, running: data.running, pendingApprovals: data.pending.length });
-  const agentHere = building && MOOD_PLACE[mood] === building.id;
-  const agentWhere = VILLAGE.places.find((p) => p.id === MOOD_PLACE[mood]);
+  const moods = data.villagers.map((v) => ({ v, mood: villagerMood(snapshotOf(v, data.paused)) }));
+  const here = moods.filter(({ v, mood }) => building && MOOD_PLACE[mood] === building.id && (!isCottage || v.id === owner?.id));
+  const away = owner && !here.some((h) => h.v.id === owner.id) ? moods.find((m) => m.v.id === owner.id) : null;
 
   // Which furniture's dialogs are open; `opened` remounts the room UI each time.
   const [action, setAction] = useState<string | null>(startAction ?? null);
@@ -35,6 +39,7 @@ export default function InteriorView({ sceneId, startAction }: { sceneId: string
   // stays away and "waiting" opens the desk instead.
   const atTownHall = sceneId === "townhall";
   const showPrompt = !atTownHall && data.pending.length > 0 && !data.pending.every((p) => deferred.includes(p.id));
+  const nameOf = (id: number | null) => data.villagers.find((v) => v.id === id)?.name ?? mayor?.name ?? "A villager";
 
   function open(act: string | undefined) {
     if (!act) return;
@@ -43,20 +48,26 @@ export default function InteriorView({ sceneId, startAction }: { sceneId: string
     setOpened((n) => n + 1);
   }
 
-  const villagers: VillagerSpec[] = agentHere
-    ? [
-        {
-          id: "agent",
-          name: data.agentName,
-          color: AGENT_COLORS[0],
-          sprite: CHARACTERS[AGENT_CHARACTER],
-          target: scene.waypoints.find((w) => w.id === "center")?.id ?? scene.spawn,
-          badge: MOOD_BADGE[mood],
-          title: moodLabel(mood, data.agentName),
-          asleep: mood === "asleep",
-        },
-      ]
-    : [];
+  const center = scene.waypoints.find((w) => w.id === "center")?.id ?? scene.spawn;
+  const offsets = standOffsets(here.map(() => center));
+  const villagers: VillagerSpec[] = here.map(({ v, mood }, i) => ({
+    id: `agent-${v.id}`,
+    name: v.name,
+    color: v.color,
+    sprite: spriteFor(v.character),
+    target: center,
+    offset: offsets[i],
+    badge: MOOD_BADGE[mood],
+    title: moodLabel(mood, v.name),
+    asleep: mood === "asleep",
+  }));
+
+  const awayWhere = away ? VILLAGE.places.find((p) => p.id === MOOD_PLACE[away.mood]) : null;
+  const note = here.length
+    ? here.map(({ v, mood }) => moodLabel(mood, v.name)).join(" · ")
+    : away
+      ? `${away.v.name} isn't home — ${awayWhere ? `they're at the ${awayWhere.label.toLowerCase()}` : "they're out"}.`
+      : "Nobody's here right now.";
 
   return (
     <div className={`${villageFonts} village-root flex h-full w-full flex-col`}>
@@ -64,7 +75,7 @@ export default function InteriorView({ sceneId, startAction }: { sceneId: string
         <Link href="/" className="village-btn px-3 py-1.5 text-xs" aria-label="Leave and go back to the village">
           ← Leave
         </Link>
-        <h1 className="village-pixel min-w-0 flex-1 truncate text-sm text-[#fff6e0]">{scene.title}</h1>
+        <h1 className="village-pixel min-w-0 flex-1 truncate text-sm text-[#fff6e0]">{title}</h1>
         {data.pending.length > 0 && (
           <button
             onClick={() => (atTownHall ? open("approvals.pending") : setDeferred([]))}
@@ -86,15 +97,11 @@ export default function InteriorView({ sceneId, startAction }: { sceneId: string
         villagers={villagers}
       >
         <p className="pointer-events-none absolute left-3 top-3 z-10 max-w-[70%] rounded border-2 border-[#3b2716] bg-[#f4ead5]/90 px-2 py-1 text-xs">
-          {agentHere
-            ? moodLabel(mood, data.agentName)
-            : mood === "idle"
-              ? `${data.agentName} isn't here — they're out and about in the village.`
-              : `${data.agentName} isn't here — ${agentWhere ? `they're at the ${agentWhere.label.toLowerCase()}` : "they're out"}.`}
+          {note}
         </p>
 
         {menuOpen && (
-          <ParchmentDialog kicker={scene.title} title="In this room" onClose={() => setMenuOpen(false)}>
+          <ParchmentDialog kicker={title} title="In this room" onClose={() => setMenuOpen(false)}>
             <ul className="space-y-2">
               {scene.places
                 .filter((p) => p.action)
@@ -113,11 +120,11 @@ export default function InteriorView({ sceneId, startAction }: { sceneId: string
           </ParchmentDialog>
         )}
 
-        {Room && action && <Room key={opened} action={action} onClose={() => setAction(null)} />}
+        {Room && action && <Room key={opened} action={action} agentId={owner?.id ?? null} onClose={() => setAction(null)} />}
 
         {showPrompt && (
           <ApprovalPrompt
-            agentName={data.agentName}
+            nameOf={(p) => nameOf(p.agentId)}
             pending={data.pending.filter((p) => !deferred.includes(p.id))}
             onDecided={() => void refresh()}
             onLater={() => setDeferred(data.pending.map((p) => p.id))}

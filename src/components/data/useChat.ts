@@ -60,7 +60,10 @@ export function formatArgsShort(args: unknown) {
 const INITIAL_LIMIT = 60;
 const OLDER_LIMIT = 100;
 
-export function useChat(opts?: { initialConversationId?: number | null }) {
+// `agentId`: talk with one villager only — their conversations, and new ones
+// with them (the cottage). Without it, every conversation (the Chat page).
+export function useChat(opts?: { initialConversationId?: number | null; agentId?: number | null }) {
+  const agentId = opts?.agentId ?? null;
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [activeId, setActiveId] = useState<number | null>(opts?.initialConversationId ?? null);
   const [msgs, setMsgs] = useState<MessageRow[]>([]);
@@ -104,10 +107,14 @@ export function useChat(opts?: { initialConversationId?: number | null }) {
   const busy = sending || Boolean(runningByConvo[activeId ?? 0]);
 
   const loadConversations = useCallback(async () => {
-    const res = await fetch("/api/conversations").then((r) => r.json());
+    const res = await fetch(agentId ? `/api/conversations?agent=${agentId}` : "/api/conversations").then((r) => r.json());
     let list: ConversationRow[] = res.conversations || [];
     if (!list.length) {
-      const created = await fetch("/api/conversations", { method: "POST" }).then((r) => r.json());
+      const created = await fetch("/api/conversations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ agentId }),
+      }).then((r) => r.json());
       list = [created.conversation];
     }
     const pending = pendingModes.current;
@@ -127,22 +134,24 @@ export function useChat(opts?: { initialConversationId?: number | null }) {
     }
     setRunningByConvo((prev) => ({ ...prev, ...runningMap }));
     setUnreadByConvo((prev) => ({ ...prev, ...unreadMap }));
-  }, []);
+  }, [agentId]);
 
   useEffect(() => {
     const t = setTimeout(loadConversations, 0);
     return () => clearTimeout(t);
   }, [loadConversations]);
 
-  // The agent's name (Settings → Identity) for the "thinking" line.
+  // Who's talking, for the "thinking" line: the villager, or the Mayor.
   useEffect(() => {
-    fetch("/api/settings")
+    fetch("/api/agents")
       .then((r) => r.json())
       .then((d) => {
-        if (d.settings?.agentName) setAgentName(d.settings.agentName);
+        const list: Array<{ id: number; name: string; isMayor: boolean }> = d.agents ?? [];
+        const who = list.find((a) => (agentId ? a.id === agentId : a.isMayor));
+        if (who) setAgentName(who.name);
       })
       .catch(() => {});
-  }, []);
+  }, [agentId]);
 
   // Periodically refresh the list so background work started by jobs (running
   // dots, unread badges, ordering) shows up even when you're not sending.
@@ -392,7 +401,7 @@ export function useChat(opts?: { initialConversationId?: number | null }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ conversationId: convoId, message: text }),
+        body: JSON.stringify({ conversationId: convoId, message: text, agentId }),
         signal: ctrl.signal,
       });
       if (!res.ok) {
@@ -543,7 +552,11 @@ export function useChat(opts?: { initialConversationId?: number | null }) {
   }
 
   async function newConversation() {
-    const created = await fetch("/api/conversations", { method: "POST" }).then((r) => r.json());
+    const created = await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ agentId }),
+    }).then((r) => r.json());
     await loadConversations();
     setActiveId(created.conversation.id);
     setMsgs([]);

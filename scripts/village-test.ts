@@ -5,7 +5,7 @@ import { CELL, stampRect, unionRect, validateScene, validateStamps } from "../sr
 import { ALL_SCENES, INTERIORS } from "../src/components/village/scenes";
 import { ROOM_ACTIONS } from "../src/components/village/rooms/actions";
 import { nearestWaypoint, shortestPath, type Edge, type Waypoint } from "../src/components/village/path";
-import { MOOD_PLACE, bubbleLine, nextHangout, villagerMood } from "../src/components/village/villagerState";
+import { MOOD_PLACE, bubbleLine, nextHangout, standOffsets, villagerMood } from "../src/components/village/villagerState";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -103,6 +103,11 @@ check(
   [],
 );
 check("nothing going on means idle", villagerMood({ paused: false, running: false, pendingApprovals: 0 }), "idle");
+
+// --- several villagers ------------------------------------------------------------
+check("one villager stands where they are", standOffsets(["c"]), [0]);
+check("two at one spot stand side by side", standOffsets(["c", "c"]), [-28, 28]);
+check("villagers at different spots aren't moved", standOffsets(["c", "ws", "c"]), [-28, 0, 28]);
 
 // --- speech bubbles -----------------------------------------------------------
 check("a bubble is the first sentence", bubbleLine("Morning! The disk looks fine. More below."), "Morning!");

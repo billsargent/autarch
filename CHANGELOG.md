@@ -3,6 +3,25 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Villagers in the village
+
+- **Welcome new villagers.** The Mayor's ledger has a **Villagers** page: everyone in the
+  village with what they're doing and what they've spent against their budget. Welcome someone
+  new (name, role, personality, look, colour, model, tools within the town's policy, daily budget
+  and hourly limit), edit them, pause them or let them work, or dismiss them (with a
+  confirmation; the Mayor stays).
+- **Everyone walks the village.** Each villager goes where their own work takes them: the
+  workshop while working, the town hall while waiting on you, home or out for a stroll when free.
+  Villagers at the same spot stand side by side, and each speaks in their own bubble.
+- **Talk to anyone.** Click a villager to talk with them; the drawer shows their conversations.
+  T talks to the Mayor (or whoever you last talked to).
+- **A cottage each.** The cottages ask whose cottage to visit; inside, the armchair and the diary
+  are that villager's.
+- **Owners everywhere.** Goals can be a villager's or the town's, jobs say who does them, the
+  clerk's desk says who's asking, the logbook says whose call it was, and the vault's coffers
+  show each villager's spending against their budget. The town's daily budget is on the Limits
+  page.
+
 ## 2026-10-24 — Budgets
 
 - **Daily budgets (#60).** Each villager can have a daily spending cap, and the village a

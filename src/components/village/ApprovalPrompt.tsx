@@ -5,7 +5,8 @@ import type { ToolExecutionRow } from "@/lib/agent/clientTypes";
 import { RISK_WORDS, describeToolCall as describe } from "./tones";
 
 interface ApprovalPromptProps {
-  agentName: string;
+  // Who is asking: the villager whose request it is.
+  nameOf: (p: ToolExecutionRow) => string;
   pending: ToolExecutionRow[];
   onDecided: () => void;
   onLater: () => void;
@@ -13,7 +14,7 @@ interface ApprovalPromptProps {
 
 // Pops over the village whenever the agent is waiting on the human. Friendly
 // wording on top, but the exact command and the risk level are always shown.
-export default function ApprovalPrompt({ agentName, pending, onDecided, onLater }: ApprovalPromptProps) {
+export default function ApprovalPrompt({ nameOf, pending, onDecided, onLater }: ApprovalPromptProps) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +55,7 @@ export default function ApprovalPrompt({ agentName, pending, onDecided, onLater 
         </div>
         <div className="space-y-3 p-4">
           <h2 id="approval-title" className="village-pixel text-lg">
-            {agentName} wants to {headline} — okay?
+            {nameOf(p)} wants to {headline} — okay?
           </h2>
           <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border-2 border-[#3b2716] bg-[#1d1a16] p-3 font-mono text-xs text-[#f4ead5]">
             {detail}

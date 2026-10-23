@@ -22,11 +22,13 @@ export interface GoalInput {
   priority: number;
   // "" = global (work windows).
   conversationId: string;
+  // Whose goal; "" = a town goal anyone may pick up.
+  agentId: string;
 }
 
-export const EMPTY_GOAL: GoalInput = { title: "", body: "", priority: 3, conversationId: "" };
+export const EMPTY_GOAL: GoalInput = { title: "", body: "", priority: 3, conversationId: "", agentId: "" };
 
-export type GoalPatch = Partial<Pick<GoalRow, "title" | "body" | "status" | "priority" | "conversationId">>;
+export type GoalPatch = Partial<Pick<GoalRow, "title" | "body" | "status" | "priority" | "conversationId" | "agentId">>;
 
 export function useGoals() {
   const [goals, setGoals] = useState<GoalRow[]>([]);
@@ -60,6 +62,7 @@ export function useGoals() {
           body: input.body,
           priority: input.priority,
           conversationId: input.conversationId || undefined,
+          agentId: input.agentId ? Number(input.agentId) : null,
         }),
       });
       await reload();

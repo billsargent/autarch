@@ -30,6 +30,8 @@ export interface VillagerSpec {
   asleep?: boolean;
   // Small hint under the name tag, e.g. "T talk".
   hint?: ReactNode;
+  // Sideways nudge (scene px) so villagers at the same spot don't overlap.
+  offset?: number;
   onClick?: () => void;
 }
 
@@ -216,7 +218,7 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
   }, [scene, v.target]);
 
   return (
-    <div className="absolute" style={{ left: pos.x, top: pos.y, transform: "translate(-50%, -100%)" }}>
+    <div className="absolute transition-[margin] duration-300" style={{ left: pos.x, top: pos.y, marginLeft: v.offset ?? 0, transform: "translate(-50%, -100%)" }}>
       {v.said && !walking && !v.asleep && (
         <div className="village-bubble absolute bottom-full left-1/2 mb-14 w-max max-w-[420px] -translate-x-1/2 px-3 py-2 text-[20px] leading-snug">
           {v.said}

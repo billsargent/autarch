@@ -5,6 +5,7 @@ import { ACTIVITY_FILTERS, filterActivity, useActivity, type ActivityFilter, typ
 import ParchmentDialog from "../ParchmentDialog";
 import { RISK_WORDS, STATUS_WORDS } from "../tones";
 import type { RoomProps } from "./types";
+import { useVillagers } from "../../data/useVillagers";
 
 // The guard tower: the logbook is the activity log (every tool call the agent
 // has attempted) and the tally board shows today's numbers. Same data as the
@@ -24,6 +25,7 @@ const FILTER_LABEL: Record<ActivityFilter, string> = {
 
 export default function GuardTowerRoom({ action, onClose }: RoomProps) {
   const { rows, stats, loaded } = useActivity();
+  const { byId } = useVillagers(15000);
   const [view, setView] = useState<"log" | "tally">(action === "activity.today" ? "tally" : "log");
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [open, setOpen] = useState<number | null>(null);
@@ -110,6 +112,7 @@ export default function GuardTowerRoom({ action, onClose }: RoomProps) {
                 <div className="space-y-2 border-t-2 border-dashed border-[#e6d6b0] px-3 py-2 text-xs">
                   {r.riskReason && <p className="text-[#6b4a2e]">{r.riskReason}</p>}
                   <p className="text-[#6b4a2e]">
+                    {byId(r.agentId) ? `${byId(r.agentId)!.name}'s call · ` : ""}
                     {r.resolvedBy ? `Decided by ${r.resolvedBy}` : "No decision needed"}
                     {r.durationMs != null && ` · took ${(r.durationMs / 1000).toFixed(1)} s`}
                     {r.conversationId != null && ` · conversation #${r.conversationId}`}

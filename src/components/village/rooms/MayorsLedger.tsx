@@ -11,6 +11,7 @@ import {
   type SettingsPatch,
 } from "../../data/useSettings";
 import { jobSchedule, useJobs } from "../../data/useJobs";
+import VillagersPage from "./VillagersPage";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
 import { DEFAULT_PERSONA } from "@/lib/agent/persona";
 
@@ -21,6 +22,7 @@ import { DEFAULT_PERSONA } from "@/lib/agent/persona";
 
 const PAGES = [
   { id: "town", label: "Pause & chat" },
+  { id: "villagers", label: "Villagers" },
   { id: "freetime", label: "Free time" },
   { id: "overrides", label: "Overrides" },
   { id: "identity", label: "Identity & model" },
@@ -206,6 +208,9 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
       );
     }
 
+    case "villagers":
+      return <VillagersPage settings={settings} tools={s.tools} />;
+
     case "freetime":
       return <FreeTimePage settings={settings} />;
 
@@ -298,6 +303,7 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
             <NumberField s={s} settings={settings} field="outputPricePerMTok" label="Output price per 1M tokens" step="0.01" />
             <NumberField s={s} settings={settings} field="cacheHitInputPricePerMTok" label="Cached input price per 1M tokens" step="0.0001" help="DeepSeek caches prompt prefixes automatically." />
           </div>
+          <TownBudgetField s={s} settings={settings} />
           <TextField
             s={s}
             settings={settings}
@@ -712,6 +718,41 @@ function TextField({ s, settings, field, label, help }: { s: Settings; settings:
         className={`${input} ${error ? "border-[#b3261e]" : ""}`}
       />
       {help && <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">{help}</span>}
+      <FieldError msg={error} />
+    </label>
+  );
+}
+
+// What the whole village may spend in a day (#60); empty = no town cap.
+function TownBudgetField({ s, settings }: { s: Settings; settings: SettingsRow }) {
+  const error = s.fieldErrors.townDailyBudgetUsd;
+  const saved = settings.townDailyBudgetUsd == null ? "" : String(settings.townDailyBudgetUsd);
+  const [draft, setDraft] = useDraft(saved, error);
+  const commit = () => {
+    if (draft === saved) s.clearFieldError("townDailyBudgetUsd");
+    else void s.save({ townDailyBudgetUsd: draft.trim() === "" ? null : Number(draft) });
+  };
+  return (
+    <label className="block text-xs font-semibold">
+      The village&apos;s daily budget (USD)
+      <input
+        type="number"
+        name="townDailyBudgetUsd"
+        min={0}
+        step="0.01"
+        value={draft}
+        placeholder="No town budget"
+        aria-invalid={Boolean(error)}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+        }}
+        className={`${input} ${error ? "border-[#b3261e]" : ""}`}
+      />
+      <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">
+        When everyone together has spent this today, every villager stops until midnight. Each villager can also have a budget of their own (Villagers).
+      </span>
       <FieldError msg={error} />
     </label>
   );

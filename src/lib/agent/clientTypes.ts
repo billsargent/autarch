@@ -61,6 +61,7 @@ export interface SettingsRow {
   toolRetries: number;
   workspaceDir: string;
   enabledTools: string[];
+  townDailyBudgetUsd: number | null;
   extraProtectedPaths: string[];
   systemPromptExtra: string | null;
   staticCorePrompt: string | null;

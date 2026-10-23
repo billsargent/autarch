@@ -4,6 +4,9 @@ import { useState } from "react";
 import type { GoalRow } from "@/lib/agent/clientTypes";
 import { EMPTY_GOAL, GOAL_STATUSES, GOAL_STATUS_LABEL, useGoals, type GoalInput } from "../../data/useGoals";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
+import VillagerPortrait from "../VillagerPortrait";
+import { useVillagers } from "../../data/useVillagers";
+import type { AgentRow } from "@/lib/agent/clientTypes";
 import type { RoomProps } from "./types";
 
 // The notice board in the village square: goals are notes pinned to it.
@@ -26,6 +29,7 @@ const SECTIONS: Array<{ title: string; statuses: GoalRow["status"][]; empty: str
 
 export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
   const { goals, conversations, loaded, create, update, remove } = useGoals();
+  const { villagers, byId } = useVillagers(15000);
   const [view, setView] = useState<View>(() => (action === "goals.new" ? { kind: "pin" } : { kind: "board" }));
   const [showOld, setShowOld] = useState(false);
   const toBoard = () => setView({ kind: "board" });
@@ -34,6 +38,7 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
     return (
       <GoalEditor
         conversations={conversations}
+        villagers={villagers}
         onSave={async (input) => {
           await create(input);
           toBoard();
@@ -61,12 +66,14 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
         key={goal.id}
         goal={goal}
         conversations={conversations}
+        villagers={villagers}
         onSave={(input) =>
           update(goal.id, {
             title: input.title,
             body: input.body || null,
             priority: input.priority,
             conversationId: input.conversationId ? Number(input.conversationId) : null,
+            agentId: input.agentId ? Number(input.agentId) : null,
           })
         }
         onStatus={(status) => update(goal.id, { status })}
@@ -137,7 +144,15 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
                       <span className="min-w-0 flex-1">
                         <span className={`village-pixel block text-sm ${g.status === "abandoned" ? "line-through" : ""}`}>{g.title}</span>
                         {g.body && <span className="mt-0.5 line-clamp-2 block text-[11px] text-[#6b4a2e]">{g.body}</span>}
-                        <span className="mt-1 block text-[11px] text-[#6b4a2e]">
+                        <span className="mt-1 flex items-center gap-1 text-[11px] text-[#6b4a2e]">
+                          {byId(g.agentId) ? (
+                            <>
+                              <VillagerPortrait character={byId(g.agentId)!.character} color={byId(g.agentId)!.color} size={14} />
+                              {byId(g.agentId)!.name} ·{" "}
+                            </>
+                          ) : (
+                            "Town goal · "
+                          )}
                           Priority {g.priority}
                           {old && ` · ${GOAL_STATUS_LABEL[g.status].toLowerCase()}`}
                           {g.conversationId ? ` · conversation #${g.conversationId}` : ""}
@@ -158,6 +173,7 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
 function GoalEditor({
   goal,
   conversations,
+  villagers,
   onSave,
   onStatus,
   onDelete,
@@ -166,6 +182,7 @@ function GoalEditor({
 }: {
   goal?: GoalRow;
   conversations: { id: number; title: string }[];
+  villagers: AgentRow[];
   onSave: (input: GoalInput) => Promise<void>;
   onStatus?: (status: GoalRow["status"]) => Promise<void>;
   onDelete?: () => Promise<void>;
@@ -174,7 +191,13 @@ function GoalEditor({
 }) {
   const [form, setForm] = useState<GoalInput>(
     goal
-      ? { title: goal.title, body: goal.body ?? "", priority: goal.priority, conversationId: goal.conversationId ? String(goal.conversationId) : "" }
+      ? {
+          title: goal.title,
+          body: goal.body ?? "",
+          priority: goal.priority,
+          conversationId: goal.conversationId ? String(goal.conversationId) : "",
+          agentId: goal.agentId ? String(goal.agentId) : "",
+        }
       : EMPTY_GOAL,
   );
   const set = (patch: Partial<GoalInput>) => setForm((f) => ({ ...f, ...patch }));
@@ -291,6 +314,17 @@ function GoalEditor({
           </select>
         </label>
       </div>
+      <label className="mt-3 block text-xs font-semibold">
+        Whose goal
+        <select name="agentId" value={form.agentId} onChange={(e) => set({ agentId: e.target.value })} className={field}>
+          <option value="">The town&apos;s — anyone may pick it up</option>
+          {villagers.map((v) => (
+            <option key={v.id} value={String(v.id)}>
+              {v.name} ({v.role})
+            </option>
+          ))}
+        </select>
+      </label>
       {saved && <p className="mt-3 text-xs text-[#3f6b22]">Saved.</p>}
     </ParchmentDialog>
   );

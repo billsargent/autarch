@@ -1,38 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { ConversationRow, MessageRow, ToolExecutionRow } from "@/lib/agent/clientTypes";
+import type { AgentRow, ToolExecutionRow } from "@/lib/agent/clientTypes";
 
 export interface VillageData {
   loaded: boolean;
-  agentName: string;
+  // The whole village is paused ("Lights out").
   paused: boolean;
-  running: boolean;
-  // Conversation the agent is busy in, else the most recently active one.
-  focusConversationId: number | null;
-  conversations: Array<Pick<ConversationRow, "id" | "title">>;
+  // The villagers and what each is up to (#55).
+  villagers: AgentRow[];
   pending: ToolExecutionRow[];
   spentToday: number;
   openGoals: number;
   unread: number;
-  lastSaid: string | null;
-  // When it was said (ms since epoch), so the bubble can fade after a while.
-  lastSaidAt: number | null;
 }
 
 const EMPTY: VillageData = {
   loaded: false,
-  agentName: "Agent",
   paused: false,
-  running: false,
-  focusConversationId: null,
-  conversations: [],
+  villagers: [],
   pending: [],
   spentToday: 0,
   openGoals: 0,
   unread: 0,
-  lastSaid: null,
-  lastSaidAt: null,
 };
 
 const POLL_MS = 5000;
@@ -50,40 +40,22 @@ export function useVillageData() {
 
   const refresh = useCallback(async () => {
     try {
-      const [convos, approvals, settings, stats, goals, notifs] = await Promise.all([
-        getJson<{ conversations: ConversationRow[] }>("/api/conversations"),
+      const [agents, approvals, settings, stats, goals, notifs] = await Promise.all([
+        getJson<{ agents: AgentRow[] }>("/api/agents"),
         getJson<{ pending: ToolExecutionRow[] }>("/api/approvals"),
-        getJson<{ settings: { agentName: string; paused: boolean } }>("/api/settings"),
+        getJson<{ settings: { paused: boolean } }>("/api/settings"),
         getJson<{ today: { costUsd: number } }>("/api/stats"),
         getJson<{ goals: Array<{ status: string }> }>("/api/goals"),
         getJson<{ unread: unknown[] }>("/api/notifications"),
       ]);
-      const list = convos.conversations ?? [];
-      const busy = list.find((c) => c.running);
-      const focus = busy ?? list[0] ?? null;
-
-      let lastSaid: string | null = null;
-      let lastSaidAt: number | null = null;
-      if (focus) {
-        const detail = await getJson<{ messages: MessageRow[] }>(`/api/conversations/${focus.id}?limit=8`);
-        const said = [...(detail.messages ?? [])].reverse().find((m) => m.role === "assistant" && m.content?.trim());
-        lastSaid = said?.content?.trim() ?? null;
-        lastSaidAt = said?.createdAt ? new Date(said.createdAt).getTime() : null;
-      }
-
       setData({
         loaded: true,
-        agentName: settings.settings?.agentName || "Agent",
         paused: Boolean(settings.settings?.paused),
-        running: Boolean(busy),
-        focusConversationId: focus?.id ?? null,
-        conversations: list.map((c) => ({ id: c.id, title: c.title })),
+        villagers: agents.agents ?? [],
         pending: approvals.pending ?? [],
         spentToday: Number(stats.today?.costUsd ?? 0),
         openGoals: (goals.goals ?? []).filter((g) => g.status === "backlog" || g.status === "in_progress").length,
         unread: notifs.unread?.length ?? 0,
-        lastSaid,
-        lastSaidAt,
       });
     } catch {
       // Keep showing the last known state; the next poll will retry.
@@ -100,5 +72,11 @@ export function useVillageData() {
     };
   }, [refresh]);
 
-  return { data, refresh };
+  const mayor = data.villagers.find((v) => v.isMayor) ?? data.villagers[0] ?? null;
+  return { data, refresh, mayor };
+}
+
+// What a villager is doing, from their own state and the village's.
+export function snapshotOf(v: AgentRow, villagePaused: boolean) {
+  return { paused: villagePaused || v.status === "paused", running: v.working, pendingApprovals: v.waiting };
 }

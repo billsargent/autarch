@@ -16,7 +16,8 @@ interface StreamEvent {
 // Loads one conversation and sends messages to it through the streaming chat
 // API. A small standalone version of what ChatView does, so the village's talk
 // drawer doesn't depend on the full chat page.
-export function useConversation(conversationId: number | null) {
+// `agentId`: the villager a new conversation is with.
+export function useConversation(conversationId: number | null, agentId?: number | null) {
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -56,7 +57,7 @@ export function useConversation(conversationId: number | null) {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ conversationId, message: text }),
+          body: JSON.stringify({ conversationId, message: text, agentId }),
           signal: ctrl.signal,
         });
         if (!res.ok || !res.body) {
@@ -101,7 +102,7 @@ export function useConversation(conversationId: number | null) {
       }
       return finalId;
     },
-    [conversationId, sending, load],
+    [conversationId, agentId, sending, load],
   );
 
   const stop = useCallback(async () => {

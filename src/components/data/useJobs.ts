@@ -16,6 +16,8 @@ export interface JobInput {
   // "" = auto-create a report session.
   conversationId: string;
   reportSessionTitle: string;
+  // Who does it; "" = the Mayor.
+  agentId: string;
 }
 
 export const EMPTY_JOB: JobInput = {
@@ -26,6 +28,7 @@ export const EMPTY_JOB: JobInput = {
   cron: "",
   conversationId: "",
   reportSessionTitle: "",
+  agentId: "",
 };
 
 export function jobInput(job: JobRow): JobInput {
@@ -37,6 +40,7 @@ export function jobInput(job: JobRow): JobInput {
     cron: job.cron || "",
     conversationId: job.conversationId ? String(job.conversationId) : "",
     reportSessionTitle: job.reportSessionTitle || "",
+    agentId: job.agentId ? String(job.agentId) : "",
   };
 }
 
@@ -81,6 +85,7 @@ export function useJobs() {
         cron: input.cron.trim() || null,
         reportSessionTitle: input.reportSessionTitle.trim() || null,
         conversationId: input.conversationId || null,
+        ...(input.agentId ? { agentId: Number(input.agentId) } : {}),
       };
       try {
         const res = await fetch(id ? `/api/jobs/${id}` : "/api/jobs", {

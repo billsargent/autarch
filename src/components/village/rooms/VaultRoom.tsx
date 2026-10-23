@@ -4,6 +4,8 @@ import { useState } from "react";
 import { USAGE_PERIODS, cacheHitRate, fmtCost, fmtTokens, usageCards, useUsage, type UsagePeriod } from "../../data/useUsage";
 import ParchmentDialog from "../ParchmentDialog";
 import type { RoomProps } from "./types";
+import VillagerPortrait from "../VillagerPortrait";
+import { useVillagers } from "../../data/useVillagers";
 
 // The vault: the coffers hold the spending totals and the ledger breaks them
 // down by period. Same data as the Usage page (useUsage).
@@ -12,6 +14,7 @@ const PERIOD_LABEL: Record<UsagePeriod, string> = { daily: "By day", weekly: "By
 
 export default function VaultRoom({ action, onClose }: RoomProps) {
   const { data } = useUsage();
+  const { villagers } = useVillagers(15000);
   const [view, setView] = useState<"ledger" | "coffers">(action === "usage.totals" ? "coffers" : "ledger");
   const [period, setPeriod] = useState<UsagePeriod>("daily");
   const rows = data ? data[period] : [];
@@ -44,6 +47,29 @@ export default function VaultRoom({ action, onClose }: RoomProps) {
       >
         <p className="mb-3 text-xs text-[#6b4a2e]">What the agents have spent on model calls. Skipped sessions aren&apos;t counted.</p>
         {data ? totals : <p className="text-sm">Counting the coins…</p>}
+        <h3 className="village-pixel mb-1.5 mt-4 text-xs">Each villager today</h3>
+        <ul className="space-y-1.5">
+          {villagers.map((v) => {
+            const share = v.dailyBudgetUsd ? Math.min(100, (v.spentToday / v.dailyBudgetUsd) * 100) : 0;
+            return (
+              <li key={v.id} className="flex items-center gap-2 rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 py-1.5 text-xs">
+                <VillagerPortrait character={v.character} color={v.color} size={20} />
+                <span className="w-28 truncate font-semibold">{v.name}</span>
+                <span className="w-32">
+                  {fmtCost(v.spentToday)}
+                  {v.dailyBudgetUsd != null ? ` of ${fmtCost(v.dailyBudgetUsd)}` : ""}
+                </span>
+                {v.dailyBudgetUsd != null ? (
+                  <span className="h-2 flex-1 overflow-hidden rounded-sm border border-[#3b2716] bg-[#e8dcc2]">
+                    <span className="block h-full" style={{ width: `${share}%`, background: share >= 100 ? "#b3261e" : share > 75 ? "#c58a1b" : "#5f8a3c" }} />
+                  </span>
+                ) : (
+                  <span className="flex-1 text-[#6b4a2e]">no budget of their own</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </ParchmentDialog>
     );
   }
