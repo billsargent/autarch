@@ -41,7 +41,7 @@ function Parlour({ onClose }: { onClose: () => void }) {
         title="Forget this conversation?"
         message={
           <>
-            Delete <strong>{active.title || "New session"}</strong> and all its messages? This can&apos;t be undone.
+            Delete <strong>{active.title || "New session"}</strong>{" "}and all its messages? This can&apos;t be undone.
           </>
         }
         confirmLabel="Delete conversation"

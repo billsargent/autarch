@@ -199,11 +199,12 @@ work in-world, with the same features as their Command Center page:
 - **Guard tower:** the logbook (activity log) and today's tally.
 - **Observatory:** the star charts (system monitor).
 - **Vault:** the ledger and the coffers (usage and spending).
-- **Town hall:** the clerk's desk (approvals) and the records cabinet (recent decisions).
+- **Town hall:** the clerk's desk (approvals), the records cabinet (recent decisions) and the
+  Mayor's ledger (every setting).
 - **Cottage:** the armchair by the hearth (the full chat) and the diary (the journal).
 
-Settings still live in the Command Center. Clicking the villager (or pressing T) opens a quick
-chat drawer anywhere in the village. Every scene (the village and each room) is
+Every Command Center page now has a room with the same features. Clicking the villager (or
+pressing T) opens a quick chat drawer anywhere in the village. Every scene (the village and each room) is
 described in `src/components/village/scenes/`, and `npm run village:map` builds its art.
 
 Village art: "Serene Village" by [LimeZu](https://limezu.itch.io/serenevillage) (CC BY 4.0) and

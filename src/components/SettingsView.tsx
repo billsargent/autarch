@@ -1,133 +1,48 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { SettingsRow } from "@/lib/agent/clientTypes";
-
-interface ToolInfo {
-  name: string;
-  description: string;
-}
-
-interface HardSafeguards {
-  protectedPaths: string[];
-  protectedPackages: string[];
-  protectedServices: string[];
-  protectedProcesses: string[];
-}
-
-const AUTONOMY_INFO: Record<string, string> = {
-  manual: "Only read-only / informational actions run automatically. Everything else waits for your approval.",
-  balanced: "Low and medium risk actions run automatically. High-risk and critical actions still need your approval.",
-  autonomous: "Low, medium, and high risk actions all run automatically. Critical actions (sudo, package removal, kill, service stop, etc.) STILL always require your approval — that safeguard can't be turned off.",
-  unrestricted:
-    "EVERYTHING runs automatically with NO approvals — destructive shell commands, sudo, package removal, killing processes, reading secrets, and modifying this framework. For risky testing only. You are fully responsible.",
-};
+import { useState } from "react";
+import {
+  AUTONOMY_INFO,
+  AUTONOMY_MODES,
+  UNRESTRICTED_MODE_WARNING,
+  UNRESTRICTED_OVERRIDES_WARNING,
+  useSettings,
+} from "./data/useSettings";
 
 export default function SettingsView() {
-  const [settings, setSettings] = useState<SettingsRow | null>(null);
-  const [tools, setTools] = useState<ToolInfo[]>([]);
-  const [hard, setHard] = useState<HardSafeguards | null>(null);
-  const [deepSeekConfigured, setDeepSeekConfigured] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const {
+    settings,
+    tools,
+    hard,
+    deepSeekConfigured,
+    models,
+    saving,
+    savedAt,
+    saveError,
+    save,
+    testAndLoadModels: loadModels,
+    toggleTool,
+    addProtectedPath: addPath,
+    removeProtectedPath,
+  } = useSettings();
   const [newPath, setNewPath] = useState("");
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [baseUrlInput, setBaseUrlInput] = useState("");
-  const [models, setModels] = useState<string[]>([]);
+  const [baseUrlInput, setBaseUrlInput] = useState<string | null>(null);
   const [modelLoading, setModelLoading] = useState(false);
   const [modelMsg, setModelMsg] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    const res = await fetch("/api/settings").then((r) => r.json());
-    setSettings(res.settings);
-    setTools(res.availableTools || []);
-    setHard(res.hardSafeguards || null);
-    setDeepSeekConfigured(res.deepSeekConfigured);
-    setModels(res.settings?.deepseekModels || []);
-    setBaseUrlInput(res.settings?.apiBaseUrl || "");
-  }, []);
-
-  useEffect(() => {
-    const t = setTimeout(load, 0);
-    return () => clearTimeout(t);
-  }, [load]);
-
-  async function save(patch: Partial<SettingsRow>) {
-    if (!settings) return;
-    setSaving(true);
-    setSaveError(null);
-    const merged = { ...settings, ...patch };
-    setSettings(merged);
-    try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        // Server-side guard: enabling unrestricted mode requires an explicit confirm flag.
-        body: JSON.stringify(
-          patch.unrestrictedMode === true || patch.autonomyMode === "unrestricted"
-            ? { ...patch, confirm: true }
-            : patch,
-        ),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setSettings(settings); // revert optimistic update
-        setSaveError(data.error || "Failed to save settings");
-      } else {
-        setSettings(data.settings);
-        setSavedAt(Date.now());
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
+  const baseUrl = baseUrlInput ?? settings?.apiBaseUrl ?? "";
 
   async function testAndLoadModels() {
     setModelLoading(true);
     setModelMsg(null);
-    try {
-      const res = await fetch("/api/deepseek/models", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ apiKey: apiKeyInput || undefined, baseUrl: baseUrlInput || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setModelMsg(`error: ${data.error || "request failed"}`);
-        return;
-      }
-      setModels(data.models || []);
-      setSettings((prev) =>
-        prev
-          ? { ...prev, deepseekModels: data.models || [], apiKeySet: true, apiBaseUrl: baseUrlInput || prev.apiBaseUrl }
-          : prev,
-      );
-      setModelMsg(`loaded ${data.count ?? 0} model(s)`);
-    } catch (e) {
-      setModelMsg(`error: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setModelLoading(false);
-    }
-  }
-
-  function toggleTool(name: string) {
-    if (!settings) return;
-    const enabled = new Set(settings.enabledTools);
-    if (enabled.has(name)) enabled.delete(name);
-    else enabled.add(name);
-    save({ enabledTools: Array.from(enabled) });
+    setModelMsg(await loadModels(apiKeyInput, baseUrl));
+    setModelLoading(false);
   }
 
   function addProtectedPath() {
-    if (!settings || !newPath.trim()) return;
-    save({ extraProtectedPaths: [...settings.extraProtectedPaths, newPath.trim()] });
+    if (!newPath.trim()) return;
+    addPath(newPath);
     setNewPath("");
-  }
-
-  function removeProtectedPath(p: string) {
-    if (!settings) return;
-    save({ extraProtectedPaths: settings.extraProtectedPaths.filter((x) => x !== p) });
   }
 
   if (!settings) {
@@ -250,9 +165,7 @@ export default function SettingsView() {
               onToggle={(v) => {
                 if (
                   v &&
-                  !window.confirm(
-                    "Enable unrestricted mode? The agent can then REQUEST every normally-blocked action — it still requires your explicit approval for each one.",
-                  )
+                  !window.confirm(UNRESTRICTED_OVERRIDES_WARNING)
                 ) {
                   return;
                 }
@@ -301,7 +214,7 @@ export default function SettingsView() {
             <label className="text-xs text-neutral-400">
               API base URL
               <input
-                value={baseUrlInput}
+                value={baseUrl}
                 onChange={(e) => setBaseUrlInput(e.target.value)}
                 placeholder="https://api.deepseek.com"
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none"
@@ -460,7 +373,7 @@ export default function SettingsView() {
         <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
           <h2 className="text-sm font-semibold">Autonomy mode</h2>
           <div className="mt-3 space-y-2">
-            {(["manual", "balanced", "autonomous", "unrestricted"] as const).map((mode) => (
+            {AUTONOMY_MODES.map((mode) => (
               <label
                 key={mode}
                 className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-xs ${
@@ -478,9 +391,7 @@ export default function SettingsView() {
                   onChange={() => {
                     if (
                       mode === "unrestricted" &&
-                      !window.confirm(
-                        "Unrestricted mode disables ALL approvals and safety gates.\n\nThe agent will automatically execute every action — including sudo, package removal, killing processes, formatting disks, reading secrets, and modifying this framework — with NO human approval.\n\nGlobal Pause and the hourly action cap still apply.\n\nAre you absolutely sure?",
-                      )
+                      !window.confirm(UNRESTRICTED_MODE_WARNING)
                     ) {
                       return;
                     }

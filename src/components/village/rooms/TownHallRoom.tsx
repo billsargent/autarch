@@ -4,14 +4,20 @@ import { useState } from "react";
 import type { ToolExecutionRow } from "@/lib/agent/clientTypes";
 import { formatToolInput, useApprovals, type Decision } from "../../data/useApprovals";
 import ParchmentDialog from "../ParchmentDialog";
+import MayorsLedger from "./MayorsLedger";
 import { RISK_WORDS, STATUS_WORDS } from "../tones";
 import type { RoomProps } from "./types";
 
 // The town hall: the clerk's desk holds every action waiting on the owner,
-// and the records cabinet keeps recent decisions. Same data and actions as the
-// Approvals page (useApprovals). Approvals are always the human's.
+// and the records cabinet keeps recent decisions (same as the Approvals page,
+// useApprovals); the Mayor's ledger holds the settings (MayorsLedger).
+// Approvals and settings are always the human's.
 
 export default function TownHallRoom({ action, onClose }: RoomProps) {
+  return action === "settings.open" ? <MayorsLedger onClose={onClose} /> : <Approvals action={action} onClose={onClose} />;
+}
+
+function Approvals({ action, onClose }: RoomProps) {
   const { pending, decided, loaded, decide } = useApprovals();
   const [view, setView] = useState<"desk" | "records">(action === "approvals.records" ? "records" : "desk");
 

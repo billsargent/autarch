@@ -3,6 +3,21 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — The Mayor's ledger
+
+- **Every setting is in the town hall (#96).** The Mayor's ledger (the bookcase in the town hall)
+  has a page per section: pause and chat mode, supervisor overrides, identity and model (API key,
+  model list, thinking), prompts, autonomy, limits and workspace, context folding, tools, extra
+  protected paths, and the fixed safeguards. Risky switches (unrestricted overrides or autonomy)
+  ask first.
+- **Validation errors show next to the field.** If the server refuses a value (say, 0 tool steps,
+  or `/` as the workspace), the reason appears under that field and what you typed stays there to
+  fix. Number and text fields save when you leave them or press Enter.
+- **Two missing spaces fixed** in sentences that mixed bold text with an apostrophe or ampersand
+  (the cottage's delete confirmation and the ledger's API-key warning): the build dropped the
+  space after the bold part.
+- The Settings page shares its logic with the ledger (`useSettings`).
+
 ## 2026-10-23 — The cottage
 
 - **The cottage (#95).** Click the cottages to go inside the agent's home.

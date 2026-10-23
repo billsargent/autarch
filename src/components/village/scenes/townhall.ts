@@ -1,6 +1,7 @@
 // The town hall: the clerk's desk holds everything waiting on the owner's
-// approval, and the records cabinet keeps the recent decisions. The long table
-// will host town meetings (#81).
+// approval, the records cabinet keeps the recent decisions, and the Mayor's
+// ledger holds the settings (the owner's alone). The long table will host
+// town meetings (#81).
 import { interior } from "./shell";
 
 export const TOWNHALL_SCENE = interior({
@@ -32,6 +33,14 @@ export const TOWNHALL_SCENE = interior({
         { stamp: "drawers", col: 14, row: 2 },
       ],
     },
+    {
+      id: "ledger",
+      label: "Mayor's ledger",
+      role: "Every setting: pause, overrides, model, prompts, autonomy, limits, tools, protected paths",
+      door: "ledger",
+      action: "settings.open",
+      parts: [{ stamp: "tallBookshelf", col: 1, row: 7 }],
+    },
   ],
   decor: [
     { stamp: "workbench", col: 7, row: 5 },
@@ -39,16 +48,17 @@ export const TOWNHALL_SCENE = interior({
     { stamp: "chairBlue", col: 10, row: 5 },
     { stamp: "pottedPlant", col: 1, row: 3 },
     { stamp: "pottedPlant", col: 14, row: 7 },
-    { stamp: "tallBookshelf", col: 1, row: 7 },
   ],
   waypoints: [
     { id: "clerk", x: 4, y: 7.6 },
     { id: "records", x: 13, y: 4.6 },
     { id: "table", x: 8.5, y: 6.6 },
+    { id: "ledger", x: 3.2, y: 9.3 },
   ],
   edges: [
     ["center", "clerk"],
     ["center", "records"],
     ["center", "table"],
+    ["center", "ledger"],
   ],
 });
