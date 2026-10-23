@@ -3,8 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { getSettings } from "@/lib/agent/settingsStore";
 import { workspaceSkillsDir } from "@/lib/agent/config";
+import { SKILL_PROMPT_CHARS as MAX_SKILL_CHARS } from "@/lib/agent/limits";
 
-const MAX_SKILL_CHARS = 3000;
 
 function safeName(raw: string): string | null {
   const base = String(raw).trim().replace(/\.md$/i, "");

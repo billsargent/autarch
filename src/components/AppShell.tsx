@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { NotificationRow } from "@/lib/agent/clientTypes";
 
 const NAV = [
+  { href: "/village", label: "Village", icon: "🏡" },
   { href: "/", label: "Chat", icon: "💬" },
   { href: "/journal", label: "Journal", icon: "📓" },
   { href: "/skills", label: "Skills", icon: "🧠" },
@@ -20,6 +21,14 @@ const NAV = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // The village and its rooms are their own full-screen world with their own top bar.
+  if (pathname === "/village" || pathname.startsWith("/village/")) {
+    return <div className="h-screen w-screen overflow-hidden">{children}</div>;
+  }
+  return <CommandCenterShell pathname={pathname}>{children}</CommandCenterShell>;
+}
+
+function CommandCenterShell({ pathname, children }: { pathname: string; children: React.ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
   const [deepSeekConfigured, setDeepSeekConfigured] = useState<boolean | null>(null);
   const [unread, setUnread] = useState(0);

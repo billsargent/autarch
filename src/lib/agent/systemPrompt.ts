@@ -4,6 +4,7 @@ import { desc, asc, eq, or, isNull } from "drizzle-orm";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { workspaceSkillsDir } from "./config";
+import { SKILL_PROMPT_CHARS, SKILLS_IN_PROMPT } from "./limits";
 import type { AgentSettingsRow } from "./settingsStore";
 
 export interface PromptScope {
@@ -79,11 +80,15 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
     `(no skills installed — create markdown files in ${skillsDir} to teach the agent reusable techniques)`;
   try {
     await fs.mkdir(skillsDir, { recursive: true });
-    const files = (await fs.readdir(skillsDir)).filter((f) => f.endsWith(".md")).slice(0, 8);
+    // Sorted so the same skills are chosen on every OS (Linux readdir order is arbitrary).
+    const files = (await fs.readdir(skillsDir))
+      .filter((f) => f.endsWith(".md"))
+      .sort()
+      .slice(0, SKILLS_IN_PROMPT);
     if (files.length) {
       const parts: string[] = [];
       for (const f of files) {
-        const content = (await fs.readFile(path.join(skillsDir, f), "utf-8")).slice(0, 2000);
+        const content = (await fs.readFile(path.join(skillsDir, f), "utf-8")).slice(0, SKILL_PROMPT_CHARS);
         parts.push(`### ${f.replace(/\.md$/, "")}\n${content}`);
       }
       skillsBlock = parts.join("\n\n");

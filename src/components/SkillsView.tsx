@@ -1,34 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-
-interface SkillRow {
-  name: string;
-  content: string;
-  size: number;
-  modifiedAt: string;
-  truncatedInPrompt: boolean;
-}
-
-const MAX_SKILL_CHARS = 3000;
+import { useState } from "react";
+import { MAX_SKILL_CHARS, skillTitle, useSkills, type SaveResult, type SkillRow } from "./data/useSkills";
 
 export default function SkillsView() {
-  const [skills, setSkills] = useState<SkillRow[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const { skills, save, remove } = useSkills();
+  const [picked, setPicked] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/skills").then((r) => r.json());
-    const list: SkillRow[] = res.skills || [];
-    setSkills(list);
-    setSelected((prev) => (prev && list.some((s) => s.name === prev) ? prev : list[0]?.name ?? null));
-  }, []);
-
-  useEffect(() => {
-    const t = setTimeout(load, 0);
-    return () => clearTimeout(t);
-  }, [load]);
+  // Keep the picked skill if it still exists, otherwise fall back to the first.
+  const selected = creating ? null : picked && skills.some((s) => s.name === picked) ? picked : skills[0]?.name ?? null;
+  const setSelected = setPicked;
 
   function startNew() {
     setCreating(true);
@@ -39,8 +22,7 @@ export default function SkillsView() {
   async function removeSkill(name: string) {
     if (!window.confirm(`Delete skill "${name}"?`)) return;
     setMsg(null);
-    await fetch(`/api/skills/${encodeURIComponent(name.replace(/\.md$/i, ""))}`, { method: "DELETE" });
-    await load();
+    await remove(name);
   }
 
   const selectedSkill = skills.find((s) => s.name === selected) ?? null;
@@ -85,10 +67,10 @@ export default function SkillsView() {
                     }}
                     className="flex-1 truncate text-left"
                   >
-                    {s.name.replace(/\.md$/i, "")}
+                    {skillTitle(s.name)}
                     {s.truncatedInPrompt && (
                       <span className="ml-1 text-amber-400" title="Truncated in the prompt">
-                        &gt;3k
+                        &gt;{MAX_SKILL_CHARS / 1000}k
                       </span>
                     )}
                   </button>
@@ -110,9 +92,11 @@ export default function SkillsView() {
                 key={selected ?? "new"}
                 skill={selectedSkill}
                 creating={creating}
-                onSaved={() => {
+                onSave={save}
+                onSaved={(name) => {
                   setMsg("Saved.");
-                  load();
+                  setCreating(false);
+                  setSelected(`${skillTitle(name.trim())}.md`);
                 }}
                 onCancel={() => {
                   setCreating(false);
@@ -132,15 +116,17 @@ export default function SkillsView() {
 function SkillEditor({
   skill,
   creating,
+  onSave,
   onSaved,
   onCancel,
 }: {
   skill: SkillRow | null;
   creating: boolean;
-  onSaved: () => void;
+  onSave: (input: { name: string; content: string; isNew: boolean }) => Promise<SaveResult>;
+  onSaved: (name: string) => void;
   onCancel: () => void;
 }) {
-  const [nameInput, setNameInput] = useState(skill ? skill.name.replace(/\.md$/i, "") : "");
+  const [nameInput, setNameInput] = useState(skill ? skillTitle(skill.name) : "");
   const [contentInput, setContentInput] = useState(skill?.content ?? "");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -151,28 +137,12 @@ function SkillEditor({
     setSaving(true);
     setMsg(null);
     try {
-      const name = nameInput.trim().replace(/\.md$/i, "");
-      if (!name) {
-        setMsg("A name is required.");
+      const result = await onSave({ name: nameInput, content: contentInput, isNew: creating });
+      if (!result.ok) {
+        setMsg(result.error);
         return;
       }
-      const res = creating
-        ? await fetch("/api/skills", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ name, content: contentInput }),
-          })
-        : await fetch(`/api/skills/${encodeURIComponent(name)}`, {
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ content: contentInput }),
-          });
-      const data = await res.json();
-      if (!res.ok) {
-        setMsg(data.error || "Failed to save.");
-        return;
-      }
-      onSaved();
+      onSaved(nameInput);
     } finally {
       setSaving(false);
     }

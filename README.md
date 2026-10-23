@@ -141,6 +141,16 @@ responsible for anything the agent does in this mode.
 > DB and masked on read (never returned to the browser). This is a local-experiment tradeoff —
 > anyone with access to `data/app.db` can read it.
 
+## The village
+
+`/village` shows the agent as a villager in a small pixel-art town, walking between buildings
+according to what it's doing, with approvals popping up at the town hall. The map is built from
+`src/components/village/layout.ts` by `npm run village:map`.
+
+Village art: "Serene Village" by [LimeZu](https://limezu.itch.io/serenevillage) (CC BY 4.0) and
+"Ninja Adventure" by [Pixel-boy and AAA](https://pixel-boy.itch.io/ninja-adventure-asset-pack)
+(CC0). See `public/village/CREDITS.md` and `docs/village-art.md`.
+
 ## Scripts
 
 | Script | Purpose |
