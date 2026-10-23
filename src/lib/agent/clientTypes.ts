@@ -123,7 +123,7 @@ export interface WorkSessionRow {
   id: number;
   jobId: number | null;
   conversationId: number | null;
-  trigger: "chat" | "approval" | "scheduled" | "report";
+  trigger: "chat" | "approval" | "scheduled" | "report" | "message";
   status: "running" | "completed" | "terminated" | "skipped" | "failed";
   startedAt: string;
   endedAt: string | null;
@@ -203,4 +203,5 @@ export interface AgentRow {
   focusConversationId: number | null;
   lastSaid: string | null;
   lastSaidAt: number | null;
+  talkingWith: number | null;
 }

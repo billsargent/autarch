@@ -31,15 +31,22 @@ function migrateSkillsDirOnce(workspaceDir: string) {
 // The async-messaging tool is low-risk + rate-limited; auto-enable it once on
 // installs created before it existed so the agent can talk to the human in a
 // session out of the box.
+// Tools added after an install was set up are offered to its tool policy once
+// (switched on), and remembered, so if the owner later switches one off it
+// stays off.
+const NEW_TOOLS_TO_OFFER = ["post_message", "ask_villager"];
+
 async function ensureMessagingEnabled(row: AgentSettingsRow): Promise<AgentSettingsRow> {
   if (messagingEnabled) return row;
   messagingEnabled = true;
+  const offered = new Set((row.offeredTools as string[] | null) ?? []);
   const enabled = (row.enabledTools as string[]) || [];
-  if (enabled.includes("post_message")) return row;
-  const next = [...enabled, "post_message"];
+  const fresh = NEW_TOOLS_TO_OFFER.filter((t) => !offered.has(t));
+  if (!fresh.length) return row;
+  const next = [...enabled, ...fresh.filter((t) => !enabled.includes(t))];
   const updated = await db
     .update(agentSettings)
-    .set({ enabledTools: next, updatedAt: new Date() })
+    .set({ enabledTools: next, offeredTools: [...offered, ...fresh], updatedAt: new Date() })
     .where(eq(agentSettings.id, row.id))
     .returning();
   return updated[0];

@@ -412,6 +412,22 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "ask_villager",
+      description:
+        "Ask another villager something: a question, a favour or a hand-off. They answer in their own time and their reply is posted in this conversation (you'll see it on your next turn). Use it when a neighbour knows something or does that job; don't use it for chit-chat. You can't ask onward while you're answering someone else.",
+      parameters: {
+        type: "object",
+        properties: {
+          to: { type: "string", description: "The villager's name." },
+          message: { type: "string", description: "What you want to ask or tell them, in a sentence or two." },
+        },
+        required: ["to", "message"],
+      },
+    },
+  },
 ];
 
 export function getEnabledToolDefinitions(enabledTools: string[]) {
@@ -475,6 +491,8 @@ export function evaluateToolRisk(
       return { risk: "low", reason: "Raises a notification for the human; no system access." };
     case "post_message":
       return { risk: "low", reason: "Posts a message into a chat session; no system access." };
+    case "ask_villager":
+      return { risk: "low", reason: "Asks another villager something; they answer on their own budget. No system access." };
     case "query_database":
       return { risk: "medium", reason: "Read-only access to the app's own database (SELECT only)." };
     case "download_file": {
@@ -519,6 +537,8 @@ export interface ToolContext {
   // list tools show them their own things.
   agentId?: number | null;
   agentName?: string;
+  // What started the turn ("message" = answering a neighbour, #57).
+  trigger?: string;
 }
 
 // "Belongs to this villager" (or to no one yet, for rows from before villagers).
@@ -583,6 +603,8 @@ export async function executeTool(
       return notifyHuman(args, ctx);
     case "post_message":
       return postMessage(args, ctx);
+    case "ask_villager":
+      return (await import("./messaging")).askVillager(args, ctx);
     case "query_database":
       return queryDatabase(args);
     case "download_file":

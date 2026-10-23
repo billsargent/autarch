@@ -184,7 +184,7 @@ async function loadHistory(conversationId: number) {
   return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.id));
 }
 
-export type SessionTrigger = "chat" | "approval" | "scheduled" | "report";
+export type SessionTrigger = "chat" | "approval" | "scheduled" | "report" | "message";
 
 // Progress events emitted (optionally) during a turn so the UI can stream a
 // live view of the agent's activity instead of only getting a final payload.
@@ -658,6 +658,7 @@ export async function runAgentTurn(opts: {
                     sessionId: session.id,
                     agentId: agent.id,
                     agentName: agent.name,
+                    trigger,
                   });
                   status = "success";
                   output = execResult.output;

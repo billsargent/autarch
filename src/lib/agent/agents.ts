@@ -203,12 +203,29 @@ export interface VillagerState {
   focusConversationId: number | null;
   lastSaid: string | null;
   lastSaidAt: number | null;
+  // A neighbour they're talking with right now (#57): answering their
+  // question, or waiting on their answer.
+  talkingWith: number | null;
 }
 
 // What each villager is up to right now: for the village to draw them.
 export function villagerStates(ids: number[], now = new Date()): Map<number, VillagerState> {
   const out = new Map<number, VillagerState>();
   const today = startOfToday(now);
+  // Villager-to-villager threads being answered right now: both sides are
+  // talking with each other.
+  const fresh = Math.floor((now.getTime() - ABANDONED_AFTER_MS) / 1000);
+  const threads = sqlite
+    .prepare(
+      `SELECT s.agent_id AS answering, c.partner_agent_id AS asking FROM work_sessions s JOIN conversations c ON c.id = s.conversation_id
+       WHERE s.status = 'running' AND s.trigger = 'message' AND c.partner_agent_id IS NOT NULL AND COALESCE(s.heartbeat_at, s.started_at) >= ?`,
+    )
+    .all(fresh) as Array<{ answering: number; asking: number }>;
+  const partner = new Map<number, number>();
+  for (const t of threads) {
+    partner.set(t.answering, t.asking);
+    partner.set(t.asking, t.answering);
+  }
   for (const id of ids) {
     // A running turn whose heartbeat went quiet belonged to a process that
     // stopped; it doesn't count (the turn lock lets go of it too).
@@ -240,6 +257,7 @@ export function villagerStates(ids: number[], now = new Date()): Map<number, Vil
       focusConversationId: focus?.id ?? null,
       lastSaid: said?.content.trim() ?? null,
       lastSaidAt: said ? said.created_at * 1000 : null,
+      talkingWith: partner.get(id) ?? null,
     });
   }
   return out;

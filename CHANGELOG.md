@@ -3,6 +3,19 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Neighbours talk
+
+- **Villagers can ask each other things (#57).** A new `ask_villager` tool lets a villager put a
+  question, favour or hand-off to a neighbour by name. The neighbour answers in their own turn,
+  on their own budget, and the reply is posted back into the asker's conversation as
+  "[Reply from …]". Each pair has its own thread (shown in the neighbour's conversations).
+- **It can't run away:** someone answering a question can't send questions onward, a pair is
+  limited to 4 questions an hour, and nobody can be asked at night, while paused, when everyone
+  is paused, or once their budget is spent.
+- **You can see it happen:** the asker walks over to the neighbour with "💬 Asking …" while they
+  answer.
+- The new tool is switched on once for existing installs; if you switch it off, it stays off.
+
 ## 2026-10-24 — Day and night
 
 - **The village keeps real time (#100).** Bedtime and wake-up (defaults 22:00 and 07:00) are in

@@ -12,7 +12,7 @@ import type { AgentRow } from "./agents";
 
 
 export interface PromptScope {
-  trigger?: "chat" | "approval" | "scheduled" | "report";
+  trigger?: "chat" | "approval" | "scheduled" | "report" | "message";
   jobId?: number | null;
   conversationId?: number | null;
   maxDurationMinutes?: number;
@@ -167,6 +167,9 @@ NOTIFICATIONS
       : "",
     settings.autonomyMode === "unrestricted"
       ? `⚠️ UNRESTRICTED MODE IS ACTIVE — the human has disabled all approvals and safety gates for risky testing. Every tool call will execute immediately with no approval, including destructive, secret-reading, and framework-modifying actions. The global Pause and hourly action cap still apply. You are fully responsible.`
+      : "",
+    trigger === "message"
+      ? `✉ A neighbour has asked you something (the latest "[… asks]" note). Answer them directly and briefly; your reply goes back to them. You can't send questions onward in this turn.`
       : "",
     isNight(new Date(), settings.bedtime, settings.wakeTime)
       ? `🌙 It's night in the village (${settings.bedtime}–${settings.wakeTime}). You were asleep; the human knocked to talk. Keep it brief and don't start any work of your own until morning.`

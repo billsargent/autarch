@@ -22,6 +22,10 @@ function chunk(delta: Record<string, unknown>, extra: Record<string, unknown> = 
 
 export function startFakeModel() {
   const script: Reply[] = [];
+  // Replies for one villager's turns, by name: a request whose system prompt
+  // starts "You are <name>" takes from here first. Lets two villagers' turns
+  // run at once without taking each other's replies.
+  const byAgent: Record<string, Reply[]> = {};
   const seen: SeenRequest[] = [];
   const server = http.createServer((req, res) => {
     let body = "";
@@ -35,7 +39,8 @@ export function startFakeModel() {
         system: parsed.messages?.[0]?.role === "system" ? parsed.messages[0].content : "",
         tools: (parsed.tools ?? []).map((t: { function: { name: string } }) => t.function.name),
       });
-      const reply = script.shift() ?? { text: "ok" };
+      const who = Object.keys(byAgent).find((n) => byAgent[n].length && seen[seen.length - 1].system.startsWith(`You are ${n}`));
+      const reply = (who ? byAgent[who].shift() : script.shift()) ?? { text: "ok" };
       const usage = { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 };
       if (!stream) {
         res.setHeader("content-type", "application/json");
@@ -66,6 +71,7 @@ export function startFakeModel() {
   });
   return {
     script,
+    byAgent,
     seen,
     // The last streamed (main) request: what a turn's step was sent.
     lastStep: () => [...seen].reverse().find((s) => s.stream),

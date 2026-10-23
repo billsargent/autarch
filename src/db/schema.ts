@@ -39,6 +39,9 @@ export const conversations = sqliteTable("conversations", {
   summary: text("summary"),
   compactedThroughId: integer("compacted_through_id"),
   chatMode: text("chat_mode", { enum: ["agentic", "conversation"] }).notNull().default("agentic"),
+  // For a thread between two villagers (#57): the one asking. The owner
+  // (agent_id) is the one being asked.
+  partnerAgentId: integer("partner_agent_id").references(() => agents.id, { onDelete: "set null" }),
   // The villager this belongs to (#56).
   agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
@@ -74,7 +77,7 @@ export const workSessions = sqliteTable("work_sessions", {
   conversationId: integer("conversation_id").references(() => conversations.id, {
     onDelete: "set null",
   }),
-  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report"] }).notNull(),
+  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report", "message"] }).notNull(),
   status: text("status", {
     enum: ["running", "completed", "terminated", "skipped", "failed"],
   })
@@ -252,6 +255,9 @@ export const agentSettings = sqliteTable("agent_settings", {
   townDailyBudgetUsd: real("town_daily_budget_usd"),
   // Day and night (#100): local "HH:MM". At night no autonomous work starts.
   bedtime: text("bedtime").notNull().default("22:00"),
+  // New tools already offered to this install (see settingsStore), so a tool
+  // the owner switched off isn't switched back on.
+  offeredTools: text("offered_tools", { mode: "json" }),
   wakeTime: text("wake_time").notNull().default("07:00"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

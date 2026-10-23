@@ -173,6 +173,7 @@ export const DEFAULT_ENABLED_TOOLS = [
   "edit_file",
   "take_screenshot",
   "web_search",
+  "ask_villager",
 ];
 
 export const MAX_OUTPUT_CHARS = 8000;

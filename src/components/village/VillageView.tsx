@@ -112,6 +112,14 @@ export default function VillageView() {
     const target = stroll ?? home.door;
     return { v, mood, target, strolling: mood === "idle" && target !== home.door };
   });
+  // A villager asking a neighbour something walks over to them (#57).
+  for (const p of plans) {
+    const other = p.v.talkingWith != null ? plans.find((o) => o.v.id === p.v.talkingWith) : null;
+    if (other && !p.v.working && p.mood !== "asleep") {
+      p.target = other.target;
+      p.strolling = false;
+    }
+  }
   const offsets = standOffsets(plans.map((p) => p.target));
   const specs: VillagerSpec[] = plans.map(({ v, mood, target, strolling }, i) => ({
     id: `agent-${v.id}`,
@@ -122,7 +130,12 @@ export default function VillageView() {
     offset: offsets[i],
     badge: MOOD_BADGE[mood],
     title: `${moodLabel(mood, v.name, strolling)} — click to talk`,
-    said: v.lastSaid && v.lastSaidAt && clock - v.lastSaidAt < BUBBLE_MS ? bubbleLine(v.lastSaid) : null,
+    said:
+      v.talkingWith != null && !v.working
+        ? `💬 Asking ${nameOf(v.talkingWith)}…`
+        : v.lastSaid && v.lastSaidAt && clock - v.lastSaidAt < BUBBLE_MS
+          ? bubbleLine(v.lastSaid)
+          : null,
     asleep: mood === "asleep",
     hint:
       v.id === talkKeyTarget ? (

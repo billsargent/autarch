@@ -217,6 +217,63 @@ async function main() {
   await settingsRoute.PUT(req("/api/settings", "PUT", { townDailyBudgetUsd: "" }));
   check("clearing the town budget removes the cap", (await getSettings()).townDailyBudgetUsd, null);
 
+  // --- villagers asking each other (#57) -----------------------------------------
+  const { messages: messagesT } = await import("../src/db/schema");
+  const { askVillager } = await import("../src/lib/agent/messaging");
+  const cal = (await add({ name: "Cal", role: "Carpenter" })).agent;
+  const dot = (await add({ name: "Dot", role: "Gardener" })).agent;
+  const msgsOf = async (id: number) => db.select().from(messagesT).where(eq(messagesT.conversationId, id)).orderBy(messagesT.id);
+  const waitFor = async (id: number, start: string) => {
+    for (let i = 0; i < 50; i++) {
+      const hit = (await msgsOf(id)).find((m) => m.content?.startsWith(start));
+      if (hit) return hit;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return null;
+  };
+  // Make it daytime whatever the real clock says: nobody can be asked at night.
+  const hm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const hmNow = new Date();
+  await updateSettings({ bedtime: hm(new Date(hmNow.getTime() + 2 * 3600_000)), wakeTime: hm(new Date(hmNow.getTime() + 3 * 3600_000)) });
+  fake.script.length = 0;
+  fake.byAgent.Cal = [{ tools: [{ name: "ask_villager", args: { to: "dot", message: "Where are the nets?" } }] }, { text: "I've asked Dot." }];
+  fake.byAgent.Dot = [{ text: "In the shed by the pond." }];
+  const { conversationId: calChat } = await runAgentTurn({ userMessage: "find the nets", agentId: cal.id });
+  const sent = (await msgsOf(calChat)).find((m) => m.role === "tool" && m.toolName === "ask_villager");
+  check("asking a neighbour sends the question (names are matched loosely)", sent?.content?.startsWith("Sent to Dot."), true);
+  const reply = await waitFor(calChat, "[Reply from Dot]");
+  check("the answer comes back to the asker's conversation", reply?.content, "[Reply from Dot] In the shed by the pond.");
+  const [thread] = await db.select().from(conversations).where(eq(conversations.partnerAgentId, cal.id));
+  check("the thread is Dot's, with Cal as partner", [thread?.agentId, thread?.title], [dot.id, "Cal ↔ Dot"]);
+  check("…holding the question and her answer", (await msgsOf(thread.id)).map((m) => m.content), ["[Cal asks] Where are the nets?", "In the shed by the pond."]);
+  const dotSession = (await db.select().from(workSessions).where(eq(workSessions.conversationId, thread.id)))[0];
+  check("Dot answered in her own turn", [dotSession.agentId, dotSession.trigger], [dot.id, "message"]);
+  check("…told that a neighbour asked", fake.seen.some((s) => s.system.startsWith("You are Dot") && s.system.includes("A neighbour has asked you")), true);
+  check("the answer doesn't start a new turn for Cal", (await db.select().from(workSessions).where(eq(workSessions.conversationId, calChat))).length, 1);
+
+  // No asking onward while answering.
+  fake.byAgent.Cal = [{ tools: [{ name: "ask_villager", args: { to: "Dot", message: "And the oars?" } }] }, { text: "ok" }];
+  fake.byAgent.Dot = [{ tools: [{ name: "ask_villager", args: { to: "Cal", message: "Why do you ask?" } }] }, { text: "Also in the shed." }];
+  await runAgentTurn({ conversationId: calChat, userMessage: "and the oars?" });
+  await waitFor(calChat, "[Reply from Dot] Also in the shed.");
+  const onward = (await msgsOf(thread.id)).find((m) => m.role === "tool" && m.toolName === "ask_villager");
+  check("someone answering can't send questions onward", onward?.content?.startsWith("Refused: you're answering a neighbour"), true);
+
+  // The pair limit, and the other refusals (called directly: no model needed).
+  const ctxCal = { agentId: cal.id, agentName: "Cal", conversationId: calChat };
+  await db.insert(messagesT).values([
+    { conversationId: thread.id, role: "event", content: "[Cal asks] 3" },
+    { conversationId: thread.id, role: "event", content: "[Cal asks] 4" },
+  ]);
+  check(`a pair is limited to a few questions an hour`, (await askVillager({ to: "Dot", message: "5?" }, ctxCal)).output.includes("4 times in the last hour"), true);
+  check("nobody by that name", (await askVillager({ to: "Zed", message: "hi" }, ctxCal)).output.startsWith('Refused: nobody called "Zed"'), true);
+  check("not yourself", (await askVillager({ to: "Cal", message: "hi" }, ctxCal)).output, "Refused: that's you.");
+  await agentRoute.PATCH(req(`/api/agents/${ann.id}`, "PATCH", { status: "paused" }), { params: Promise.resolve({ id: String(ann.id) }) });
+  check("not someone who's paused", (await askVillager({ to: "Ann", message: "hi" }, ctxCal)).output.includes("resting"), true);
+  await updateSettings({ bedtime: hm(new Date(hmNow.getTime() - 3600_000)), wakeTime: hm(new Date(hmNow.getTime() + 3600_000)) });
+  check("not at night", (await askVillager({ to: "Bea", message: "hi" }, ctxCal)).output.includes("is asleep"), true);
+  await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });
