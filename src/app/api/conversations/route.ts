@@ -4,8 +4,14 @@ import { conversations, messages, workSessions } from "@/db/schema";
 import { desc, eq, sql as dsql } from "drizzle-orm";
 import { ensureConversation } from "@/lib/agent/runner";
 
-export async function GET() {
-  const rows = await db.select().from(conversations).orderBy(desc(conversations.updatedAt));
+// ?agent=<id> lists one villager's conversations.
+export async function GET(req: Request) {
+  const agent = Number(new URL(req.url).searchParams.get("agent")) || null;
+  const rows = await db
+    .select()
+    .from(conversations)
+    .where(agent ? eq(conversations.agentId, agent) : undefined)
+    .orderBy(desc(conversations.updatedAt));
   // Which conversations have a turn actively running right now.
   const active = await db
     .select({ conversationId: workSessions.conversationId })
@@ -26,7 +32,10 @@ export async function GET() {
   return NextResponse.json({ conversations: withMeta });
 }
 
-export async function POST() {
-  const convo = await ensureConversation(null);
+// Body (optional): { agentId } — which villager the conversation is with.
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({}));
+  const agentId = Number(body?.agentId) || null;
+  const convo = await ensureConversation(null, agentId);
   return NextResponse.json({ conversation: convo });
 }

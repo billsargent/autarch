@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { conversations, jobs } from "@/db/schema";
 import { asc, eq } from "drizzle-orm";
 import { cronProblem, nextCronRun } from "@/lib/agent/cron";
+import { getAgent } from "@/lib/agent/agents";
 
 export async function GET() {
   const rows = await db.select().from(jobs).orderBy(asc(jobs.nextRunAt));
@@ -30,6 +31,8 @@ export async function POST(req: Request) {
   const inserted = await db
     .insert(jobs)
     .values({
+      // Whose job it is (the Mayor's if not said).
+      agentId: (await getAgent(Number(body.agentId) || null)).id,
       conversationId,
       name: String(body.name || "Untitled job"),
       instruction: body.instruction ? String(body.instruction) : "",

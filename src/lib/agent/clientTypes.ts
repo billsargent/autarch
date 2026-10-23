@@ -26,6 +26,7 @@ export interface ToolExecutionRow {
   resolvedAt: string | null;
   resolvedBy: string | null;
   durationMs: number | null;
+  agentId: number | null;
 }
 
 export interface JournalEntryRow {
@@ -36,6 +37,7 @@ export interface JournalEntryRow {
   status: "open" | "in_progress" | "done" | "abandoned";
   createdAt: string;
   updatedAt: string;
+  agentId: number | null;
 }
 
 export interface ConversationRow {
@@ -46,6 +48,7 @@ export interface ConversationRow {
   updatedAt: string;
   running?: boolean;
   lastMessageId?: number;
+  agentId: number | null;
 }
 
 export interface SettingsRow {
@@ -110,6 +113,7 @@ export interface JobRow {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
+  agentId: number | null;
 }
 
 export interface WorkSessionRow {
@@ -138,6 +142,7 @@ export interface GoalRow {
   conversationId: number | null;
   createdAt: string;
   updatedAt: string;
+  agentId: number | null;
 }
 
 export interface NotificationRow {
@@ -149,6 +154,7 @@ export interface NotificationRow {
   source: string;
   read: boolean;
   createdAt: string;
+  agentId: number | null;
 }
 
 export const RISK_COLORS: Record<string, string> = {
@@ -169,3 +175,29 @@ export const STATUS_COLORS: Record<string, string> = {
   rate_limited: "text-orange-400",
   cancelled: "text-neutral-400",
 };
+
+// A villager (#55), as /api/agents lists them: the stored row plus what they're
+// up to right now.
+export interface AgentRow {
+  id: number;
+  name: string;
+  role: string;
+  persona: string | null;
+  character: string;
+  color: string;
+  model: string | null;
+  enabledTools: string[] | null;
+  home: string;
+  isMayor: boolean;
+  status: "active" | "paused" | "dismissed";
+  dailyBudgetUsd: number | null;
+  maxActionsPerHour: number | null;
+  createdAt: string;
+  updatedAt: string;
+  working: boolean;
+  waiting: number;
+  spentToday: number;
+  focusConversationId: number | null;
+  lastSaid: string | null;
+  lastSaidAt: number | null;
+}

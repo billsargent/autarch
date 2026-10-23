@@ -45,7 +45,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   let convId = job[0].conversationId;
   if (!convId) {
-    const inserted = await db.insert(conversations).values({ title: `Job: ${job[0].name}` }).returning();
+    const inserted = await db.insert(conversations).values({ title: `Job: ${job[0].name}`, agentId: job[0].agentId }).returning();
     await db.update(jobs).set({ conversationId: inserted[0].id, updatedAt: new Date() }).where(eq(jobs.id, jobId));
     convId = inserted[0].id;
   }

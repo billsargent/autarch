@@ -10,7 +10,8 @@ import Database from "better-sqlite3";
 import { db } from "@/db";
 import { DB_PATH } from "@/db/path";
 import { journalEntries, jobs, goals, notifications, conversations, messages } from "@/db/schema";
-import { eq, asc, desc, and, sql as dsql } from "drizzle-orm";
+import { eq, asc, desc, and, or, isNull, sql as dsql } from "drizzle-orm";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   classifyShellCommand,
   classifyFileOperation,
@@ -514,6 +515,15 @@ export function extraProcessGuard(command: string, overrides?: SuperviseOverride
 export interface ToolContext {
   conversationId?: number | null;
   sessionId?: number | null;
+  // The villager running the tool (#56): what it creates is theirs, and the
+  // list tools show them their own things.
+  agentId?: number | null;
+  agentName?: string;
+}
+
+// "Belongs to this villager" (or to no one yet, for rows from before villagers).
+function ownedBy(column: AnySQLiteColumn, ctx?: ToolContext) {
+  return ctx?.agentId ? or(eq(column, ctx.agentId), isNull(column)) : undefined;
 }
 
 export async function executeTool(
@@ -558,17 +568,17 @@ export async function executeTool(
     case "fetch_url":
       return fetchUrl(String(args.url || ""), (args.method as "GET" | "POST") || "GET", args.body as string | undefined);
     case "update_journal":
-      return updateJournal(args);
+      return updateJournal(args, ctx);
     case "schedule_job":
       return scheduleJob(args, ctx);
     case "list_jobs":
-      return listJobs();
+      return listJobs(ctx);
     case "cancel_job":
-      return cancelJob(args);
+      return cancelJob(args, ctx);
     case "manage_goal":
       return manageGoal(args, ctx);
     case "list_goals":
-      return listGoals();
+      return listGoals(ctx);
     case "notify_human":
       return notifyHuman(args, ctx);
     case "post_message":
@@ -588,7 +598,7 @@ export async function executeTool(
   }
 }
 
-async function updateJournal(args: Record<string, unknown>) {
+async function updateJournal(args: Record<string, unknown>, ctx?: ToolContext) {
   const title = String(args.title || "Untitled entry");
   const body = args.body ? String(args.body) : null;
   const category = (args.category as string) || "task";
@@ -605,7 +615,7 @@ async function updateJournal(args: Record<string, unknown>) {
         status: status as "open" | "in_progress" | "done" | "abandoned",
         updatedAt: new Date(),
       })
-      .where(eq(journalEntries.id, entryId))
+      .where(and(eq(journalEntries.id, entryId), ownedBy(journalEntries.agentId, ctx)))
       .returning();
     if (updated.length) {
       return { output: `Updated journal entry #${entryId}: ${title}`, summary: `journal update #${entryId}` };
@@ -619,6 +629,7 @@ async function updateJournal(args: Record<string, unknown>) {
       body,
       category: category as "exploration" | "task" | "reflection" | "idea" | "system",
       status: status as "open" | "in_progress" | "done" | "abandoned",
+      agentId: ctx?.agentId ?? null,
     })
     .returning();
   return { output: `Created journal entry #${inserted[0].id}: ${title}`, summary: `journal create #${inserted[0].id}` };
@@ -893,7 +904,7 @@ async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
         updatedAt: new Date(),
         ...(nextRunAt ? { nextRunAt } : {}),
       })
-      .where(eq(jobs.id, jobId))
+      .where(and(eq(jobs.id, jobId), ownedBy(jobs.agentId, ctx)))
       .returning();
     if (updated.length) {
       return { output: `Updated job #${updated[0].id}: ${name}`, summary: `job update #${updated[0].id}` };
@@ -912,6 +923,7 @@ async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
       cron: cron || null,
       enabled,
       conversationId: ctx?.conversationId ?? null,
+      agentId: ctx?.agentId ?? null,
       nextRunAt: nextFor(true)!,
     })
     .returning();
@@ -923,8 +935,8 @@ async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
   };
 }
 
-async function listJobs() {
-  const rows = await db.select().from(jobs).orderBy(asc(jobs.nextRunAt));
+async function listJobs(ctx?: ToolContext) {
+  const rows = await db.select().from(jobs).where(ownedBy(jobs.agentId, ctx)).orderBy(asc(jobs.nextRunAt));
   const text = rows.length
     ? rows
         .map(
@@ -936,13 +948,13 @@ async function listJobs() {
   return { output: text, summary: "list jobs" };
 }
 
-async function cancelJob(args: Record<string, unknown>) {
+async function cancelJob(args: Record<string, unknown>, ctx?: ToolContext) {
   const jobId = Number(args.jobId);
   if (!jobId) return { output: "A jobId is required.", summary: "job cancel failed" };
   const updated = await db
     .update(jobs)
     .set({ enabled: false, updatedAt: new Date() })
-    .where(eq(jobs.id, jobId))
+    .where(and(eq(jobs.id, jobId), ownedBy(jobs.agentId, ctx)))
     .returning();
   if (updated.length) {
     return { output: `Disabled job #${jobId}: ${updated[0].name}.`, summary: `job cancel #${jobId}` };
@@ -970,7 +982,7 @@ async function manageGoal(args: Record<string, unknown>, ctx?: ToolContext) {
     const updated = await db
       .update(goals)
       .set(updateValues)
-      .where(eq(goals.id, goalId))
+      .where(and(eq(goals.id, goalId), ownedBy(goals.agentId, ctx)))
       .returning();
     if (updated.length) {
       return {
@@ -980,15 +992,19 @@ async function manageGoal(args: Record<string, unknown>, ctx?: ToolContext) {
     }
     return { output: `Goal #${goalId} not found.`, summary: "goal update failed" };
   }
-  const inserted = await db.insert(goals).values({ title, body, status, priority, conversationId }).returning();
+  const inserted = await db
+    .insert(goals)
+    .values({ title, body, status, priority, conversationId, agentId: ctx?.agentId ?? null })
+    .returning();
   return {
     output: `Created goal #${inserted[0].id}: ${title} (${status}, priority ${priority})`,
     summary: `goal create #${inserted[0].id}`,
   };
 }
 
-async function listGoals() {
-  const rows = await db.select().from(goals).orderBy(asc(goals.priority), desc(goals.updatedAt));
+async function listGoals(ctx?: ToolContext) {
+  // Your own goals and the town's (goals with no owner).
+  const rows = await db.select().from(goals).where(ownedBy(goals.agentId, ctx)).orderBy(asc(goals.priority), desc(goals.updatedAt));
   const text = rows.length
     ? rows
         .map((g) => `#${g.id} [${g.status}] (p${g.priority}) ${g.title}${g.body ? ` — ${g.body}` : ""}`)
@@ -1007,7 +1023,7 @@ async function notifyHuman(args: Record<string, unknown>, ctx?: ToolContext) {
   const severity = (args.severity as "info" | "success" | "warning" | "critical") || "info";
   const inserted = await db
     .insert(notifications)
-    .values({ title, body, severity, source: "agent" })
+    .values({ title, body, severity, source: ctx?.agentName ?? "agent", agentId: ctx?.agentId ?? null })
     .returning();
   // Optionally bridge into a chat session so the message is also waiting there.
   let posted = "";

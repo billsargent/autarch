@@ -10,6 +10,7 @@ import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, execute
 import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
 import { isChatMode, resolveToolAccess } from "./chatMode";
 import { HEARTBEAT_MS, TurnBusyError, claimTurn, heartbeat, isCancelRequested } from "./turnLock";
+import { agentModel, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
 
 export { TurnBusyError } from "./turnLock";
 
@@ -149,19 +150,27 @@ const RETRYABLE_TOOLS = new Set([
 // Time box for the closing calls (truncation reply, summary) (#21).
 const CLOSING_CALL_TIMEOUT_MS = 120_000;
 
-export async function ensureConversation(conversationId?: number | null) {
+export async function ensureConversation(conversationId?: number | null, agentId?: number | null) {
   if (conversationId) {
     const rows = await db.select().from(conversations).where(eq(conversations.id, conversationId));
     if (rows.length) return rows[0];
   }
   // New conversations start in the global default chat mode; after that each
-  // conversation keeps its own.
+  // conversation keeps its own. They belong to the villager being talked to
+  // (the Mayor if none is named).
   const { chatMode } = await getSettings();
+  const agent = await getAgent(agentId);
   const inserted = await db
     .insert(conversations)
-    .values({ title: "New session", chatMode: isChatMode(chatMode) ? chatMode : "agentic" })
+    .values({ title: "New session", chatMode: isChatMode(chatMode) ? chatMode : "agentic", agentId: agent.id })
     .returning();
   return inserted[0];
+}
+
+// The town settings as one villager sees them: its own model, and its own
+// tools within the town's tool policy.
+function settingsFor(agent: AgentRow, town: AgentSettingsRow): AgentSettingsRow {
+  return { ...town, modelName: agentModel(agent, town), enabledTools: effectiveTools(agent, town) };
 }
 
 async function insertMessage(row: typeof messages.$inferInsert) {
@@ -214,9 +223,9 @@ export interface ActiveSession {
 // holds it) and starts its work session.
 function beginSession(
   trigger: SessionTrigger,
-  opts: { jobId?: number | null; conversationId: number; maxDurationMinutes?: number },
+  opts: { jobId?: number | null; conversationId: number; agentId: number; maxDurationMinutes?: number },
 ): ActiveSession {
-  const row = claimTurn({ conversationId: opts.conversationId, trigger, jobId: opts.jobId });
+  const row = claimTurn({ conversationId: opts.conversationId, trigger, jobId: opts.jobId, agentId: opts.agentId });
   const maxDurationMinutes = opts.maxDurationMinutes ?? 10;
   return {
     id: row.id,
@@ -311,12 +320,18 @@ export async function runAgentTurn(opts: {
   trigger?: SessionTrigger;
   jobId?: number | null;
   maxDurationMinutes?: number;
+  // For a new conversation: which villager it's with (default: the Mayor).
+  agentId?: number | null;
 }, onEvent?: (e: AgentEvent) => void): Promise<AgentTurnResult> {
-  const conversation = await ensureConversation(opts.conversationId ?? undefined);
+  const conversation = await ensureConversation(opts.conversationId ?? undefined, opts.agentId);
   const conversationId = conversation.id;
   const newMessages: Array<typeof messages.$inferSelect> = [];
 
-  const settings = await getSettings();
+  // The turn runs as the conversation's villager (#56).
+  const agent = await getAgent(conversation.agentId);
+  if (agent.status === "dismissed") throw new Error(`${agent.name} has left the village, so they can't take part any more.`);
+  const settings = settingsFor(agent, await getSettings());
+  const villagerPaused = agent.status === "paused";
   const overrides = buildOverrides(settings);
   const trigger: SessionTrigger = opts.trigger ?? (opts.jobId ? "scheduled" : "chat");
   const maxDurationMinutes = opts.maxDurationMinutes ?? settings.maxSessionMinutes;
@@ -325,6 +340,7 @@ export async function runAgentTurn(opts: {
   const session = beginSession(trigger, {
     jobId: opts.jobId ?? null,
     conversationId,
+    agentId: agent.id,
     maxDurationMinutes,
   });
 
@@ -390,6 +406,8 @@ export async function runAgentTurn(opts: {
       maxDurationMinutes,
       maxSteps,
       toolsAvailable,
+      agent,
+      neighbours: (await listVillagers()).filter((v) => v.id !== agent.id),
     });
 
     const historyRows = await loadHistory(conversationId);
@@ -563,6 +581,7 @@ export async function runAgentTurn(opts: {
             riskLevel: risk.risk,
             riskReason: risk.reason,
             status: "success",
+            agentId: agent.id,
           })
           .returning();
         const execution = execRow[0];
@@ -578,6 +597,10 @@ export async function runAgentTurn(opts: {
         } else if (settings.paused) {
           status = "blocked";
           output = "The human has globally PAUSED the agent. No actions run while paused.";
+          resultContent = `PAUSED: ${output}`;
+        } else if (villagerPaused) {
+          status = "blocked";
+          output = `The human has paused ${agent.name}. No actions run while you're paused; you can still chat.`;
           resultContent = `PAUSED: ${output}`;
         } else if (!unrestricted && !toolIsEnabled) {
           status = "blocked";
@@ -609,6 +632,8 @@ export async function runAgentTurn(opts: {
                   const execResult = await executeTool(toolName, args, settings, {
                     conversationId,
                     sessionId: session.id,
+                    agentId: agent.id,
+                    agentName: agent.name,
                   });
                   status = "success";
                   output = execResult.output;
@@ -840,8 +865,11 @@ export async function resolveApproval(executionId: number, decision: "approved" 
   let status: typeof toolExecutions.$inferInsert.status = decision;
   if (decision === "approved") {
     try {
-      const result = await executeTool(execution.tool, (execution.input as Record<string, unknown>) || {}, settings, {
+      const agent = await getAgent(execution.agentId);
+      const result = await executeTool(execution.tool, (execution.input as Record<string, unknown>) || {}, settingsFor(agent, settings), {
         conversationId: execution.conversationId,
+        agentId: agent.id,
+        agentName: agent.name,
       });
       output = result.output;
     } catch (err) {

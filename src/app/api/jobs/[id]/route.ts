@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { jobs, conversations } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { cronProblem, nextCronRun } from "@/lib/agent/cron";
+import { getAgent } from "@/lib/agent/agents";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -24,6 +25,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     } else {
       patch.conversationId = null;
     }
+  }
+  if ("agentId" in body && Number(body.agentId)) {
+    patch.agentId = (await getAgent(Number(body.agentId))).id;
+    // Turns run as their conversation's villager, so a job handed to someone
+    // else starts a fresh conversation with them (unless one was chosen).
+    const [current] = await db.select({ agentId: jobs.agentId }).from(jobs).where(eq(jobs.id, Number(id)));
+    if (current && current.agentId !== patch.agentId && !("conversationId" in body)) patch.conversationId = null;
   }
   if ("intervalMinutes" in body) patch.intervalMinutes = Math.max(5, Number(body.intervalMinutes) || 60);
   if ("maxDurationMinutes" in body) patch.maxDurationMinutes = Math.max(1, Number(body.maxDurationMinutes) || 10);

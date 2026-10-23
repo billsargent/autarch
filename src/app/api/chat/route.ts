@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     );
   }
   const body = await req.json().catch(() => ({}));
-  const { conversationId, message } = body as { conversationId?: number; message: string };
+  const { conversationId, message, agentId } = body as { conversationId?: number; message: string; agentId?: number };
   if (!message || !message.trim()) {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
   }
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
         }
       };
       try {
-        const result = await runAgentTurn({ conversationId, userMessage: message }, send);
+        const result = await runAgentTurn({ conversationId, userMessage: message, agentId: Number(agentId) || null }, send);
         send({ type: "done", conversationId: result.conversationId });
         controller.close();
       } catch (err) {

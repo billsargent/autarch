@@ -6,12 +6,41 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
+// The villagers (#55). Each is an agent with its own name, personality, look,
+// model, tools and home folder; the first one is the Mayor. Town-wide things
+// (the API key, safety policy, the tool policy) stay in agent_settings.
+export const agents = sqliteTable("agents", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  role: text("role").notNull().default("Villager"),
+  // Personality in the owner's words; empty = the default villager.
+  persona: text("persona"),
+  // Sprite key (src/lib/agent/villagerLooks.ts) and accent colour.
+  character: text("character").notNull().default("villager"),
+  color: text("color").notNull().default("#4f86c6"),
+  // Model; empty = the town default (agent_settings.model_name).
+  model: text("model"),
+  // Tools this villager may use, within the town's tool policy; empty = all of it.
+  enabledTools: text("enabled_tools", { mode: "json" }),
+  // Home folder inside the town workspace ("" = the workspace itself).
+  home: text("home").notNull().default(""),
+  isMayor: integer("is_mayor", { mode: "boolean" }).notNull().default(false),
+  status: text("status", { enum: ["active", "paused", "dismissed"] }).notNull().default("active"),
+  // Limits (#60); empty = no cap of its own.
+  dailyBudgetUsd: real("daily_budget_usd"),
+  maxActionsPerHour: integer("max_actions_per_hour"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+});
+
 export const conversations = sqliteTable("conversations", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull().default("New session"),
   summary: text("summary"),
   compactedThroughId: integer("compacted_through_id"),
   chatMode: text("chat_mode", { enum: ["agentic", "conversation"] }).notNull().default("agentic"),
+  // The villager this belongs to (#56).
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
@@ -33,6 +62,8 @@ export const jobs = sqliteTable("jobs", {
   lastRunAt: integer("last_run_at", { mode: "timestamp" }),
   lastStatus: text("last_status"),
   lastError: text("last_error"),
+  // The villager this belongs to (#56).
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
@@ -63,6 +94,8 @@ export const workSessions = sqliteTable("work_sessions", {
   // Turn lock and Stop (src/lib/agent/turnLock.ts).
   heartbeatAt: integer("heartbeat_at", { mode: "timestamp" }),
   cancelRequested: integer("cancel_requested", { mode: "boolean" }).notNull().default(false),
+  // The villager this belongs to (#56).
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
 });
 
 export const messages = sqliteTable("messages", {
@@ -112,6 +145,8 @@ export const toolExecutions = sqliteTable("tool_executions", {
   resolvedAt: integer("resolved_at", { mode: "timestamp" }),
   resolvedBy: text("resolved_by"),
   durationMs: integer("duration_ms"),
+  // The villager this belongs to (#56).
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
 });
 
 export const journalEntries = sqliteTable("journal_entries", {
@@ -126,6 +161,8 @@ export const journalEntries = sqliteTable("journal_entries", {
   status: text("status", { enum: ["open", "in_progress", "done", "abandoned"] })
     .notNull()
     .default("open"),
+  // The villager this belongs to (#56).
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
@@ -141,6 +178,8 @@ export const goals = sqliteTable("goals", {
   conversationId: integer("conversation_id").references(() => conversations.id, {
     onDelete: "set null",
   }),
+  // Whose goal; empty = a town goal anyone may pick up (#56).
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
@@ -155,6 +194,8 @@ export const notifications = sqliteTable("notifications", {
     .default("info"),
   source: text("source").notNull().default("system"),
   read: integer("read", { mode: "boolean" }).notNull().default(false),
+  // Which villager sent it, if any.
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
@@ -207,5 +248,7 @@ export const agentSettings = sqliteTable("agent_settings", {
   reasoningEffort: text("reasoning_effort").notNull().default("low"),
   maxOutputTokens: integer("max_output_tokens").notNull().default(2048),
   cacheHitInputPricePerMTok: real("cache_hit_input_price_per_mtok").notNull().default(0.0028),
+  // What the whole town may spend per day, in USD; empty = no town cap (#60).
+  townDailyBudgetUsd: real("town_daily_budget_usd"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

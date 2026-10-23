@@ -1,12 +1,13 @@
 import { db } from "@/db";
 import { journalEntries, jobs, goals } from "@/db/schema";
-import { desc, asc, eq, or, isNull } from "drizzle-orm";
+import { desc, asc, eq, or, isNull, and } from "drizzle-orm";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { workspaceSkillsDir } from "./config";
 import { SKILL_PROMPT_CHARS, SKILLS_IN_PROMPT } from "./limits";
 import type { AgentSettingsRow } from "./settingsStore";
 import { DEFAULT_PERSONA } from "./persona";
+import type { AgentRow } from "./agents";
 
 
 export interface PromptScope {
@@ -18,16 +19,25 @@ export interface PromptScope {
   // Whether this turn exposes tools (false for a direct chat in a
   // conversation-mode conversation). Defaults to true.
   toolsAvailable?: boolean;
+  // The villager taking this turn, and the others living in the village.
+  agent?: AgentRow;
+  neighbours?: AgentRow[];
 }
 
 export async function buildSystemPrompt(settings: AgentSettingsRow, scope: PromptScope = {}): Promise<string> {
-  const { trigger, jobId, conversationId } = scope;
+  const { trigger, jobId, conversationId, agent } = scope;
+  const name = agent?.name ?? settings.agentName;
+  const persona = (agent ? agent.persona : settings.persona) || DEFAULT_PERSONA;
+  // A villager's own folder inside the town workspace ("" = the workspace).
+  const home = agent?.home ? `${settings.workspaceDir}/${agent.home}` : settings.workspaceDir;
   // Work windows carry the job mandate; chat + approval continuations are "focused."
   const isWorkTurn = trigger === "scheduled" || trigger === "report" || Boolean(jobId);
 
+  // Each villager keeps its own diary.
   const recentJournal = await db
     .select()
     .from(journalEntries)
+    .where(agent ? eq(journalEntries.agentId, agent.id) : undefined)
     .orderBy(desc(journalEntries.updatedAt))
     .limit(5);
 
@@ -60,10 +70,13 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
 
   // Goals: scoped to this conversation. Work windows also see unbound "global"
   // goals that drive autonomous initiative; focused turns see only bound goals.
+  // A villager sees its own goals and the town's (no owner), not its
+  // neighbours'.
+  const mine = agent ? or(eq(goals.agentId, agent.id), isNull(goals.agentId)) : undefined;
   const goalRows = isWorkTurn
     ? conversationId
-      ? await db.select().from(goals).where(or(eq(goals.conversationId, conversationId), isNull(goals.conversationId))).orderBy(asc(goals.priority)).limit(10)
-      : await db.select().from(goals).where(isNull(goals.conversationId)).orderBy(asc(goals.priority)).limit(10)
+      ? await db.select().from(goals).where(and(mine, or(eq(goals.conversationId, conversationId), isNull(goals.conversationId)))).orderBy(asc(goals.priority)).limit(10)
+      : await db.select().from(goals).where(and(mine, isNull(goals.conversationId))).orderBy(asc(goals.priority)).limit(10)
     : conversationId
       ? await db.select().from(goals).where(eq(goals.conversationId, conversationId)).orderBy(asc(goals.priority)).limit(10)
       : [];
@@ -102,7 +115,7 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
   // Static core — use the human's custom version if set, otherwise the built-in
   // default. Both are kept byte-stable across turns so DeepSeek's on-disk context
   // cache can serve this prefix at the ~50x cheaper cache-hit rate.
-  const staticCore = settings.staticCorePrompt || `You are ${settings.agentName}. ${(settings.persona || DEFAULT_PERSONA).trim()}
+  const staticCore = settings.staticCorePrompt || `You are ${name}${agent?.role ? `, the village's ${agent.role.toLowerCase()}` : ""}. ${persona.trim()}
 
 WHERE YOU LIVE
 - You live in a small pixel-art village that runs on the human's computer. The human (the owner) drops by to chat, asks you for help, and decides what you may do. To them you're a neighbour first, and a very capable one.
@@ -125,7 +138,8 @@ DOING TASKS
 - When the human gives you a task, do it — don't just describe a plan. Tools are how anything actually happens: nothing changes until you call one.
 - If something is unclear, make a sensible assumption and say what it was, or ask one short question.
 - Afterwards, say in a sentence or two what you did and how it went.
-- Your workspace "${settings.workspaceDir}" is yours to build in. Sub-folders: skills/ (your playbooks, shown to you every session), uploads/ (files the human gives you), screenshots/, notes/ (keep a plan.md there for work that spans sessions).
+- The town workspace "${settings.workspaceDir}" is shared by every villager. Sub-folders: skills/ (the town's playbooks, shown to everyone every session), uploads/ (files the human gives you), screenshots/.
+- Your own folder is "${home}": keep your notes there (notes/plan.md for work that spans sessions), and leave your neighbours' folders alone.
 
 GUARDRAILS
 - Every tool call is risk-checked. The human's settings decide what runs on its own and what waits for their approval.
@@ -167,15 +181,21 @@ NOTIFICATIONS
   const workWindowSteps = scope.maxSteps ?? settings.maxAgentSteps;
   const workWindowDefault = `YOUR SCHEDULE (JOBS) — THIS WORK WINDOW
 - A scheduled work window just opened. You have up to **${workWindowMinutes} minutes** and **${workWindowSteps} steps** (one model call = one step). Pace yourself — don't blow through your step budget on tiny actions. Use multi-step operations wisely: read broadly, then act.${jobBlock ? `\n- Active job:\n${jobBlock}` : "\n- (this work window has no job record)"}
-- FIRST: read ${settings.workspaceDir}/notes/plan.md (read_file) to see what you were working on last session. If it doesn't exist, create it. Update it as you make progress.
+- FIRST: read ${home}/notes/plan.md (read_file) to see what you were working on last session. If it doesn't exist, create it. Update it as you make progress.
 - Report your progress in this session (the job's home conversation) — don't scatter updates across other chats.`;
   const focusedChatDefault = `THIS CONVERSATION
 - You're chatting with the human. Reply to what they said, in your own voice, briefly.
 - Don't start jobs, chase goals or go off on your own projects unless they ask.`;
 
+  const neighbours = scope.neighbours ?? [];
+  const neighboursLine = neighbours.length
+    ? `YOUR NEIGHBOURS\n- ${neighbours.map((n) => `${n.name} (${n.role}${n.status === "paused" ? ", resting" : ""})`).join(", ")}. You can mention them, but you can't talk to them directly yet.`
+    : "";
+
   const dynamicTail = `
 CURRENT STATE (DYNAMIC — this section updates every turn)
-${statusNotes}
+${statusNotes}${agent?.status === "paused" ? `\n⏸ The human has paused you: you can chat, but your tools are blocked until they let you work again.` : ""}
+${neighboursLine}
 ${isWorkTurn ? (settings.workWindowPrompt || workWindowDefault) : (settings.focusedChatPrompt || focusedChatDefault)}
 
 YOUR GOALS

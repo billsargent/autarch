@@ -4,9 +4,9 @@
 // Run with: npm run test:turns
 import { spawn } from "node:child_process";
 import fs from "node:fs";
-import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { startFakeModel } from "./lib/fakeModel";
 
 const isChild = process.argv[2] === "child";
 const tmp = isChild ? process.argv[3] : fs.mkdtempSync(path.join(os.tmpdir(), "autarch-turns-"));
@@ -22,57 +22,10 @@ function check(name: string, actual: unknown, expected: unknown) {
   }
 }
 
-// --- a fake model --------------------------------------------------------------
-// Each request takes the next scripted reply. A reply is text, tool calls, or
-// "hang" (stream nothing until the client goes away).
-type Reply =
-  | { text: string }
-  | { tools: Array<{ name: string; args: Record<string, unknown>; bare?: boolean }> }
-  | { hang: true };
-
-const script: Reply[] = [];
-const seen: Array<{ stream: boolean }> = [];
-let lastSystemPrompt = "";
-
-function chunk(delta: Record<string, unknown>, extra: Record<string, unknown> = {}) {
-  return `data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", choices: [{ index: 0, delta }], ...extra })}\n\n`;
-}
-
-const server = http.createServer((req, res) => {
-  let body = "";
-  req.on("data", (c) => (body += c));
-  req.on("end", () => {
-    const parsed = JSON.parse(body || "{}");
-    const stream = Boolean(parsed.stream);
-    seen.push({ stream });
-    if (stream && parsed.messages?.[0]?.role === "system") lastSystemPrompt = parsed.messages[0].content;
-    const reply = script.shift() ?? { text: "ok" };
-    const usage = { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 };
-    if (!stream) {
-      res.setHeader("content-type", "application/json");
-      const text = "text" in reply ? reply.text : "summary";
-      res.end(JSON.stringify({ id: "x", object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }], usage }));
-      return;
-    }
-    res.setHeader("content-type", "text/event-stream");
-    if ("hang" in reply) {
-      res.write(chunk({ role: "assistant", content: "" }));
-      return; // never finishes; the client must abort
-    }
-    if ("text" in reply) {
-      res.write(chunk({ role: "assistant", content: reply.text }));
-    } else {
-      reply.tools.forEach((t, i) => {
-        // "bare" calls leave out type and id, as some providers' deltas do.
-        const head = t.bare ? { index: i, function: { name: t.name, arguments: "" } } : { index: i, id: `call_${i}`, type: "function", function: { name: t.name, arguments: "" } };
-        res.write(chunk({ role: "assistant", tool_calls: [head] }));
-        res.write(chunk({ tool_calls: [{ index: i, function: { arguments: JSON.stringify(t.args) } }] }));
-      });
-    }
-    res.write(`data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", choices: [], usage })}\n\n`);
-    res.end("data: [DONE]\n\n");
-  });
-});
+// A fake model: scripted replies, and a record of what it was sent.
+const fake = startFakeModel();
+const { script, seen } = fake;
+const lastSystemPrompt = () => fake.lastStep()?.system ?? "";
 
 async function child() {
   // Claim conversation 1 and report whether this process won.
@@ -148,8 +101,7 @@ async function main() {
   sqlite.prepare("UPDATE work_sessions SET status = 'completed' WHERE conversation_id = ?").run(c1);
 
   // --- real turns against the fake model ------------------------------------------
-  await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
-  const port = (server.address() as { port: number }).port;
+  const port = await fake.listen();
   const workspace = path.join(tmp, "ws");
   fs.mkdirSync(path.join(workspace, "adir"), { recursive: true });
   await updateSettings({
@@ -246,15 +198,18 @@ async function main() {
   const p1 = await conv();
   script.push({ text: "Hello there!" });
   await runAgentTurn({ conversationId: p1, userMessage: "hi" });
-  check("the default personality reaches the model", lastSystemPrompt.includes(DEFAULT_PERSONA), true);
-  check("…with the tool-restraint rules", lastSystemPrompt.includes("Most messages need no tools at all"), true);
-  check("…and no nudge to query the database about itself", /inspect your own usage|self-observation/.test(lastSystemPrompt), false);
-  await updateSettings({ persona: "A grumpy old fisherman who loves puns." });
+  check("the default personality reaches the model", lastSystemPrompt().includes(DEFAULT_PERSONA), true);
+  check("…with the tool-restraint rules", lastSystemPrompt().includes("Most messages need no tools at all"), true);
+  check("…and no nudge to query the database about itself", /inspect your own usage|self-observation/.test(lastSystemPrompt()), false);
+  // The personality lives on the villager (the Mayor here) since #55.
+  const { ensureMayor } = await import("../src/lib/agent/agents");
+  const { agents } = await import("../src/db/schema");
+  await db.update(agents).set({ persona: "A grumpy old fisherman who loves puns." }).where(eq(agents.id, (await ensureMayor()).id));
   script.push({ text: "Hmph." });
   await runAgentTurn({ conversationId: p1, userMessage: "hello again" });
-  check("a custom personality replaces the default", [lastSystemPrompt.includes("grumpy old fisherman"), lastSystemPrompt.includes(DEFAULT_PERSONA)], [true, false]);
+  check("a custom personality replaces the default", [lastSystemPrompt().includes("grumpy old fisherman"), lastSystemPrompt().includes(DEFAULT_PERSONA)], [true, false]);
 
-  server.close();
+  fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });
   } catch {

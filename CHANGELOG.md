@@ -3,6 +3,26 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Villagers, behind the scenes
+
+- **The village can have more than one villager (#55).** Each has a name, role, personality,
+  look, colour, model, tools and a home folder. Your existing agent becomes **the Mayor**,
+  keeping its name and personality, and everything it had (conversations, jobs, diary, letters)
+  is his. Settings' agent name and personality now edit the Mayor.
+- **Everything belongs to someone (#56).** Conversations, jobs, sessions, tool calls, diary
+  entries and letters record their villager; a goal with no owner is a town goal anyone may pick
+  up. A turn runs as its conversation's villager: their personality, their model (or the
+  town's), their tools — never more than the town's tool policy allows — and their own diary
+  and goals. Jobs run as their villager.
+- **Pause or dismiss a villager.** A paused villager can chat but can't act, and their jobs
+  wait. A dismissed villager leaves: their jobs stop and nobody can talk to them, but their
+  history stays. The Mayor can't be dismissed.
+- A `/api/agents` API lists villagers with what they're up to (working, waiting on you, spent
+  today, last words), and adds, changes, pauses and dismisses them. The village screens come
+  next.
+- `npm run test:villagers` covers the upgrade, adding villagers and turns as different
+  villagers against a fake model.
+
 ## 2026-10-24 — A villager, not a machine
 
 - **The agent has a personality (#101).** A new **Personality** setting (Identity, in Settings and

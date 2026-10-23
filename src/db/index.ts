@@ -36,6 +36,23 @@ CREATE TABLE IF NOT EXISTS jobs (
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
+CREATE TABLE IF NOT EXISTS agents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'Villager',
+  persona TEXT,
+  character TEXT NOT NULL DEFAULT 'villager',
+  color TEXT NOT NULL DEFAULT '#4f86c6',
+  model TEXT,
+  enabled_tools TEXT,
+  home TEXT NOT NULL DEFAULT '',
+  is_mayor INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active',
+  daily_budget_usd REAL,
+  max_actions_per_hour INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
 CREATE TABLE IF NOT EXISTS work_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
@@ -245,6 +262,16 @@ if (!globalForDb.__agentLabSqlite) {
   if (!existingCols("work_sessions").includes("heartbeat_at")) {
     sqlite.exec("ALTER TABLE work_sessions ADD COLUMN heartbeat_at INTEGER");
     sqlite.exec("ALTER TABLE work_sessions ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0");
+  }
+  // Villagers (#55, #56): everything gets an owner. The Mayor is created, and
+  // existing rows given to him, by ensureMayor() (src/lib/agent/agents.ts).
+  for (const table of ["conversations", "jobs", "work_sessions", "tool_executions", "journal_entries", "goals", "notifications"]) {
+    if (!existingCols(table).includes("agent_id")) {
+      sqlite.exec(`ALTER TABLE ${table} ADD COLUMN agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL`);
+    }
+  }
+  if (!existingCols("agent_settings").includes("town_daily_budget_usd")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN town_daily_budget_usd REAL");
   }
   // Clean up stale FK references (conversations deleted without cascade).
   sqlite.exec("UPDATE jobs SET conversation_id = NULL WHERE conversation_id IS NOT NULL AND conversation_id NOT IN (SELECT id FROM conversations)");

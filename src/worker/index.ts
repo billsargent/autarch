@@ -6,6 +6,8 @@ import { TurnBusyError, runAgentTurn, type SessionTrigger } from "@/lib/agent/ru
 import { nextCronRun } from "@/lib/agent/cron";
 import { reapStaleSessions } from "@/lib/agent/sessions";
 import { requestCancel } from "@/lib/agent/turnLock";
+import { ensureMayor } from "@/lib/agent/agents";
+import { agents } from "@/db/schema";
 
 // Standalone background scheduler for the agent. Run with: npm run worker
 // Polls the DB for due jobs, respects the human's global pause switch and
@@ -48,6 +50,7 @@ async function ensureDailyReportJob() {
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, DAILY_REPORT_HOUR, 0, 0);
   await db.insert(jobs).values({
+    agentId: (await ensureMayor()).id,
     name: "Daily self-report",
     instruction:
       "Write a concise daily self-report: what you did over the past day, what you spent, what you learned, and your plan for today. Save it to your journal (category=reflection).",
@@ -67,6 +70,7 @@ async function ensureSelfWorkJob() {
   const existing = await db.select().from(jobs).where(eq(jobs.kind, "self_work")).limit(1);
   if (existing.length) return;
   await db.insert(jobs).values({
+    agentId: (await ensureMayor()).id,
     name: "Self-directed work",
     instruction:
       "Your own initiative window. Review your goals and journal, pick the highest-value goal, and make concrete progress on it: explore, build, test, or automate something real. Take action — don't just plan. Journal what you did. Only notify the human if something genuinely needs their input.",
@@ -123,7 +127,7 @@ async function ensureJobConversation(job: typeof jobs.$inferSelect): Promise<num
   const title = job.reportSessionTitle || `Job: ${job.name}`;
   const inserted = await db
     .insert(conversations)
-    .values({ title })
+    .values({ title, agentId: job.agentId })
     .returning();
   await db
     .update(jobs)
@@ -158,12 +162,20 @@ async function runDueJobs() {
   const settings = await getSettings();
   if (settings.paused) return; // global kill switch: don't start anything
 
-  const due = await db
-    .select()
-    .from(jobs)
-    .where(and(eq(jobs.enabled, true), lte(jobs.nextRunAt, new Date())))
-    .orderBy(asc(jobs.nextRunAt))
-    .limit(5);
+  // Jobs of villagers who are resting (paused) or have left wait.
+  const working = new Set(
+    (await db.select({ id: agents.id }).from(agents).where(eq(agents.status, "active"))).map((a) => a.id),
+  );
+  const due = (
+    await db
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.enabled, true), lte(jobs.nextRunAt, new Date())))
+      .orderBy(asc(jobs.nextRunAt))
+      .limit(10)
+  )
+    .filter((j) => j.agentId === null || working.has(j.agentId))
+    .slice(0, 5);
   if (!due.length) return;
 
   // Overlap guard: never start a scheduled session while any turn is active.

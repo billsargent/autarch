@@ -56,6 +56,7 @@ export function claimTurn(opts: {
   conversationId: number;
   trigger: Trigger;
   jobId?: number | null;
+  agentId?: number | null;
   nowMs?: number;
 }): { id: number; startedAt: Date } {
   const nowMs = opts.nowMs ?? Date.now();
@@ -67,9 +68,9 @@ export function claimTurn(opts: {
     const started = nowSec(nowMs);
     const info = sqlite
       .prepare(
-        "INSERT INTO work_sessions (job_id, conversation_id, trigger, status, started_at, heartbeat_at, cancel_requested) VALUES (?, ?, ?, 'running', ?, ?, 0)",
+        "INSERT INTO work_sessions (job_id, conversation_id, trigger, status, started_at, heartbeat_at, cancel_requested, agent_id) VALUES (?, ?, ?, 'running', ?, ?, 0, ?)",
       )
-      .run(opts.jobId ?? null, opts.conversationId, opts.trigger, started, started);
+      .run(opts.jobId ?? null, opts.conversationId, opts.trigger, started, started, opts.agentId ?? null);
     return { id: Number(info.lastInsertRowid), startedAt: new Date(started * 1000) };
   });
   return claim.immediate();

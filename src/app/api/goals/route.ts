@@ -18,6 +18,8 @@ export async function POST(req: Request) {
       status: (body.status as "backlog" | "in_progress" | "done" | "abandoned") || "backlog",
       priority: Number(body.priority) || 3,
       conversationId: body.conversationId ? Number(body.conversationId) : null,
+      // A villager's own goal, or (empty) a town goal anyone may pick up.
+      agentId: body.agentId ? Number(body.agentId) : null,
     })
     .returning();
   return NextResponse.json({ goal: inserted[0] });
