@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { conversations, jobs } from "@/db/schema";
 import { asc, eq } from "drizzle-orm";
-import { nextCronRun } from "@/lib/agent/cron";
+import { cronProblem, nextCronRun } from "@/lib/agent/cron";
 
 export async function GET() {
   const rows = await db.select().from(jobs).orderBy(asc(jobs.nextRunAt));
@@ -15,6 +15,8 @@ export async function POST(req: Request) {
   const intervalMinutes = Math.max(5, Number(body.intervalMinutes) || 60);
   const maxDurationMinutes = Math.max(1, Number(body.maxDurationMinutes) || 10);
   const cron = typeof body.cron === "string" && body.cron.trim() ? body.cron.trim() : "";
+  const problem = cron ? cronProblem(cron) : null;
+  if (problem) return NextResponse.json({ error: `That cron schedule won't work: ${problem}.` }, { status: 400 });
   const nextRunAt = cron
     ? nextCronRun(cron, new Date()) ?? new Date(Date.now() + intervalMinutes * 60_000)
     : new Date(Date.now() + intervalMinutes * 60_000);

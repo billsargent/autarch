@@ -3,6 +3,21 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — The worker: opt-in free time, real cron checks, clean shutdown
+
+- **Nothing autonomous runs until you ask (#52).** New installs get the self-directed work window
+  and the daily self-report switched off. A new **Free time** page in the Mayor's ledger turns
+  them on and shows the session cap they count against. Existing installs keep their current
+  settings.
+- **Cron schedules are really checked (#24).** A bad expression (wrong field count, out-of-range
+  values, a step of 0, a backwards range, February 30th…) is refused with the reason, by the
+  workshop, the Jobs page and the agent's `schedule_job` tool; it used to be accepted and
+  silently fall back to the interval. `7` is accepted as Sunday.
+- **The worker shuts down cleanly (#28).** On SIGTERM or Ctrl+C it stops taking work, stops the
+  turn it's running (recorded as stopped, not left "running"), and exits.
+- One more missing space fixed (the Free time page), and `test:village` now fails on the JSX
+  pattern that loses those spaces.
+
 ## 2026-10-23 — Dev server settings
 
 - **No network address in the repo (#48).** The hosts allowed to open the dev server from another

@@ -10,6 +10,7 @@ import {
   useSettings,
   type SettingsPatch,
 } from "../../data/useSettings";
+import { jobSchedule, useJobs } from "../../data/useJobs";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
 
 // The Mayor's ledger in the town hall: every setting, one page per section,
@@ -19,6 +20,7 @@ import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
 
 const PAGES = [
   { id: "town", label: "Pause & chat" },
+  { id: "freetime", label: "Free time" },
   { id: "overrides", label: "Overrides" },
   { id: "identity", label: "Identity & model" },
   { id: "prompts", label: "Prompts" },
@@ -202,6 +204,9 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
         </Section>
       );
     }
+
+    case "freetime":
+      return <FreeTimePage settings={settings} />;
 
     case "identity":
       return <IdentityPage s={s} settings={settings} />;
@@ -494,6 +499,54 @@ function IdentityPage({ s, settings }: { s: Settings; settings: SettingsRow }) {
         />
         <FieldError msg={s.fieldErrors.systemPromptExtra} />
       </label>
+    </Section>
+  );
+}
+
+// Work the agent starts on its own. Both are off on a new install (#52); they
+// are ordinary jobs, so the workshop can change their schedule too.
+function FreeTimePage({ settings }: { settings: SettingsRow }) {
+  const { jobs, loaded, setEnabled } = useJobs();
+  const own = [
+    {
+      kind: "self_work" as const,
+      label: "Let the agent work on its own ideas",
+      desc: "A work window where it picks a goal from the notice board and makes progress on it.",
+    },
+    {
+      kind: "daily_report" as const,
+      label: "Daily self-report",
+      desc: "Each morning it writes what it did, what it spent and its plan for the day into the diary.",
+    },
+  ];
+  return (
+    <Section
+      title="Free time"
+      intro="Work the agent starts on its own, without being asked. Each run is a work session: it counts toward the daily session cap and the gap between sessions (Limits), and every risky action still needs your approval."
+    >
+      {!loaded && <p className="text-sm">Checking the job board…</p>}
+      {own.map((o) => {
+        const job = jobs.find((j) => j.kind === o.kind);
+        if (loaded && !job) {
+          return (
+            <p key={o.kind} className="rounded border-2 border-dashed border-[#c9b27a] p-3 text-xs">
+              <strong>{o.label}:</strong> the worker adds this job the first time it starts (<code>npm run worker</code>).
+            </p>
+          );
+        }
+        if (!job) return null;
+        return (
+          <div key={o.kind}>
+            <Toggle label={o.label} desc={o.desc} checked={job.enabled} onToggle={(v) => void setEnabled(job, v)} />
+            <p className="mt-1 text-[11px] text-[#6b4a2e]">
+              {o.kind === "daily_report" ? "Every morning at 09:00" : jobSchedule(job)}, up to {job.maxDurationMinutes}{" "}min each time. Change it at the workshop&apos;s job board.
+            </p>
+          </div>
+        );
+      })}
+      <p className="text-[11px] text-[#6b4a2e]">
+        Today&apos;s cap: {settings.maxSessionsPerDay} autonomous sessions, at least {settings.minGapMinutes} min apart.
+      </p>
     </Section>
   );
 }

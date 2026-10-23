@@ -54,6 +54,37 @@ async function main() {
   const longer = await patch({ intervalMinutes: 90 });
   check("a new interval re-plans from now", minutesAway(longer), 90);
 
+  // --- #24: cron expressions are checked, with a reason --------------------------
+  const { cronProblem } = await import("../src/lib/agent/cron");
+  for (const ok of ["*/15 * * * *", "30 3 * * 1", "0 9-17 * * 1-5", "0 0 1,15 * *", "5/20 * * * *", "0 12 * * 7", "0 0 29 2 *"]) {
+    check(`"${ok}" is accepted`, cronProblem(ok), null);
+  }
+  const bad: Array<[string, string]> = [
+    ["hello", "5 fields"],
+    ["* * * *", "5 fields"],
+    ["61 * * * *", "between 0 and 59"],
+    ["* 24 * * *", "between 0 and 23"],
+    ["* * 0 * *", "between 1 and 31"],
+    ["* * * 13 *", "between 1 and 12"],
+    ["* * * * 8", "between 0 and 7"],
+    ["*/0 * * * *", "step of 0"],
+    ["10-5 * * * *", "backwards"],
+    ["a * * * *", "isn't a number"],
+    ["1,,2 * * * *", "isn't a number"],
+    ["0 0 31 2 *", "never comes round"],
+  ];
+  for (const [expr, why] of bad) {
+    check(`"${expr}" is refused (${why})`, cronProblem(expr)?.includes(why), true);
+  }
+  const badPost = await jobsRoute.POST(json({ name: "bad", cron: "61 * * * *" }));
+  check("creating a job with a bad cron is a 400", [badPost.status, (await badPost.json()).error?.includes("between 0 and 59")], [400, true]);
+  const badPatch = await jobRoute.PATCH(new Request("http://test", { method: "PATCH", body: JSON.stringify({ cron: "nope" }) }), params(job.id));
+  check("changing a job to a bad cron is a 400", badPatch.status, 400);
+  const { executeTool } = await import("../src/lib/agent/tools");
+  const { getSettings } = await import("../src/lib/agent/settingsStore");
+  const refusedTool = await executeTool("schedule_job", { name: "agent job", cron: "99 * * * *" }, await getSettings(), {});
+  check("the agent's schedule_job refuses a bad cron", refusedTool.output.startsWith("Refused"), true);
+
   try {
     fs.rmSync(tmp, { recursive: true, force: true });
   } catch {

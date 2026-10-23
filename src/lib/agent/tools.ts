@@ -27,7 +27,7 @@ import {
   type SuperviseOverrides,
 } from "./risk";
 import { MAX_OUTPUT_CHARS, MAX_FETCH_BYTES, MAX_DOWNLOAD_BYTES, workspaceSkillsDir } from "./config";
-import { nextCronRun } from "./cron";
+import { cronProblem, nextCronRun } from "./cron";
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -868,6 +868,10 @@ async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
   const cron = args.cron && String(args.cron).trim() ? String(args.cron).trim() : "";
   const enabled = args.enabled === undefined ? true : Boolean(args.enabled);
   const jobId = args.jobId ? Number(args.jobId) : undefined;
+  const problem = cron ? cronProblem(cron) : null;
+  if (problem) {
+    return { output: `Refused: the cron expression "${cron}" won't work: ${problem}. Nothing was scheduled or changed.`, summary: "schedule refused: bad cron" };
+  }
 
   const nextFor = (e: boolean): Date | null => {
     if (!e) return null; // leave nextRunAt untouched when disabling

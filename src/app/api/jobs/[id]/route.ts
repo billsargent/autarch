@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { jobs, conversations } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { nextCronRun } from "@/lib/agent/cron";
+import { cronProblem, nextCronRun } from "@/lib/agent/cron";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -33,6 +33,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if ("cron" in body) {
     const c = typeof body.cron === "string" ? body.cron.trim() : "";
+    const problem = c ? cronProblem(c) : null;
+    if (problem) return NextResponse.json({ error: `That cron schedule won't work: ${problem}.` }, { status: 400 });
     patch.cron = c || null;
   }
   // Re-plan the next run when the job is switched on or its schedule changes;

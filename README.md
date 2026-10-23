@@ -108,7 +108,13 @@ Human-initiated chat is never throttled; only autonomous (scheduled/report) sess
 The **agent can schedule its own jobs** (`schedule_job`) and the human can create them
 in the **Jobs** tab. A separate process (`npm run worker`) polls the DB every 15s, checks
 pause/cooldown/daily caps, and opens a work window by injecting an event note into the
-job's conversation. A built-in **daily self-report** job is auto-seeded for 09:00.
+job's conversation. Cron schedules are checked when a job is saved, and a bad one is refused with
+the reason.
+
+Nothing runs on its own until you ask: the worker adds a **self-directed work** window (every 90
+minutes) and a **daily self-report** (09:00), both switched off. Turn them on in the Mayor's
+ledger → **Free time**. Stopping the worker (SIGTERM or Ctrl+C) stops its current turn cleanly
+before it exits.
 
 ### Token & cost tracking
 Each model call's token usage is recorded per message and rolled up per session. Cost is

@@ -5,6 +5,7 @@ import { getSettings, type AgentSettingsRow } from "@/lib/agent/settingsStore";
 import { TurnBusyError, runAgentTurn, type SessionTrigger } from "@/lib/agent/runner";
 import { nextCronRun } from "@/lib/agent/cron";
 import { reapStaleSessions } from "@/lib/agent/sessions";
+import { requestCancel } from "@/lib/agent/turnLock";
 
 // Standalone background scheduler for the agent. Run with: npm run worker
 // Polls the DB for due jobs, respects the human's global pause switch and
@@ -40,6 +41,7 @@ function nextRunFor(job: typeof jobs.$inferSelect): Date {
 }
 
 // Seed the built-in daily self-report job once (next run at 09:00 tomorrow).
+// Switched off: nothing autonomous runs until the owner turns it on (#52).
 async function ensureDailyReportJob() {
   const existing = await db.select().from(jobs).where(eq(jobs.kind, "daily_report")).limit(1);
   if (existing.length) return;
@@ -52,14 +54,15 @@ async function ensureDailyReportJob() {
     kind: "daily_report",
     intervalMinutes: 1440,
     maxDurationMinutes: 10,
-    enabled: true,
+    enabled: false,
     nextRunAt: first,
   });
-  console.log("[worker] seeded daily self-report job (next run", first.toISOString() + ")");
+  console.log("[worker] added the daily self-report job, switched off (turn it on in the Mayor's ledger → Free time)");
 }
 
-// Seed a recurring self-directed work window so the agent takes initiative
-// through the day even when the human never asks. Respects cooldown + daily cap.
+// Seed a recurring self-directed work window, so the agent can take initiative
+// through the day. Switched off until the owner opts in (#52); when on, it
+// respects the cooldown and daily cap.
 async function ensureSelfWorkJob() {
   const existing = await db.select().from(jobs).where(eq(jobs.kind, "self_work")).limit(1);
   if (existing.length) return;
@@ -70,10 +73,10 @@ async function ensureSelfWorkJob() {
     kind: "self_work",
     intervalMinutes: SELF_WORK_INTERVAL_MINUTES,
     maxDurationMinutes: SELF_WORK_MAX_MINUTES,
-    enabled: true,
+    enabled: false,
     nextRunAt: new Date(Date.now() + SELF_WORK_INTERVAL_MINUTES * 60_000),
   });
-  console.log(`[worker] seeded self-directed work job (every ${SELF_WORK_INTERVAL_MINUTES} min)`);
+  console.log(`[worker] added the self-directed work job, switched off (turn it on in the Mayor's ledger → Free time)`);
 }
 
 // Enforce "how often it starts working" (cooldown + daily cap). Applies to
@@ -129,7 +132,29 @@ async function ensureJobConversation(job: typeof jobs.$inferSelect): Promise<num
   return inserted[0].id;
 }
 
+// Shutdown (#28): on SIGTERM/SIGINT stop taking new work, ask the running
+// turn to stop (it finishes its session as "terminated" within a second or
+// so), then exit. If it doesn't stop in time, exit anyway; the turn lock
+// releases the session when its heartbeat goes quiet.
+let stopping = false;
+let currentConversation: number | null = null;
+let idle: (() => void) | null = null;
+const SHUTDOWN_GRACE_MS = 30_000;
+
+function shutdown(signal: string) {
+  if (stopping) return;
+  stopping = true;
+  console.log(`[worker] ${signal}: stopping${currentConversation ? " the current turn" : ""}…`);
+  if (currentConversation) requestCancel(currentConversation);
+  idle?.();
+  setTimeout(() => {
+    console.log("[worker] the turn didn't stop in time; exiting anyway");
+    process.exit(0);
+  }, SHUTDOWN_GRACE_MS).unref();
+}
+
 async function runDueJobs() {
+  if (stopping) return;
   const settings = await getSettings();
   if (settings.paused) return; // global kill switch: don't start anything
 
@@ -151,7 +176,7 @@ async function runDueJobs() {
     // Enforce cooldown + daily cap per job (not just once per tick) so several
     // jobs due at the same time can't blow past maxSessionsPerDay / minGapMinutes.
     const latestSettings = await getSettings();
-    if (latestSettings.paused) break;
+    if (latestSettings.paused || stopping) break;
     const { allowed, reason } = await checkWorkAllowed(latestSettings);
     if (!allowed) {
       for (const j of due.slice(i)) {
@@ -185,6 +210,7 @@ async function runDueJobs() {
     let ran = true;
     try {
       const conversationId = await ensureJobConversation(job);
+      currentConversation = conversationId;
       await runAgentTurn({
         conversationId,
         eventNote,
@@ -216,6 +242,7 @@ async function runDueJobs() {
         console.error(`[worker] job #${job.id} "${job.name}" failed: ${msg}`);
       }
     } finally {
+      currentConversation = null;
       if (ran) {
         await db
           .update(jobs)
@@ -228,6 +255,8 @@ async function runDueJobs() {
 }
 
 async function main() {
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
   console.log("[worker] Autarch scheduler started (poll every " + POLL_MS / 1000 + "s).");
   try {
     await ensureDailyReportJob();
@@ -239,7 +268,7 @@ async function main() {
   } catch (err) {
     console.error("[worker] could not seed self-directed work job:", err);
   }
-  for (;;) {
+  while (!stopping) {
     try {
       // Clean up sessions left "running" by a crash, or nothing would ever run again.
       const reaped = await reapStaleSessions();
@@ -248,8 +277,19 @@ async function main() {
     } catch (err) {
       console.error("[worker] tick error:", err);
     }
-    await sleep(POLL_MS);
+    if (stopping) break;
+    // Sleep until the next poll, or until a shutdown wakes us.
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, POLL_MS);
+      idle = () => {
+        clearTimeout(t);
+        resolve();
+      };
+    });
+    idle = null;
   }
+  console.log("[worker] stopped.");
+  process.exit(0);
 }
 
 main();

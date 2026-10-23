@@ -6,6 +6,8 @@ import { ALL_SCENES, INTERIORS } from "../src/components/village/scenes";
 import { ROOM_ACTIONS } from "../src/components/village/rooms/actions";
 import { nearestWaypoint, shortestPath, type Edge, type Waypoint } from "../src/components/village/path";
 import { MOOD_PLACE, nextHangout, villagerMood } from "../src/components/village/villagerState";
+import fs from "node:fs";
+import path from "node:path";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown) {
@@ -101,6 +103,29 @@ check(
   [],
 );
 check("nothing going on means idle", villagerMood({ paused: false, running: false, pendingApprovals: 0 }), "idle");
+
+// --- JSX text the compiler mangles ---------------------------------------------
+// In this build, JSX text that starts with a space right after a tag or {…}
+// and contains an HTML entity (&apos; &amp; …) loses that leading space
+// ("yet.Add one", "10min"). Write {" "} before it, or drop the entity.
+const RISKY_JSX_TEXT = /(\}|<\/\w+>) [^<{}\n]*&(apos|amp|quot|lt|gt);/;
+function tsxFiles(dir: string): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = path.join(dir, e.name);
+    return e.isDirectory() ? tsxFiles(p) : e.name.endsWith(".tsx") ? [p] : [];
+  });
+}
+check(
+  "no JSX text that would lose its leading space",
+  tsxFiles("src").flatMap((f) =>
+    fs
+      .readFileSync(f, "utf-8")
+      .split("\n")
+      .map((line, i) => (RISKY_JSX_TEXT.test(line) ? `${f.replace(/\\/g, "/")}:${i + 1}` : null))
+      .filter(Boolean),
+  ),
+  [],
+);
 
 if (failures > 0) {
   console.error(`\n${failures} village test(s) FAILED`);
