@@ -3,6 +3,30 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — One turn at a time, and a Stop that works
+
+- **One turn per conversation (#18).** A chat message, an approval follow-up, "Run now" and the
+  worker could all run turns in the same conversation at once, interleaving their messages. A turn
+  now claims its conversation before writing anything (an SQLite write lock shared by the web
+  server and the worker). A second chat message gets "already working — wait, or press Stop";
+  an approval follow-up waits its turn; a scheduled job waits for the next tick.
+- **A turn whose process died lets go.** Running turns keep a heartbeat. If the server restarts
+  mid-turn, the conversation is free again within about 90 seconds (it used to stay stuck until
+  the stale-session cleanup, up to 25 minutes later).
+- **Stop works for every turn (#19),** including scheduled jobs the worker runs: the request is
+  stored in the database, and the turn notices within a second, even while waiting on the model.
+  A Stop that lands mid-reply is recorded as stopped, not as an empty "completed" reply.
+- **"Run now" won't start a job that's already running (#27).**
+- **Step-limit fixes (#20):** a turn that finishes cleanly on its last allowed step is no longer
+  marked truncated, and a truncated turn ends with one closing message, not two (and one model
+  call, not two).
+- **Runner cleanups (#21):** one `session_start` event per turn; only read-only tools are retried
+  after a failure, so a failed write or post can't happen twice; no more "after 0 retries";
+  streamed tool calls missing their type or id are repaired instead of dropped; and the
+  compaction, truncation and summary calls are time-boxed and stop with the turn.
+- `npm run test:turns` covers all of this against a fake model server, including four processes
+  racing for one conversation.
+
 ## 2026-10-23 — The village is Home
 
 - **Home (`/`) is the village (#97).** Signing in lands there. The classic pages are all still

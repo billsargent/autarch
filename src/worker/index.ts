@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { jobs, workSessions, conversations } from "@/db/schema";
 import { eq, and, gte, lte, ne, inArray, asc, desc, count } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "@/lib/agent/settingsStore";
-import { runAgentTurn, type SessionTrigger } from "@/lib/agent/runner";
+import { TurnBusyError, runAgentTurn, type SessionTrigger } from "@/lib/agent/runner";
 import { nextCronRun } from "@/lib/agent/cron";
 import { reapStaleSessions } from "@/lib/agent/sessions";
 
@@ -182,6 +182,7 @@ async function runDueJobs() {
       .set({ lastRunAt: new Date(), lastStatus: "running", lastError: null, updatedAt: new Date() })
       .where(eq(jobs.id, job.id));
 
+    let ran = true;
     try {
       const conversationId = await ensureJobConversation(job);
       await runAgentTurn({
@@ -198,17 +199,31 @@ async function runDueJobs() {
       console.log(`[worker] job #${job.id} "${job.name}" completed`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      await db
-        .update(jobs)
-        .set({ lastStatus: "failed", lastError: msg, updatedAt: new Date() })
-        .where(eq(jobs.id, job.id));
-      console.error(`[worker] job #${job.id} "${job.name}" failed: ${msg}`);
+      if (err instanceof TurnBusyError) {
+        // Someone is talking in the job's conversation: nothing ran. Leave the
+        // job due so it runs on a later tick (#18).
+        ran = false;
+        await db
+          .update(jobs)
+          .set({ lastStatus: "waiting", lastError: "Its conversation was busy; it will run when it's free.", updatedAt: new Date() })
+          .where(eq(jobs.id, job.id));
+        console.log(`[worker] job #${job.id} "${job.name}" waiting: its conversation is busy`);
+      } else {
+        await db
+          .update(jobs)
+          .set({ lastStatus: "failed", lastError: msg, updatedAt: new Date() })
+          .where(eq(jobs.id, job.id));
+        console.error(`[worker] job #${job.id} "${job.name}" failed: ${msg}`);
+      }
     } finally {
-      await db
-        .update(jobs)
-        .set({ nextRunAt: nextRunFor(job), updatedAt: new Date() })
-        .where(eq(jobs.id, job.id));
+      if (ran) {
+        await db
+          .update(jobs)
+          .set({ nextRunAt: nextRunFor(job), updatedAt: new Date() })
+          .where(eq(jobs.id, job.id));
+      }
     }
+    if (!ran) break;
   }
 }
 

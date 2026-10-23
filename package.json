@@ -19,6 +19,7 @@
     "test:village": "tsx scripts/village-test.ts",
     "test:safety": "tsx scripts/safety-test.ts",
     "test:jobs": "tsx scripts/jobs-test.ts",
+    "test:turns": "tsx scripts/turn-test.ts",
     "pixelate": "tsx scripts/pixelate.ts",
     "village:map": "tsx scripts/build-village-map.ts"
   },

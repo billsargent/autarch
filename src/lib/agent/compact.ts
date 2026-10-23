@@ -20,6 +20,8 @@ export interface BuildOptions {
   rows: HistoryRow[];
   settings: AgentSettingsRow;
   client: OpenAI;
+  // Aborts the summary call when the turn is stopped.
+  signal?: AbortSignal;
 }
 
 // Build the model-facing messages for a turn. If the history fits within the
@@ -29,7 +31,7 @@ export interface BuildOptions {
 // conversation summary]" user message. No DB rows are deleted, so the UI's
 // scroll-back history is unaffected.
 export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessageParam[]> {
-  const { conversationId, rows, settings, client } = opts;
+  const { conversationId, rows, settings, client, signal } = opts;
   const full = historyToApiMessages(rows);
   if (!settings.autoCompact) return full;
 
@@ -53,7 +55,7 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
 
   let summary = "";
   try {
-    summary = await generateSummary(client, settings.modelName, toSummarize);
+    summary = await generateSummary(client, settings.modelName, toSummarize, signal);
   } catch {
     // Safe fallback: hard window + truncation note rather than a giant prompt.
     return [
@@ -73,7 +75,10 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
   return [{ role: "user", content: `[Earlier conversation summary]\n${summary}` }, ...historyToApiMessages(keep)];
 }
 
-async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]): Promise<string> {
+// Each summary call is time-boxed and stops with the turn.
+const SUMMARY_TIMEOUT_MS = 120_000;
+
+async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[], signal?: AbortSignal): Promise<string> {
   // Cluster-aware chunking: never split between an assistant tool_calls message
   // and its tool result rows. A `tool` row always stays in the current chunk with
   // its preceding assistant, so chunk boundaries only ever land after non-tool rows.
@@ -138,7 +143,7 @@ async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]
       thinking: { type: "enabled" },
     } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
       thinking?: { type: "enabled" | "disabled" };
-    });
+    }, { timeout: SUMMARY_TIMEOUT_MS, signal });
     const out = completion.choices[0]?.message?.content?.trim() ?? "";
     if (out) parts.push(out);
   }

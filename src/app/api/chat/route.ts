@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { runAgentTurn, type AgentEvent } from "@/lib/agent/runner";
 import { isDeepSeekConfigured } from "@/lib/agent/deepseekClient";
 import { getSettings } from "@/lib/agent/settingsStore";
+import { isConversationBusy } from "@/lib/agent/turnLock";
 
 export async function POST(req: Request) {
   const settings = await getSettings();
@@ -15,6 +16,14 @@ export async function POST(req: Request) {
   const { conversationId, message } = body as { conversationId?: number; message: string };
   if (!message || !message.trim()) {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
+  }
+  // One turn per conversation (#18). The runner re-checks atomically when it
+  // claims the conversation; this just answers early with a clear 409.
+  if (conversationId && isConversationBusy(Number(conversationId))) {
+    return NextResponse.json(
+      { error: "The agent is already working in this conversation. Wait for it to finish, or press Stop." },
+      { status: 409 },
+    );
   }
 
   // Stream progress events (SSE) so the UI can show the agent working in

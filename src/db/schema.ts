@@ -60,6 +60,9 @@ export const workSessions = sqliteTable("work_sessions", {
   totalTokens: integer("total_tokens").notNull().default(0),
   costUsd: real("cost_usd").notNull().default(0),
   reason: text("reason"),
+  // Turn lock and Stop (src/lib/agent/turnLock.ts).
+  heartbeatAt: integer("heartbeat_at", { mode: "timestamp" }),
+  cancelRequested: integer("cancel_requested", { mode: "boolean" }).notNull().default(false),
 });
 
 export const messages = sqliteTable("messages", {

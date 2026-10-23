@@ -9,6 +9,9 @@ import { buildSystemPrompt } from "./systemPrompt";
 import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, executeTool } from "./tools";
 import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
 import { isChatMode, resolveToolAccess } from "./chatMode";
+import { HEARTBEAT_MS, TurnBusyError, claimTurn, heartbeat, isCancelRequested } from "./turnLock";
+
+export { TurnBusyError } from "./turnLock";
 
 type ChatMessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
@@ -55,12 +58,23 @@ async function streamChatCompletion(
   base: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
   isInterrupted: () => boolean,
   onDelta?: (content: string, reasoning: string) => void,
+  signal?: AbortSignal,
 ): Promise<StreamedMessage> {
-  const stream = await client.chat.completions.create({
-    ...modelRequestParams(settings, base),
-    stream: true,
-    stream_options: { include_usage: true },
-  } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming & DeepSeekThinking);
+  let stream;
+  try {
+    stream = await client.chat.completions.create(
+      {
+        ...modelRequestParams(settings, base),
+        stream: true,
+        stream_options: { include_usage: true },
+      } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming & DeepSeekThinking,
+      { signal },
+    );
+  } catch (err) {
+    // Stopped before the first chunk arrived.
+    if (signal?.aborted) return { content: "", reasoningContent: "", toolCalls: null, usage: undefined, interrupted: true };
+    throw err;
+  }
 
   let content = "";
   let reasoning = "";
@@ -68,6 +82,7 @@ async function streamChatCompletion(
   const toolAcc: Array<{ id?: string; type?: string; function: { name: string; arguments: string } }> = [];
   let interrupted = false;
 
+  try {
   for await (const chunk of stream) {
     if (isInterrupted()) {
       interrupted = true;
@@ -92,10 +107,21 @@ async function streamChatCompletion(
     if (chunk.usage) usage = chunk.usage as UsageLike;
     onDelta?.(content, reasoning);
   }
+  } catch (err) {
+    if (!signal?.aborted) throw err;
+  }
+  // An abort can also just end the stream quietly; either way the reply was
+  // cut off, not finished.
+  if (signal?.aborted) interrupted = true;
 
-  const toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] | null = toolAcc.length
-    ? (toolAcc as unknown as OpenAI.Chat.Completions.ChatCompletionMessageToolCall[])
-    : null;
+  // Deltas don't always carry the call's type or id (and indices can skip);
+  // a call without them would be dropped here and break the next request.
+  const calls = toolAcc.filter(Boolean).map((t, i) => ({
+    id: t.id || `call_${Date.now().toString(36)}_${i}`,
+    type: "function" as const,
+    function: t.function,
+  }));
+  const toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] | null = calls.length ? calls : null;
 
   return { content, reasoningContent: reasoning, toolCalls, usage, interrupted };
 }
@@ -106,18 +132,22 @@ function worseRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
   return RISK_RANK[a] >= RISK_RANK[b] ? a : b;
 }
 
-// Conversations whose in-flight turn has been cancelled by the human (the Stop
-// button). Checked at step boundaries so the server actually stops spending
-// tokens / running tools instead of just closing the client's SSE stream.
-// In-memory: covers chat turns in the web process (scheduled worker turns are
-// time-boxed and not cancelable from the UI today).
-const cancelledConversations = new Set<number>();
-export function cancelTurn(conversationId: number) {
-  cancelledConversations.add(conversationId);
-}
-export function isTurnCancelled(conversationId: number): boolean {
-  return cancelledConversations.has(conversationId);
-}
+// Tools that only read, so retrying one after a failure can't repeat a side
+// effect (#21). Everything else runs once.
+const RETRYABLE_TOOLS = new Set([
+  "read_file",
+  "list_directory",
+  "get_system_status",
+  "list_processes",
+  "fetch_url",
+  "list_jobs",
+  "list_goals",
+  "query_database",
+  "web_search",
+]);
+
+// Time box for the closing calls (truncation reply, summary) (#21).
+const CLOSING_CALL_TIMEOUT_MS = 120_000;
 
 export async function ensureConversation(conversationId?: number | null) {
   if (conversationId) {
@@ -180,19 +210,13 @@ export interface ActiveSession {
   costUsd: number;
 }
 
-async function beginSession(
+// Claims the conversation for this turn (throws TurnBusyError if another turn
+// holds it) and starts its work session.
+function beginSession(
   trigger: SessionTrigger,
-  opts: { jobId?: number | null; conversationId?: number | null; maxDurationMinutes?: number },
-): Promise<ActiveSession> {
-  const inserted = await db
-    .insert(workSessions)
-    .values({
-      jobId: opts.jobId ?? null,
-      conversationId: opts.conversationId ?? null,
-      trigger,
-    })
-    .returning();
-  const row = inserted[0];
+  opts: { jobId?: number | null; conversationId: number; maxDurationMinutes?: number },
+): ActiveSession {
+  const row = claimTurn({ conversationId: opts.conversationId, trigger, jobId: opts.jobId });
   const maxDurationMinutes = opts.maxDurationMinutes ?? 10;
   return {
     id: row.id,
@@ -290,41 +314,55 @@ export async function runAgentTurn(opts: {
 }, onEvent?: (e: AgentEvent) => void): Promise<AgentTurnResult> {
   const conversation = await ensureConversation(opts.conversationId ?? undefined);
   const conversationId = conversation.id;
-  cancelledConversations.delete(conversationId);
   const newMessages: Array<typeof messages.$inferSelect> = [];
-  if (opts.userMessage) {
-    const row = await insertMessage({ conversationId, role: "user", content: opts.userMessage });
-    newMessages.push(row);
-    if (conversation.title === "New session") {
-      await db
-        .update(conversations)
-        .set({ title: opts.userMessage.slice(0, 60), updatedAt: new Date() })
-        .where(eq(conversations.id, conversationId));
-    }
-  }
-  if (opts.eventNote) {
-    const row = await insertMessage({ conversationId, role: "event", content: opts.eventNote });
-    newMessages.push(row);
-  }
 
   const settings = await getSettings();
   const overrides = buildOverrides(settings);
   const trigger: SessionTrigger = opts.trigger ?? (opts.jobId ? "scheduled" : "chat");
   const maxDurationMinutes = opts.maxDurationMinutes ?? settings.maxSessionMinutes;
-  const session = await beginSession(trigger, {
+  // Claim the conversation before writing anything, so a refused turn leaves
+  // no trace and two turns never interleave (#18).
+  const session = beginSession(trigger, {
     jobId: opts.jobId ?? null,
     conversationId,
     maxDurationMinutes,
   });
+
+  // While the turn runs: a heartbeat shows its process is alive, and Stop
+  // (cancel_requested, set by any process) aborts whatever is in flight.
+  const stop = new AbortController();
+  let beats = 0;
+  const watch = setInterval(() => {
+    try {
+      if (isCancelRequested(session.id)) stop.abort();
+      if (++beats % Math.round(HEARTBEAT_MS / 1000) === 0) heartbeat(session.id);
+    } catch {
+      /* the next tick tries again */
+    }
+  }, 1000);
+  const cancelRequested = () => stop.signal.aborted || isCancelRequested(session.id);
 
   const inputPrice = Number(settings.inputPricePerMTok) || 0.14;
   const outputPrice = Number(settings.outputPricePerMTok) || 0.28;
   const cacheHitPrice = Number(settings.cacheHitInputPricePerMTok) || 0.0028;
   const deadline = session.startedAt.getTime() + session.maxDurationMs;
 
-  onEvent?.({ type: "session_start", sessionId: session.id });
-
   try {
+    if (opts.userMessage) {
+      const row = await insertMessage({ conversationId, role: "user", content: opts.userMessage });
+      newMessages.push(row);
+      if (conversation.title === "New session") {
+        await db
+          .update(conversations)
+          .set({ title: opts.userMessage.slice(0, 60), updatedAt: new Date() })
+          .where(eq(conversations.id, conversationId));
+      }
+    }
+    if (opts.eventNote) {
+      const row = await insertMessage({ conversationId, role: "event", content: opts.eventNote });
+      newMessages.push(row);
+    }
+
     const client = getDeepSeekClient({ apiKey: settings.apiKey, baseUrl: settings.apiBaseUrl });
     // Chat turns use the user's fixed maxAgentSteps setting. Work windows (scheduled
     // or report) auto-scale steps from the time budget so a 45min job isn't choked
@@ -355,7 +393,7 @@ export async function runAgentTurn(opts: {
     });
 
     const historyRows = await loadHistory(conversationId);
-    const built = await buildPromptMessages({ conversationId, rows: historyRows, settings, client });
+    const built = await buildPromptMessages({ conversationId, rows: historyRows, settings, client, signal: stop.signal });
     const apiMessages: ChatMessageParam[] = [{ role: "system", content: systemPrompt }, ...built];
     onEvent?.({
       type: "session_start",
@@ -373,6 +411,7 @@ export async function runAgentTurn(opts: {
     let terminated = false;
     let cancelled = false;
     let ranTools = false;
+    let lastStepHadTools = false;
     let lastContentEmpty = true;
 
     for (let step = 0; step < maxSteps; step++) {
@@ -387,7 +426,7 @@ export async function runAgentTurn(opts: {
         break;
       }
 
-      if (isTurnCancelled(conversationId)) {
+      if (cancelRequested()) {
         cancelled = true;
         terminated = true;
         const row = await insertMessage({
@@ -410,17 +449,18 @@ export async function runAgentTurn(opts: {
           tools: toolsAvailable ? tools : undefined,
           tool_choice: toolsAvailable ? "auto" : undefined,
         },
-        () => isTurnCancelled(conversationId) || Date.now() > deadline,
+        () => stop.signal.aborted || Date.now() > deadline,
         (content, reasoning) => {
           // Live "thinking / generating" indicator in the UI while the model streams.
           onEvent?.({ type: "model_stream", step: step + 1, content, reasoning });
         },
+        stop.signal,
       );
 
       // Cancelled / timed out mid-generation: abort the stream (done above) and
       // stop the turn instead of paying for the rest of the generation.
       if (streamed.interrupted) {
-        if (isTurnCancelled(conversationId)) {
+        if (cancelRequested()) {
           cancelled = true;
           terminated = true;
           const row = await insertMessage({
@@ -479,7 +519,8 @@ export async function runAgentTurn(opts: {
           : {}),
       } as ChatMessageParam);
 
-      ranTools = ranTools || Boolean(rawMsg.tool_calls?.length);
+      lastStepHadTools = Boolean(rawMsg.tool_calls?.length);
+      ranTools = ranTools || lastStepHadTools;
       lastContentEmpty = !(rawMsg.content && rawMsg.content.trim().length > 0);
       onEvent?.({ type: "model_reply", step: step + 1, content: rawMsg.content ?? "" });
 
@@ -546,7 +587,7 @@ export async function runAgentTurn(opts: {
           status = "blocked";
           output = risk.reason;
           resultContent = `BLOCKED by safety layer: ${risk.reason}`;
-        } else if (isTurnCancelled(conversationId)) {
+        } else if (cancelRequested()) {
           status = "cancelled";
           output = "Turn cancelled by the human before this action ran.";
           resultContent = `CANCELLED: ${output}`;
@@ -560,7 +601,7 @@ export async function runAgentTurn(opts: {
             const auto = autonomyAllowsAuto(mode, risk.risk);
             if (auto) {
               try {
-              const maxRetries = settings.toolRetries ?? 1;
+              const maxRetries = RETRYABLE_TOOLS.has(toolName) ? (settings.toolRetries ?? 1) : 0;
               let attempt = 0;
               let lastError = "";
               while (attempt <= maxRetries) {
@@ -579,7 +620,7 @@ export async function runAgentTurn(opts: {
                   if (attempt > maxRetries) {
                     status = "error";
                     output = lastError;
-                    resultContent = `ERROR (after ${maxRetries} retries): ${output}`;
+                    resultContent = maxRetries > 0 ? `ERROR (after ${maxRetries} retries): ${output}` : `ERROR: ${output}`;
                   } else {
                     await new Promise((r) => setTimeout(r, 1000));
                   }
@@ -632,7 +673,7 @@ export async function runAgentTurn(opts: {
     // If the step limit was reached while the agent was still working (it didn't
     // choose to stop), insert an event so the agent knows it was truncated and the
     // human sees a clear indicator that more work is pending.
-    if (ranTools && session.stepsUsed >= maxSteps && !terminated) {
+    if (lastStepHadTools && session.stepsUsed >= maxSteps && !terminated) {
       const truncEvent = await insertMessage({
         conversationId,
         role: "event",
@@ -650,6 +691,7 @@ export async function runAgentTurn(opts: {
             model: settings.modelName,
             messages: apiMessages,
           }),
+          { timeout: CLOSING_CALL_TIMEOUT_MS, signal: stop.signal },
         );
         const tMsg = truncCompletion.choices[0].message as OpenAI.Chat.Completions.ChatCompletionMessage & {
           reasoning_content?: string;
@@ -669,6 +711,8 @@ export async function runAgentTurn(opts: {
           costUsd: tCost ? Number(tCost.toFixed(6)) : null,
         });
         newMessages.push(tRow);
+        // That reply is the turn's closing message; don't ask for a second one.
+        lastContentEmpty = !(tMsg.content && tMsg.content.trim().length > 0);
       } catch {
         // best-effort; the truncation event is already in the conversation
       }
@@ -677,7 +721,7 @@ export async function runAgentTurn(opts: {
     // Always end a working turn with a plain-language summary: if the last
     // assistant message was empty (e.g. it stopped on a tool call alone), make
     // one final no-tools completion asking for a summary.
-    if (ranTools && lastContentEmpty && Date.now() < deadline && !isTurnCancelled(conversationId)) {
+    if (ranTools && lastContentEmpty && Date.now() < deadline && !cancelRequested()) {
       try {
         const summaryCompletion = await client.chat.completions.create(
           modelRequestParams(settings, {
@@ -691,6 +735,7 @@ export async function runAgentTurn(opts: {
               },
             ],
           }),
+          { timeout: CLOSING_CALL_TIMEOUT_MS, signal: stop.signal },
         );
         const sMsg = summaryCompletion.choices[0].message as OpenAI.Chat.Completions.ChatCompletionMessage & {
           reasoning_content?: string;
@@ -720,11 +765,11 @@ export async function runAgentTurn(opts: {
       cancelled || terminated ? "terminated" : "completed",
       cancelled ? "cancelled by human" : terminated ? "time limit reached" : undefined,
     );
-    cancelledConversations.delete(conversationId);
   } catch (err) {
     await finishSession(session, "failed", err instanceof Error ? err.message : String(err));
-    cancelledConversations.delete(conversationId);
     throw err;
+  } finally {
+    clearInterval(watch);
   }
 
   await db.update(conversations).set({ updatedAt: new Date() }).where(eq(conversations.id, conversationId));
@@ -827,7 +872,7 @@ export async function resolveApproval(executionId: number, decision: "approved" 
       decision === "approved"
         ? `Human approved your "${execution.tool}" request (execution #${execution.id}). Result:\n${output}`
         : `Human DENIED your "${execution.tool}" request (execution #${execution.id}). ${note ? `Reason: ${note}` : ""}`;
-    void runAgentTurn({ conversationId, eventNote, trigger: "approval" }).catch(async (err) => {
+    void runWhenFree({ conversationId, eventNote, trigger: "approval" }).catch(async (err) => {
       await insertMessage({
         conversationId,
         role: "event",
@@ -838,4 +883,23 @@ export async function resolveApproval(executionId: number, decision: "approved" 
     });
   }
   return { executionId, status, output };
+}
+
+// Run a turn as soon as the conversation is free: an approval follow-up that
+// arrives while another turn is running waits its turn instead of
+// interleaving with it (#18). Gives up after `maxWaitMs`.
+export async function runWhenFree(
+  opts: Parameters<typeof runAgentTurn>[0],
+  waitMs = 3000,
+  maxWaitMs = 60 * 60_000,
+): Promise<AgentTurnResult> {
+  const until = Date.now() + maxWaitMs;
+  for (;;) {
+    try {
+      return await runAgentTurn(opts);
+    } catch (err) {
+      if (!(err instanceof TurnBusyError) || Date.now() > until) throw err;
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
 }

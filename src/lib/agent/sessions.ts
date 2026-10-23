@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { jobs, workSessions } from "@/db/schema";
 import { and, eq, lt, max } from "drizzle-orm";
 import { getSettings } from "./settingsStore";
+import { releaseAbandoned } from "./turnLock";
 
 // A session left "running" by a process that stopped mid-turn (crash, restart,
 // deploy) would block every scheduled job forever, because the worker never
@@ -23,11 +24,15 @@ export async function reapStaleSessions(now = new Date()): Promise<number> {
   const maxTurnMinutes = Math.max(settings.maxSessionMinutes, Number(longestJob[0]?.m ?? 0));
   const cutoff = new Date(now.getTime() - (maxTurnMinutes + STALE_GRACE_MINUTES) * 60_000);
 
-  const reaped = await db
+  // Sessions with a heartbeat are released as soon as it goes quiet; older
+  // ones (from before heartbeats) by their start time.
+  const released = releaseAbandoned(now.getTime());
+  const timedOut = await db
     .update(workSessions)
     .set({ status: "failed", endedAt: now, reason: "interrupted: the process stopped mid-turn" })
     .where(and(eq(workSessions.status, "running"), lt(workSessions.startedAt, cutoff)))
     .returning({ id: workSessions.id, jobId: workSessions.jobId });
+  const reaped = [...released, ...timedOut];
 
   for (const s of reaped) {
     if (s.jobId) {

@@ -52,7 +52,9 @@ CREATE TABLE IF NOT EXISTS work_sessions (
   cache_miss_tokens INTEGER NOT NULL DEFAULT 0,
   total_tokens INTEGER NOT NULL DEFAULT 0,
   cost_usd REAL NOT NULL DEFAULT 0,
-  reason TEXT
+  reason TEXT,
+  heartbeat_at INTEGER,
+  cancel_requested INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -227,6 +229,11 @@ if (!globalForDb.__agentLabSqlite) {
     sqlite.exec(
       "UPDATE conversations SET chat_mode = COALESCE((SELECT chat_mode FROM agent_settings ORDER BY id LIMIT 1), 'agentic')",
     );
+  }
+  // One turn per conversation, and Stop across processes (#18, #19).
+  if (!existingCols("work_sessions").includes("heartbeat_at")) {
+    sqlite.exec("ALTER TABLE work_sessions ADD COLUMN heartbeat_at INTEGER");
+    sqlite.exec("ALTER TABLE work_sessions ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0");
   }
   // Clean up stale FK references (conversations deleted without cascade).
   sqlite.exec("UPDATE jobs SET conversation_id = NULL WHERE conversation_id IS NOT NULL AND conversation_id NOT IN (SELECT id FROM conversations)");

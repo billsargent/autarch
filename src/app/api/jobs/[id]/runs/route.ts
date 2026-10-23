@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { workSessions, jobs, conversations } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { runAgentTurn } from "@/lib/agent/runner";
 import { getSettings } from "@/lib/agent/settingsStore";
+import { TurnBusyError, isConversationBusy } from "@/lib/agent/turnLock";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,21 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const settings = await getSettings();
   if (settings.paused) return NextResponse.json({ error: "Agent is paused" }, { status: 409 });
+
+  // Don't start a second run of a job that's already running (#27), or a
+  // turn in a conversation that's busy (#18).
+  const runningOfJob = await db
+    .select({ id: workSessions.id })
+    .from(workSessions)
+    .where(and(eq(workSessions.jobId, jobId), eq(workSessions.status, "running")))
+    .limit(1);
+  if (runningOfJob.length) return NextResponse.json({ error: "This job is already running." }, { status: 409 });
+  if (job[0].conversationId && isConversationBusy(job[0].conversationId)) {
+    return NextResponse.json(
+      { error: "The agent is already working in this job's conversation. Try again when it's done." },
+      { status: 409 },
+    );
+  }
 
   let convId = job[0].conversationId;
   if (!convId) {
@@ -50,7 +66,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     })
     .catch(async (err) => {
       const msg = err instanceof Error ? err.message : String(err);
-      await db.update(jobs).set({ lastStatus: "failed", lastError: msg, updatedAt: new Date() }).where(eq(jobs.id, jobId));
+      // Lost the race for a busy conversation: nothing ran.
+      const lastStatus = err instanceof TurnBusyError ? "skipped" : "failed";
+      await db.update(jobs).set({ lastStatus, lastError: msg, updatedAt: new Date() }).where(eq(jobs.id, jobId));
     });
 
   return NextResponse.json({ ok: true, conversationId: convId }, { status: 202 });
