@@ -3,6 +3,7 @@
 import { VILLAGE, sceneManifest } from "../src/components/village/manifest";
 import { CELL, stampRect, unionRect, validateScene, validateStamps } from "../src/components/village/scene";
 import { ALL_SCENES, INTERIORS } from "../src/components/village/scenes";
+import { ROOM_ACTIONS } from "../src/components/village/rooms/actions";
 import { nearestWaypoint, shortestPath, type Edge, type Waypoint } from "../src/components/village/path";
 import { MOOD_PLACE, nextHangout, villagerMood } from "../src/components/village/villagerState";
 
@@ -73,6 +74,16 @@ check("every room has a way out", Object.values(INTERIORS).filter((l) => !l.exit
 check(
   "room furniture always does something",
   Object.values(INTERIORS).flatMap((l) => l.places.filter((p) => !p.action).map((p) => `${l.id}/${p.id}`)),
+  [],
+);
+check(
+  "every furniture action has a room UI that handles it",
+  ALL_SCENES.flatMap((l) => l.places.filter((p) => p.action && !ROOM_ACTIONS[l.id]?.includes(p.action)).map((p) => `${l.id}/${p.id}:${p.action}`)),
+  [],
+);
+check(
+  "every village place opens something",
+  VILLAGE.places.filter((p) => !p.interior && !p.href && !p.action && p.id !== "pond").map((p) => p.id),
   [],
 );
 const placeIds = new Set(VILLAGE.places.map((p) => p.id));

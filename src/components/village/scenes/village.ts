@@ -1,6 +1,7 @@
 // The village: buildings, roads and scenery. Each building is a place the
-// villagers walk to; buildings with a room open it, the rest link to their
-// Command Center page until their room is built.
+// villagers walk to; buildings with a room open it, outdoor things (the notice
+// board) open their dialogs in place, and the rest link to their Command
+// Center page until their room is built.
 import type { Rect, SceneLayout } from "../scene";
 
 // Roads are two tiles wide so the path edges render cleanly.
@@ -27,10 +28,10 @@ export const VILLAGE_SCENE: SceneLayout = {
   paths: { rects: ROADS, blob: "svPathBlob" },
   walkable: ROADS,
   places: [
-    { id: "workshop", label: "Workshop", role: "Jobs and the agent's workspace", href: "/jobs", door: "ws", parts: [{ stamp: "barn", col: 4, row: 3 }] },
+    { id: "workshop", label: "Workshop", role: "Jobs — the agent's scheduled work", interior: "workshop", door: "ws", parts: [{ stamp: "barn", col: 4, row: 3 }] },
     { id: "townhall", label: "Town hall", role: "Approvals and meetings", href: "/approvals", door: "tc", parts: [{ stamp: "hall", col: 18, row: 1 }] },
     { id: "library", label: "Library", role: "Skills — the agent's playbooks", interior: "library", door: "lib", parts: [{ stamp: "svHouseBlueBig", col: 30, row: 4 }] },
-    { id: "noticeboard", label: "Notice board", role: "Goals", href: "/goals", door: "nb", parts: [{ stamp: "svNoticeBoard", col: 5, row: 12 }] },
+    { id: "noticeboard", label: "Notice board", role: "Goals pinned for the agent", action: "goals.board", door: "nb", parts: [{ stamp: "svNoticeBoard", col: 5, row: 12 }] },
     { id: "pond", label: "Village pond", role: "The plaza — where villagers gather", door: "c", parts: [{ stamp: "svPond", col: 22, row: 12 }] },
     { id: "observatory", label: "Observatory", role: "Usage and the system monitor", href: "/usage", door: "obs", parts: [{ stamp: "dome", col: 31, row: 11 }] },
     {

@@ -35,12 +35,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const c = typeof body.cron === "string" ? body.cron.trim() : "";
     patch.cron = c || null;
   }
-  if (patch.enabled === true) {
-    const row = await db.select().from(jobs).where(eq(jobs.id, Number(id))).limit(1);
-    const rawCron = (patch.cron as string | undefined) ?? row[0]?.cron ?? "";
+  // Re-plan the next run when the job is switched on or its schedule changes;
+  // otherwise a new cron would wait for the old schedule's time.
+  const [row] = await db.select().from(jobs).where(eq(jobs.id, Number(id))).limit(1);
+  const scheduleChanged =
+    ("cron" in patch && patch.cron !== (row?.cron ?? null)) ||
+    ("intervalMinutes" in patch && patch.intervalMinutes !== row?.intervalMinutes);
+  if (patch.enabled === true || scheduleChanged) {
+    const rawCron = "cron" in patch ? ((patch.cron as string | null) ?? "") : (row?.cron ?? "");
     const cron = rawCron.trim();
     // Use the new intervalMinutes if it was patched, otherwise the existing DB value.
-    const interval = ((patch.intervalMinutes as number | undefined) ?? Number(row[0]?.intervalMinutes)) || 60;
+    const interval = ((patch.intervalMinutes as number | undefined) ?? Number(row?.intervalMinutes)) || 60;
     patch.nextRunAt = cron ? nextCronRun(cron, new Date()) ?? new Date(Date.now() + interval * 60_000) : new Date(Date.now() + interval * 60_000);
   }
   const updated = await db

@@ -1,134 +1,63 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import type { JobRow, WorkSessionRow } from "@/lib/agent/clientTypes";
+import { EMPTY_JOB, jobInput, jobSchedule, useJobs, type JobInput } from "./data/useJobs";
 
 export default function JobsView() {
-  const [jobs, setJobs] = useState<JobRow[]>([]);
-  const [name, setName] = useState("");
-  const [instruction, setInstruction] = useState("");
-  const [intervalMinutes, setIntervalMinutes] = useState(60);
-  const [maxDurationMinutes, setMaxDurationMinutes] = useState(10);
-  const [cron, setCron] = useState("");
-  const [reportSessionTitle, setReportSessionTitle] = useState("");
+  const { jobs, conversations, save, setEnabled, remove: removeJob, runNow: startJob, loadRuns } = useJobs();
+  const [form, setForm] = useState<JobInput>(EMPTY_JOB);
+  const set = (patch: Partial<JobInput>) => setForm((f) => ({ ...f, ...patch }));
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [runs, setRuns] = useState<Record<number, WorkSessionRow[]>>({});
   const [editing, setEditing] = useState<JobRow | null>(null);
-  const [conversations, setConversations] = useState<{ id: number; title: string }[]>([]);
-  const [editConvId, setEditConvId] = useState<string>("");
   const [runningNow, setRunningNow] = useState<Set<number>>(new Set());
 
-  const load = useCallback(async () => {
-    const jobsRes = await fetch("/api/jobs").then((r) => r.json());
-    setJobs(jobsRes.jobs || []);
-    fetch("/api/conversations")
-      .then((r) => r.json())
-      .then((d) => setConversations(d.conversations || []))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const first = setTimeout(load, 0);
-    const id = setInterval(load, 20000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(id);
-    };
-  }, [load]);
-
   async function saveJob() {
-    if (!name.trim()) return;
-    const payload: Record<string, unknown> = {
-      name,
-      instruction,
-      intervalMinutes,
-      maxDurationMinutes,
-      // Always send cron so the server can clear it when the input is empty.
-      cron: cron.trim() || null,
-      reportSessionTitle: reportSessionTitle.trim() || null,
-    };
-    if (editConvId) payload.conversationId = editConvId;
-    else payload.conversationId = null; // explicitly clear if deselected
-
-    const url = editing ? `/api/jobs/${editing.id}` : "/api/jobs";
-    const method = editing ? "PATCH" : "POST";
-    try {
-      const res = await fetch(url, {
-        method,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || `Failed to save job (HTTP ${res.status})`);
-        return;
-      }
-    } catch (err) {
-      alert(`Failed to save job: ${err instanceof Error ? err.message : String(err)}`);
+    if (!form.name.trim()) return;
+    const res = await save(form, editing?.id);
+    if (!res.ok) {
+      alert(res.error);
       return;
     }
     cancelEdit();
-    await load();
   }
 
   function startEdit(job: JobRow) {
     setEditing(job);
-    setName(job.name);
-    setInstruction(job.instruction);
-    setIntervalMinutes(job.intervalMinutes);
-    setMaxDurationMinutes(job.maxDurationMinutes);
-    setCron(job.cron || "");
-    setReportSessionTitle(job.reportSessionTitle || "");
-    setEditConvId(job.conversationId ? String(job.conversationId) : "");
+    setForm(jobInput(job));
   }
 
   function cancelEdit() {
     setEditing(null);
-    setName("");
-    setInstruction("");
-    setIntervalMinutes(60);
-    setMaxDurationMinutes(10);
-    setCron("");
-    setReportSessionTitle("");
-    setEditConvId("");
+    setForm(EMPTY_JOB);
   }
 
   async function toggleRuns(jobId: number) {
     const next = expandedId === jobId ? null : jobId;
     setExpandedId(next);
     if (next !== null) {
-      const res = await fetch(`/api/jobs/${jobId}/runs`).then((r) => r.json());
-      setRuns((prev) => ({ ...prev, [jobId]: res.runs || [] }));
+      const list = await loadRuns(jobId);
+      setRuns((prev) => ({ ...prev, [jobId]: list }));
     }
   }
 
-  async function setEnabled(job: JobRow, enabled: boolean) {
-    await fetch(`/api/jobs/${job.id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ enabled }),
-    });
-    await load();
-  }
-
   async function remove(job: JobRow) {
-    await fetch(`/api/jobs/${job.id}`, { method: "DELETE" });
-    await load();
+    if (!confirm(`Delete the job "${job.name}"? This can't be undone.`)) return;
+    await removeJob(job);
   }
 
   async function runNow(job: JobRow) {
     setRunningNow((prev) => new Set(prev).add(job.id));
     try {
-      const res = await fetch(`/api/jobs/${job.id}/runs`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) alert(data.error || "Failed to start job");
+      const res = await startJob(job);
+      if (!res.ok) alert(res.error);
     } finally {
       setRunningNow((prev) => {
         const next = new Set(prev);
         next.delete(job.id);
         return next;
       });
-      await load();
     }
   }
 
@@ -145,14 +74,14 @@ export default function JobsView() {
           <h2 className="text-sm font-semibold">{editing ? `Edit job: ${editing.name}` : "Schedule a new job"}</h2>
           <div className="mt-3 space-y-2">
             <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={form.name}
+              onChange={(e) => set({ name: e.target.value })}
               placeholder="Job name, e.g. 'Daily system health check'"
               className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
             />
             <textarea
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
+              value={form.instruction}
+              onChange={(e) => set({ instruction: e.target.value })}
               placeholder="What should the agent do during each window? (leave empty to let it decide)"
               rows={2}
               className="w-full resize-none rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
@@ -162,9 +91,9 @@ export default function JobsView() {
                 Every (minutes)
                 <input
                   type="number"
-                  value={intervalMinutes}
+                  value={form.intervalMinutes}
                   min={5}
-                  onChange={(e) => setIntervalMinutes(Number(e.target.value) || 60)}
+                  onChange={(e) => set({ intervalMinutes: Number(e.target.value) || 60 })}
                   className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
                 />
               </label>
@@ -172,9 +101,9 @@ export default function JobsView() {
                 Max duration (minutes)
                 <input
                   type="number"
-                  value={maxDurationMinutes}
+                  value={form.maxDurationMinutes}
                   min={1}
-                  onChange={(e) => setMaxDurationMinutes(Number(e.target.value) || 10)}
+                  onChange={(e) => set({ maxDurationMinutes: Number(e.target.value) || 10 })}
                   className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
                 />
               </label>
@@ -182,8 +111,8 @@ export default function JobsView() {
             <label className="block text-xs text-neutral-400">
               Cron (optional — overrides the interval; 5 fields: min hour dom month dow)
               <input
-                value={cron}
-                onChange={(e) => setCron(e.target.value)}
+                value={form.cron}
+                onChange={(e) => set({ cron: e.target.value })}
                 placeholder="e.g. 30 3 * * 1  → 03:30 every Monday"
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
               />
@@ -191,8 +120,8 @@ export default function JobsView() {
             <label className="block text-xs text-neutral-400">
               Report session
               <select
-                value={editConvId}
-                onChange={(e) => setEditConvId(e.target.value)}
+                value={form.conversationId}
+                onChange={(e) => set({ conversationId: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none"
               >
                 <option value="">Auto-create (new session)</option>
@@ -207,8 +136,8 @@ export default function JobsView() {
             <label className="block text-xs text-neutral-400">
               Report session title
               <input
-                value={reportSessionTitle}
-                onChange={(e) => setReportSessionTitle(e.target.value)}
+                value={form.reportSessionTitle}
+                onChange={(e) => set({ reportSessionTitle: e.target.value })}
                 placeholder="Custom name for auto-created sessions (optional)"
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
               />
@@ -217,7 +146,7 @@ export default function JobsView() {
             <div className="flex items-center gap-2">
               <button
                 onClick={saveJob}
-                disabled={!name.trim()}
+                disabled={!form.name.trim()}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
               >
                 {editing ? "Save changes" : "Create job"}
@@ -260,7 +189,7 @@ export default function JobsView() {
                   </p>
                   {j.instruction && <p className="mt-1 text-xs text-neutral-400">{j.instruction}</p>}
                   <p className="mt-2 text-[11px] text-neutral-500">
-                    {j.cron ? `cron "${j.cron}"` : `every ${j.intervalMinutes} min`} · up to {j.maxDurationMinutes} min ·
+                    {jobSchedule(j)} · up to {j.maxDurationMinutes} min ·
                     next run {new Date(j.nextRunAt).toLocaleString()}
                   </p>
                   {j.lastStatus && (

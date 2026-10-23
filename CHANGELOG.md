@@ -3,6 +3,21 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — The workshop and the notice board
+
+- **The workshop (#89).** Click the workshop in the village to go inside. Each job is a slip on the
+  job board: run it now, pause or resume it, edit it at the workbench, check its past runs, or
+  delete it (with a confirmation). New jobs are set up at the workbench, with every field the Jobs
+  page has.
+- **The notice board (#90)** opens right in the village. Goals are notes pinned by priority, grouped
+  into being worked on, up next and taken down. Open one to change its status, edit its title,
+  notes, priority or conversation, or delete it (with a confirmation). "Pin a new goal" adds one.
+- **Changing a job's schedule now moves its next run.** Editing the cron or interval used to keep
+  the old next-run time until the job was paused and resumed.
+- **Deleting a job or goal on the old pages now asks first** (#41).
+- The Jobs and Goals pages and the new rooms share the same data hooks, so they always behave the
+  same.
+
 ## 2026-10-23 — Dashboard sign-in
 
 - **The dashboard needs a password (#3).** Every page and API call needs a signed-in session;

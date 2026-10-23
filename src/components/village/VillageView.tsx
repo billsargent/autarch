@@ -11,6 +11,7 @@ import SceneView from "./SceneView";
 import VillageHud from "./VillageHud";
 import TalkDrawer from "./TalkDrawer";
 import ApprovalPrompt from "./ApprovalPrompt";
+import { ROOMS } from "./rooms";
 
 function plain(text: string, max: number): string {
   const flat = text.replace(/[#*_`>[\]]+/g, "").replace(/\s+/g, " ").trim();
@@ -44,8 +45,11 @@ export default function VillageView() {
   const target = mood === "idle" && stroll ? stroll : home.door;
   const strolling = mood === "idle" && target !== home.door;
 
-  // Drawers and prompts.
+  // Drawers, prompts, and the dialogs of outdoor things (the notice board).
   const [talking, setTalking] = useState(false);
+  const [action, setAction] = useState<string | null>(null);
+  const [opened, setOpened] = useState(0);
+  const VillageRoom = ROOMS.village;
   const [deferred, setDeferred] = useState<number[]>([]);
   const showPrompt = data.pending.length > 0 && !data.pending.every((p) => deferred.includes(p.id));
   const promptQueue = data.pending.filter((p) => !deferred.includes(p.id));
@@ -73,6 +77,11 @@ export default function VillageView() {
 
   function openPlace(p: Place) {
     if (p.interior) router.push(`/village/${p.interior}`);
+    else if (p.action) {
+      setTalking(false);
+      setAction(p.action);
+      setOpened((n) => n + 1);
+    }
     else if (p.id === "cottages") setTalking(true);
     else if (p.href) router.push(p.href);
   }
@@ -142,6 +151,8 @@ export default function VillageView() {
             onClose={() => setTalking(false)}
           />
         )}
+
+        {VillageRoom && action && <VillageRoom key={opened} action={action} onClose={() => setAction(null)} />}
 
         {showPrompt && (
           <ApprovalPrompt

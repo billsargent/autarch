@@ -185,8 +185,15 @@ responsible for anything the agent does in this mode.
 ## The village
 
 `/village` shows the agent as a villager in a small pixel-art town, walking between buildings
-according to what it's doing, with approvals popping up at the town hall. The map is built from
-`src/components/village/layout.ts` by `npm run village:map`.
+according to what it's doing, with approvals popping up at the town hall. Some places already
+work in-world, with the same features as their Command Center page:
+
+- **Library:** skills are books on the shelves; new ones are written at the desk.
+- **Workshop:** jobs are slips on the job board; new ones are set up at the workbench.
+- **Notice board:** goals pinned by priority, opened right in the village.
+
+The other buildings still link to their pages. Every scene (the village and each room) is
+described in `src/components/village/scenes/`, and `npm run village:map` builds its art.
 
 Village art: "Serene Village" by [LimeZu](https://limezu.itch.io/serenevillage) (CC BY 4.0) and
 "Ninja Adventure" by [Pixel-boy and AAA](https://pixel-boy.itch.io/ninja-adventure-asset-pack)

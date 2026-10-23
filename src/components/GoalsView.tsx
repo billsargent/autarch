@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import type { GoalRow } from "@/lib/agent/clientTypes";
+import { EMPTY_GOAL, GOAL_STATUSES, useGoals, type GoalInput } from "./data/useGoals";
 
-const GOAL_STATUSES = ["backlog", "in_progress", "done", "abandoned"] as const;
 const STATUS_STYLE: Record<string, string> = {
   backlog: "text-neutral-400",
   in_progress: "text-blue-300",
@@ -12,56 +12,19 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default function GoalsView() {
-  const [goals, setGoals] = useState<GoalRow[]>([]);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [priority, setPriority] = useState(3);
-  const [convId, setConvId] = useState("");
-  const [conversations, setConversations] = useState<{ id: number; title: string }[]>([]);
-
-  const load = useCallback(async () => {
-    const goalsRes = await fetch("/api/goals").then((r) => r.json());
-    setGoals(goalsRes.goals || []);
-    fetch("/api/conversations")
-      .then((r) => r.json())
-      .then((d) => setConversations(d.conversations || []))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const first = setTimeout(load, 0);
-    const id = setInterval(load, 20000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(id);
-    };
-  }, [load]);
+  const { goals, conversations, create, update, remove: removeGoal } = useGoals();
+  const [form, setForm] = useState<GoalInput>(EMPTY_GOAL);
+  const set = (patch: Partial<GoalInput>) => setForm((f) => ({ ...f, ...patch }));
 
   async function createGoal() {
-    if (!title.trim()) return;
-    await fetch("/api/goals", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title, body, priority, conversationId: convId || undefined }),
-    });
-    setTitle("");
-    setBody("");
-    setConvId("");
-    await load();
+    if (!form.title.trim()) return;
+    await create(form);
+    setForm((f) => ({ ...EMPTY_GOAL, priority: f.priority }));
   }
 
-  async function update(id: number, patch: Partial<GoalRow>) {
-    await fetch(`/api/goals/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(patch),
-    });
-    await load();
-  }
-
-  async function remove(id: number) {
-    await fetch(`/api/goals/${id}`, { method: "DELETE" });
-    await load();
+  async function remove(goal: GoalRow) {
+    if (!confirm(`Delete the goal "${goal.title}"? This can't be undone.`)) return;
+    await removeGoal(goal.id);
   }
 
   return (
@@ -77,14 +40,14 @@ export default function GoalsView() {
           <h2 className="text-sm font-semibold">Add a goal</h2>
           <div className="mt-3 space-y-2">
             <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              value={form.title}
+              onChange={(e) => set({ title: e.target.value })}
               placeholder="Goal title, e.g. 'Build a local dashboard for my metrics'"
               className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
             />
             <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
+              value={form.body}
+              onChange={(e) => set({ body: e.target.value })}
               placeholder="Notes / details (optional)"
               rows={2}
               className="w-full resize-none rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
@@ -94,18 +57,18 @@ export default function GoalsView() {
                 Priority (1 = highest)
                 <input
                   type="number"
-                  value={priority}
+                  value={form.priority}
                   min={1}
                   max={5}
-                  onChange={(e) => setPriority(Number(e.target.value) || 3)}
+                  onChange={(e) => set({ priority: Number(e.target.value) || 3 })}
                   className="ml-2 w-20 rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm outline-none"
                 />
               </label>
               <label className="text-xs text-neutral-400">
                 Session
                 <select
-                  value={convId}
-                  onChange={(e) => setConvId(e.target.value)}
+                  value={form.conversationId}
+                  onChange={(e) => set({ conversationId: e.target.value })}
                   className="ml-2 rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1 text-sm outline-none"
                 >
                   <option value="">Global (work windows)</option>
@@ -118,7 +81,7 @@ export default function GoalsView() {
               </label>
               <button
                 onClick={createGoal}
-                disabled={!title.trim()}
+                disabled={!form.title.trim()}
                 className="ml-auto rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
               >
                 Add goal
@@ -170,7 +133,7 @@ export default function GoalsView() {
                     ))}
                   </select>
                   <button
-                    onClick={() => remove(g.id)}
+                    onClick={() => remove(g)}
                     className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-[11px] text-red-400 hover:bg-red-950/30"
                   >
                     Delete
