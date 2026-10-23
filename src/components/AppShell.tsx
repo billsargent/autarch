@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { NotificationRow } from "@/lib/agent/clientTypes";
+import { signOut } from "@/lib/signOut";
 
 const NAV = [
   { href: "/village", label: "Village", icon: "🏡" },
@@ -22,7 +23,7 @@ const NAV = [
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   // The village and its rooms are their own full-screen world with their own top bar.
-  if (pathname === "/village" || pathname.startsWith("/village/")) {
+  if (pathname === "/village" || pathname.startsWith("/village/") || pathname === "/login") {
     return <div className="h-screen w-screen overflow-hidden">{children}</div>;
   }
   return <CommandCenterShell pathname={pathname}>{children}</CommandCenterShell>;
@@ -193,6 +194,9 @@ function CommandCenterShell({ pathname, children }: { pathname: string; children
         <div className="border-t border-neutral-800 p-4 text-[11px] text-neutral-600">
           <p>Experimental. The agent runs with real shell/file/system access inside guardrails you configure.</p>
           {version && <p className="mt-1 font-mono text-[10px] text-neutral-700">{version}</p>}
+          <button onClick={signOut} className="mt-2 text-neutral-500 underline hover:text-neutral-300">
+            Sign out
+          </button>
         </div>
       </aside>
       <main className="flex-1 overflow-hidden">{children}</main>

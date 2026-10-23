@@ -10,6 +10,14 @@
    sudo systemctl enable --now deepseek-agent-web
    ```
 4. Verify: `sudo systemctl status deepseek-agent-web` and open `http://<host>:3000`.
+5. Sign in: the first start prints a setup code in the service log
+   (`journalctl -u deepseek-agent-web | grep setup`). Open the dashboard, enter it and choose a
+   password. Or set `Environment=AUTARCH_PASSWORD=...` in the unit before the first start.
+
+> The dashboard controls the machine. Don't expose port 3000 to the internet; if you reach it
+> from other machines, put a reverse proxy with HTTPS in front of it. The units below run as
+> root for simplicity; running them as an ordinary user that owns only the workspace is safer
+> (see the threat model in the main README).
 
 > `allowedDevOrigins` in `next.config.ts` only affects `next dev`; production needs no change.
 

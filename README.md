@@ -39,6 +39,25 @@ npm run worker
 Open http://localhost:3000. Everything is configured from the **Settings** tab and stored in
 the local SQLite file `data/app.db`.
 
+### Signing in
+
+The dashboard has one owner and one password. On first run the web server prints a line like
+this in its console:
+
+```
+[auth] No password is set yet. Open /login and enter setup code 1A2B-3C4D to choose one.
+```
+
+Open the dashboard, enter that code, and choose a password (at least 8 characters). The code
+is needed so whoever reaches the page first can't claim it. To skip this step on a server, set
+`AUTARCH_PASSWORD` before the first start; it's hashed on first use and never stored in plain
+text.
+
+The password is stored as a salted scrypt hash in `data/auth.json`, next to the database. To
+reset it, stop the server, delete that file, and start again for a new setup code. Changing the
+password signs out every other session. Sessions last 30 days. After 5 wrong passwords, sign-in
+waits 30 seconds, doubling with each further miss up to 15 minutes.
+
 > The `db:push` / `db:generate` scripts still exist for schema maintenance, but the app creates
 > its own schema at startup, so they are optional.
 
@@ -108,9 +127,15 @@ Enter a DeepSeek API key in **Settings** (stored in the DB, masked in the UI) an
 Core protections live in **code**, not the database, so neither the agent nor a
 misconfiguration can remove them (`src/lib/agent/config.ts`):
 
-- Hard-protected paths: `node_modules`, `.git`, `.env`, `src/db`, `package.json`, …
-  — never writable/deletable, even with approval.
-- Secret paths (`.ssh/`, `id_rsa`, `credentials.json`, `.env*`, …) — never readable.
+- Hard-protected paths: the framework's own code and config (`src/`, `scripts/`, `deploy/`,
+  `public/`, `package.json`, `.git`, `node_modules`, `.env*`, …), the database and
+  `auth.json` — never writable or deletable, even with approval. Symlinks are followed, so a
+  link pointing at a protected file counts as that file.
+- Secret paths (`.ssh/`, `id_rsa`, `credentials.json`, `.env*`, the database, `auth.json`, …)
+  — never readable.
+- The agent can't call this machine's own services: `fetch_url` and `download_file` block
+  loopback addresses in every spelling and re-check redirects; other local-network addresses
+  need approval.
 - Protected packages / services / processes — removal/stop/kill is blocked.
 - Blocked shell patterns: `rm -rf /`, `mkfs`, fork bombs, killing PID 1, `chmod -R 777 /`, …
 - Critical actions (sudo, package removal, killing processes, service stop/disable,
@@ -136,6 +161,22 @@ shell commands, reading secrets, and modifying the framework itself — with **n
 It is opt-in with a confirmation prompt and is intended for risky testing only. The global
 **Pause** button and the **hourly action cap** still apply as a hard stop. You are fully
 responsible for anything the agent does in this mode.
+
+### Threat model — what the safety layer is and isn't
+
+- **The risk classifier is a guide for the agent, not a sandbox.** It reads tool arguments
+  and shell commands and decides what needs approval. A determined process can find
+  shell spellings it doesn't recognise. The real boundary is the operating system: run the
+  web server and the worker as an **ordinary user** that owns only the workspace, not as root,
+  and give that user `sudo` only for what you'd approve anyway.
+- **Approvals are the human's.** No agent can approve its own requests, change settings or
+  overrides, or lift the pause: the dashboard's control API needs a signed-in session, and
+  the agent's tools can't read the session secret or reach the dashboard's port.
+- **The dashboard is a remote control for the machine.** Keep it behind sign-in (above), don't
+  expose it to the internet directly, and put HTTPS in front of it (a reverse proxy) if you
+  open it beyond this machine, so the session cookie isn't sent in the clear.
+- **Model output is untrusted.** Chat markdown is sanitized, files from the workspace are
+  served as plain text or downloads, and the agent's web fetches can't reach local services.
 
 > **Security note:** The DeepSeek API key is stored in the `agent_settings` row of the SQLite
 > DB and masked on read (never returned to the browser). This is a local-experiment tradeoff —

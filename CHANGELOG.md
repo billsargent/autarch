@@ -3,6 +3,21 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — Dashboard sign-in
+
+- **The dashboard needs a password (#3).** Every page and API call needs a signed-in session;
+  the village art and the health check stay public. On first run the server prints a one-time
+  setup code in its console, and the login page asks for it before you choose the password
+  (or set `AUTARCH_PASSWORD`). The password is kept only as a salted scrypt hash in
+  `data/auth.json`, which the agent can't read or change. Sessions are signed cookies
+  (`httpOnly`, same-site strict) that last 30 days; changing the password signs everyone else
+  out. Repeated wrong passwords or setup codes are slowed down.
+- **Requests from other sites are refused.** Anything that changes state must come from the
+  dashboard itself, so a web page you visit can't drive it.
+- **Sign out** from the Command Center sidebar or the village bar.
+- **A threat model in the README (#13):** the classifier guides the agent but isn't a sandbox;
+  run the services as an ordinary user and keep the dashboard off the open internet.
+
 ## 2026-10-23 — Closing the agent's escape routes
 
 - **The agent can't reach this machine's own services (#4).** `fetch_url` and `download_file`

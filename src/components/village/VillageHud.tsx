@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { signOut } from "@/lib/signOut";
 
 interface VillageHudProps {
   villagers: number;
@@ -59,6 +60,9 @@ export default function VillageHud(p: VillageHudProps) {
         <Link href="/" className="village-btn village-btn-primary px-3 py-1.5 text-xs">
           Command Center
         </Link>
+        <button onClick={signOut} className="village-btn px-3 py-1.5 text-xs" title="Sign out of the dashboard">
+          Sign out
+        </button>
       </div>
     </div>
   );

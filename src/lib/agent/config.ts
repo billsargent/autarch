@@ -5,7 +5,7 @@
 // settings, but these core protections can never be removed from the UI.
 
 import path from "node:path";
-import { DB_FILES } from "../../db/path";
+import { AUTH_FILE, DB_FILES } from "../../db/path";
 
 export const PROJECT_ROOT = /*turbopackIgnore: true*/ process.cwd();
 
@@ -41,6 +41,7 @@ export const HARD_PROTECTED_PATHS: string[] = [
   path.join(PROJECT_ROOT, "data", "app.db-shm"),
   // ...and wherever AUTARCH_DB_PATH points it.
   ...DB_FILES,
+  AUTH_FILE,
 ];
 
 // Any path (anywhere on disk) matching these patterns is treated as a secret
@@ -60,7 +61,7 @@ export const SECRET_PATH_PATTERNS: RegExp[] = [
   // The framework's own database holds the plaintext DeepSeek API key,
   // including a custom AUTARCH_DB_PATH location.
   /app\.db(-wal|-shm)?$/i,
-  ...DB_FILES.map((f) => new RegExp(`^${f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")),
+  ...[...DB_FILES, AUTH_FILE].map((f) => new RegExp(`^${f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")),
 ];
 
 // System directories that require CRITICAL (always human-approved) risk for

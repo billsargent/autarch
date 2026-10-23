@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "autarch-safety-"));
 process.env.AUTARCH_DB_PATH = path.join(tmp, "test.db");
+delete process.env.AUTARCH_PASSWORD;
 
 let failures = 0;
 function check(name: string, ok: boolean, detail?: unknown) {
@@ -257,6 +258,66 @@ async function main() {
   check("…marking it failed", (await db.select().from(workSessions).where(eq(workSessions.id, old.id)))[0].status === "failed");
   check("…and leaves a live one alone", (await db.select().from(workSessions).where(eq(workSessions.id, fresh.id)))[0].status === "running");
   check("…and clears the job's 'running'", (await db.select().from(jobs).where(eq(jobs.id, job.id)))[0].lastStatus === "interrupted");
+
+  // --- #3: dashboard login ------------------------------------------------------
+  const auth = await import("../src/lib/auth");
+  check("the auth file sits next to the test database", path.dirname(auth.AUTH_FILE) === tmp);
+  check("no password is set at first", !auth.isPasswordSet());
+  check("a session can't be made before a password exists", (() => {
+    try {
+      auth.createSessionToken();
+      return false;
+    } catch {
+      return true;
+    }
+  })());
+  const code = auth.setupCode();
+  check("the setup code is stable and looks like XXXX-XXXX", /^[0-9A-F]{4}-[0-9A-F]{4}$/.test(code) && auth.setupCode() === code);
+  const { hash, salt } = auth.hashPassword("correct horse");
+  check("a hashed password verifies", auth.verifyPassword("correct horse", hash, salt));
+  check("a wrong password doesn't", !auth.verifyPassword("correct horsf", hash, salt));
+  auth.setPassword("correct horse");
+  const stored = fs.readFileSync(auth.AUTH_FILE, "utf-8");
+  check("the password isn't stored in plain text", auth.isPasswordSet() && !stored.includes("correct horse"));
+  check("checkPassword accepts the right one", auth.checkPassword("correct horse") && !auth.checkPassword("nope"));
+  const token = auth.createSessionToken();
+  check("a fresh session is valid", auth.isValidSession(token));
+  check("a session expires after 30 days", !auth.isValidSession(token, Date.now() + 31 * 86_400_000));
+  const [payload, mac] = token.split(".");
+  const forged = Buffer.from(JSON.stringify({ exp: Date.now() + 365 * 86_400_000 })).toString("base64url");
+  check("a tampered payload is rejected", !auth.isValidSession(`${forged}.${mac}`));
+  check("a missing or junk token is rejected", !auth.isValidSession(undefined) && !auth.isValidSession("junk") && !auth.isValidSession(`${payload}.`));
+  auth.setPassword("another password");
+  check("changing the password signs old sessions out", !auth.isValidSession(token));
+  check("the cookie is httpOnly and same-site strict", (() => {
+    const c = auth.sessionCookie("t", false);
+    return c.httpOnly && c.sameSite === "strict" && c.path === "/";
+  })());
+
+  check("the login page and auth API are public", auth.isPublicPath("/login") && auth.isPublicPath("/api/auth/login"));
+  check("village art is public", auth.isPublicPath("/village/scenes/village.png") && auth.isPublicPath("/village/tiles/x.png"));
+  for (const p of ["/", "/village", "/village/library", "/api/settings", "/api/approvals/3", "/api/files/a.txt", "/loginx", "/api/authx"]) {
+    check(`${p} needs a session`, !auth.isPublicPath(p));
+  }
+
+  check("a cross-site POST is refused", auth.isCrossSite("POST", "localhost:3000", "https://evil.example", null));
+  check("a same-site POST is allowed", !auth.isCrossSite("POST", "localhost:3000", "http://localhost:3000", null));
+  check("a POST with a junk Origin is refused", auth.isCrossSite("POST", "localhost:3000", "null", null));
+  check("Sec-Fetch-Site cross-site is refused when there's no Origin", auth.isCrossSite("DELETE", "localhost:3000", null, "cross-site"));
+  check("GETs aren't blocked", !auth.isCrossSite("GET", "localhost:3000", "https://evil.example", "cross-site"));
+
+  const who = "tester";
+  for (let i = 0; i < 4; i++) auth.recordLoginFailure(who);
+  check("four wrong passwords don't lock you out", auth.loginLockedFor(who) === 0);
+  auth.recordLoginFailure(who);
+  check("the fifth locks for 30 s", auth.loginLockedFor(who) === 30);
+  auth.recordLoginFailure(who);
+  check("…and the next doubles it", auth.loginLockedFor(who) === 60);
+  check("the lock lifts with time", auth.loginLockedFor(who, Date.now() + 61_000) === 0);
+  auth.clearLoginFailures(who);
+  check("signing in clears the count", auth.loginLockedFor(who) === 0);
+
+  check("the agent can't touch the auth file", risk.isHardProtectedPath(auth.AUTH_FILE) && risk.isSecretPath(auth.AUTH_FILE));
 
   // Best effort: on Windows the database file stays locked until the process exits.
   try {
