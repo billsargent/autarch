@@ -19,6 +19,10 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 - **"Decide later" sticks** for the rest of the browser session, so the same approval prompt no
   longer pops up again in every room. New requests still interrupt.
 - **The activity log can show cancelled calls** (#41), on the old page too.
+- **Any model name can be typed** in Settings (#41): the model field suggests the models loaded
+  from the API but accepts any name, saving when you leave the field or press Enter. Its hint used
+  to promise this while the field was a plain dropdown.
+- The chat's message list no longer re-renders on unrelated changes (#41).
 - Every interior now shares one wall-and-floor shell, and the old Activity, System monitor,
   Usage and Approvals pages use the same data hooks as the rooms.
 

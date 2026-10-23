@@ -338,28 +338,11 @@ export default function SettingsView() {
           </div>
           <label className="mt-3 block text-xs text-neutral-400">
             Model
-            <select
-              value={settings.modelName}
-              onChange={(e) => save({ modelName: e.target.value })}
-              className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none"
-            >
-              {models.length ? (
-                models.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))
-              ) : (
-                <option value={settings.modelName}>{settings.modelName}</option>
-              )}
-              {models.length > 0 && !models.includes(settings.modelName) && (
-                <option value={settings.modelName}>{settings.modelName} (custom)</option>
-              )}
-            </select>
+            <ModelInput value={settings.modelName} models={models} onSave={(modelName) => save({ modelName })} />
             <span className="mt-1 block text-[10px] text-neutral-600">
               {models.length
-                ? "Loaded from the API. Pick one, or type a custom value."
-                : "Click 'Test & load models' to populate from the API."}
+                ? "Pick one of the models loaded from the API, or type any other model name."
+                : "Type a model name, or click 'Test & load models' to list the ones the API offers."}
             </span>
           </label>
           <div className="mt-3 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
@@ -795,5 +778,41 @@ function ToggleRow({
         <p className="mt-0.5 text-neutral-500">{desc}</p>
       </div>
     </label>
+  );
+}
+
+// A model name: suggestions from the API, but any name can be typed. Saves
+// when the field loses focus or on Enter, not on every keystroke.
+function ModelInput({ value, models, onSave }: { value: string; models: string[]; onSave: (v: string) => void }) {
+  const [draft, setDraft] = useState(value);
+  const [synced, setSynced] = useState(value);
+  if (value !== synced) {
+    setSynced(value);
+    setDraft(value);
+  }
+  const commit = () => {
+    const v = draft.trim();
+    if (v && v !== value) onSave(v);
+    else setDraft(value);
+  };
+  return (
+    <>
+      <input
+        name="modelName"
+        list="model-options"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+        }}
+        className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm text-neutral-100 outline-none"
+      />
+      <datalist id="model-options">
+        {models.map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
+    </>
   );
 }

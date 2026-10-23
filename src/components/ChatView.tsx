@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConversationRow, MessageRow, ToolExecutionRow } from "@/lib/agent/clientTypes";
 import type { ChatMode } from "@/lib/agent/chatMode";
 import ChatComposer from "./ChatComposer";
@@ -315,7 +315,8 @@ export default function ChatView() {
 
   // Filter tool messages from the chat stream when the user prefers a clean view
   // (tool activity still appears in the live console below the chat).
-  const visibleMsgs = hideChatTools ? msgs.filter((m) => m.role !== "tool") : msgs;
+  // Memoized so MessageList (memo) doesn't re-render on unrelated state changes.
+  const visibleMsgs = useMemo(() => (hideChatTools ? msgs.filter((m) => m.role !== "tool") : msgs), [hideChatTools, msgs]);
 
   async function send(text: string) {
     if (!text.trim() || sending) return;
