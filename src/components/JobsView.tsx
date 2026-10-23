@@ -212,7 +212,7 @@ export default function JobsView() {
                 placeholder="Custom name for auto-created sessions (optional)"
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-sm outline-none"
               />
-              <span className="mt-1 block text-[10px] text-neutral-600">Only used when "Auto-create" is selected above.</span>
+              <span className="mt-1 block text-[10px] text-neutral-600">Only used when &quot;Auto-create&quot; is selected above.</span>
             </label>
             <div className="flex items-center gap-2">
               <button

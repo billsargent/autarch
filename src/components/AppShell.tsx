@@ -36,6 +36,7 @@ function CommandCenterShell({ pathname, children }: { pathname: string; children
   const [bellOpen, setBellOpen] = useState(false);
   const [notifs, setNotifs] = useState<NotificationRow[]>([]);
   const [version, setVersion] = useState("");
+  const [agentName, setAgentName] = useState("A");
 
   useEffect(() => {
     let alive = true;
@@ -50,6 +51,7 @@ function CommandCenterShell({ pathname, children }: { pathname: string; children
         setPendingCount(approvalsRes.pending?.length || 0);
         setDeepSeekConfigured(Boolean(settingsRes.deepSeekConfigured));
         setPaused(Boolean(settingsRes.settings?.paused));
+        if (settingsRes.settings?.agentName) setAgentName(settingsRes.settings.agentName);
         setUnread(notifRes.unread?.length || 0);
         if (bellOpen) setNotifs(notifRes.unread || []);
         // Fetch commit hash once on mount so the bottom of the sidebar shows the version.
@@ -93,7 +95,7 @@ function CommandCenterShell({ pathname, children }: { pathname: string; children
         <div className="border-b border-neutral-800 px-5 py-5">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-700 font-mono text-sm font-bold">
-              R1
+              {agentName.slice(0, 1).toUpperCase()}
             </div>
             <div>
               <p className="text-sm font-semibold leading-tight">Autarch</p>

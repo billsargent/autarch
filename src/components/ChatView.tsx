@@ -64,6 +64,7 @@ export default function ChatView() {
   const [runningByConvo, setRunningByConvo] = useState<Record<number, boolean>>({});
   const [unreadByConvo, setUnreadByConvo] = useState<Record<number, number>>({});
   const [modeError, setModeError] = useState<string | null>(null);
+  const [agentName, setAgentName] = useState("The agent");
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -126,6 +127,16 @@ export default function ChatView() {
     const t = setTimeout(loadConversations, 0);
     return () => clearTimeout(t);
   }, [loadConversations]);
+
+  // The agent's name (Settings → Identity) for the "thinking" line.
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.settings?.agentName) setAgentName(d.settings.agentName);
+      })
+      .catch(() => {});
+  }, []);
 
   // Periodically refresh the sidebar so background work started by jobs (running
   // dots, unread badges, ordering) shows up even when you're not sending.
@@ -663,6 +674,7 @@ export default function ChatView() {
           loadingOlder={loadingOlder}
           onLoadOlder={loadOlder}
           onQuickAction={onQuickAction}
+          agentName={agentName}
         />
 
         {showTools && (live.length > 0 || liveStatus) && (
