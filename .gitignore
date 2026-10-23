@@ -11,7 +11,7 @@ dist/
 *.tsbuildinfo
 
 # local database (machine-local, recreated automatically on first run)
-data/
+/data/
 
 # env / secrets
 .env
@@ -27,3 +27,6 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# downloaded art packs (source of public/village/tiles)
+assets-src/
