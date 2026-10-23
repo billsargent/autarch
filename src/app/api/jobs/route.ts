@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { jobs } from "@/db/schema";
-import { asc } from "drizzle-orm";
+import { conversations, jobs } from "@/db/schema";
+import { asc, eq } from "drizzle-orm";
 import { nextCronRun } from "@/lib/agent/cron";
 
 export async function GET() {
@@ -18,9 +18,17 @@ export async function POST(req: Request) {
   const nextRunAt = cron
     ? nextCronRun(cron, new Date()) ?? new Date(Date.now() + intervalMinutes * 60_000)
     : new Date(Date.now() + intervalMinutes * 60_000);
+  // The conversation reports go to; unknown ids fall back to auto-creating one.
+  const convNum = body.conversationId === "" || body.conversationId == null ? null : Number(body.conversationId);
+  const conversationId =
+    convNum !== null && Number.isFinite(convNum) &&
+    (await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.id, convNum)).limit(1)).length
+      ? convNum
+      : null;
   const inserted = await db
     .insert(jobs)
     .values({
+      conversationId,
       name: String(body.name || "Untitled job"),
       instruction: body.instruction ? String(body.instruction) : "",
       kind: body.kind === "daily_report" ? "daily_report" : "interval",

@@ -12,8 +12,10 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 - **The notice board (#90)** opens right in the village. Goals are notes pinned by priority, grouped
   into being worked on, up next and taken down. Open one to change its status, edit its title,
   notes, priority or conversation, or delete it (with a confirmation). "Pin a new goal" adds one.
-- **Changing a job's schedule now moves its next run.** Editing the cron or interval used to keep
-  the old next-run time until the job was paused and resumed.
+- **Changing a job's schedule now moves its next run (#25).** Editing the cron or interval used to
+  keep the old next-run time until the job was paused and resumed.
+- **New jobs report where you told them to (#26).** The chosen report conversation was ignored on
+  create, so every new job made its own. `npm run test:jobs` covers both fixes.
 - **Deleting a job or goal on the old pages now asks first** (#41).
 - The Jobs and Goals pages and the new rooms share the same data hooks, so they always behave the
   same.
