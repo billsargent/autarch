@@ -1,23 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-
-interface StatusPayload {
-  hostname: string;
-  platform: string;
-  release: string;
-  arch: string;
-  uptimePretty: string;
-  cpuModel: string;
-  cpuCount: number;
-  loadavg: number[];
-  totalMemMB: number;
-  freeMemMB: number;
-  usedMemPercent: number;
-  disk: string;
-  topProcesses: string;
-  timestamp: string;
-}
+import { useState } from "react";
+import { loadPercent, useSystemStatus } from "./data/useSystemStatus";
 
 function Bar({ percent, color }: { percent: number; color: string }) {
   return (
@@ -28,23 +12,8 @@ function Bar({ percent, color }: { percent: number; color: string }) {
 }
 
 export default function MonitorView() {
-  const [status, setStatus] = useState<StatusPayload | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
-
-  const load = useCallback(async () => {
-    const res = await fetch("/api/system/status").then((r) => r.json());
-    setStatus(res);
-  }, []);
-
-  useEffect(() => {
-    const first = setTimeout(load, 0);
-    if (!autoRefresh) return () => clearTimeout(first);
-    const id = setInterval(load, 15000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(id);
-    };
-  }, [load, autoRefresh]);
+  const { status } = useSystemStatus(autoRefresh);
 
   return (
     <div className="h-full overflow-y-auto px-8 py-6">
@@ -84,8 +53,8 @@ export default function MonitorView() {
             <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
               <p className="mb-2 text-xs font-semibold text-neutral-400">Load (1 min / cores)</p>
               <Bar
-                percent={(status.loadavg[0] / status.cpuCount) * 100}
-                color={status.loadavg[0] / status.cpuCount > 0.85 ? "bg-red-500" : "bg-emerald-500"}
+                percent={loadPercent(status)}
+                color={loadPercent(status) > 85 ? "bg-red-500" : "bg-emerald-500"}
               />
               <p className="mt-2 text-xs text-neutral-500">{status.loadavg[0].toFixed(2)} / {status.cpuCount} cores</p>
             </div>

@@ -196,8 +196,12 @@ work in-world, with the same features as their Command Center page:
 - **Library:** skills are books on the shelves; new ones are written at the desk.
 - **Workshop:** jobs are slips on the job board; new ones are set up at the workbench.
 - **Notice board:** goals pinned by priority, opened right in the village.
+- **Guard tower:** the logbook (activity log) and today's tally.
+- **Observatory:** the star charts (system monitor).
+- **Vault:** the ledger and the coffers (usage and spending).
+- **Town hall:** the clerk's desk (approvals) and the records cabinet (recent decisions).
 
-The other buildings still link to their pages. Every scene (the village and each room) is
+The cottages still open the chat drawer, and settings live in the Command Center. Every scene (the village and each room) is
 described in `src/components/village/scenes/`, and `npm run village:map` builds its art.
 
 Village art: "Serene Village" by [LimeZu](https://limezu.itch.io/serenevillage) (CC BY 4.0) and

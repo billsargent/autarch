@@ -1,52 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-
-interface BucketRow {
-  bucket: string;
-  prompt: number;
-  completion: number;
-  total: number;
-  cost: number;
-  sessions: number;
-  cacheHit: number;
-  cacheMiss: number;
-}
-
-interface Totals {
-  prompt: number;
-  completion: number;
-  total: number;
-  cost: number;
-  sessions: number;
-  cacheHit: number;
-  cacheMiss: number;
-}
-
-interface UsageData {
-  daily: BucketRow[];
-  weekly: BucketRow[];
-  monthly: BucketRow[];
-  yearly: BucketRow[];
-  periodTotals: {
-    today: Totals;
-    week: Totals;
-    month: Totals;
-    year: Totals;
-  };
-  allTime: Totals;
-}
-
-const PERIODS = ["daily", "weekly", "monthly", "yearly"] as const;
-type Period = (typeof PERIODS)[number];
-
-function fmt(n: number): string {
-  return n.toLocaleString();
-}
-
-function fmtCost(n: number): string {
-  return `$${n.toFixed(4)}`;
-}
+import { useState } from "react";
+import { USAGE_PERIODS, cacheHitRate, fmtCost, fmtTokens as fmt, usageCards, useUsage, type UsagePeriod } from "./data/useUsage";
 
 function Bar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.max(1, Math.round((value / max) * 100)) : 0;
@@ -58,33 +13,12 @@ function Bar({ value, max }: { value: number; max: number }) {
 }
 
 export default function UsageView() {
-  const [data, setData] = useState<UsageData | null>(null);
-  const [period, setPeriod] = useState<Period>("daily");
-
-  const load = useCallback(async () => {
-    const res = await fetch("/api/usage").then((r) => r.json());
-    setData(res);
-  }, []);
-
-  useEffect(() => {
-    const first = setTimeout(load, 0);
-    const id = setInterval(load, 30000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(id);
-    };
-  }, [load]);
+  const { data } = useUsage();
+  const [period, setPeriod] = useState<UsagePeriod>("daily");
 
   const rows = data ? data[period] : [];
   const maxTotal = rows.reduce((m, r) => Math.max(m, r.total), 0);
-
-  const cards = [
-    { label: "Today", t: data?.periodTotals.today },
-    { label: "This week", t: data?.periodTotals.week },
-    { label: "This month", t: data?.periodTotals.month },
-    { label: "This year", t: data?.periodTotals.year },
-    { label: "All-time", t: data?.allTime },
-  ];
+  const cards = usageCards(data);
 
   return (
     <div className="h-full overflow-y-auto px-8 py-6">
@@ -95,7 +29,7 @@ export default function UsageView() {
             <p className="mt-1 text-sm text-neutral-500">Token and cost tracking across work sessions.</p>
           </div>
           <div className="flex rounded-lg border border-neutral-700 bg-neutral-950 p-0.5 text-[11px]">
-            {PERIODS.map((p) => (
+            {USAGE_PERIODS.map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
@@ -149,9 +83,7 @@ export default function UsageView() {
                   <td className="px-3 py-2 text-right font-semibold text-neutral-100">{fmt(r.total)}</td>
                   <td className="px-3 py-2 text-right">{fmtCost(r.cost)}</td>
                   <td className="px-3 py-2 text-right">
-                    {r.cacheHit + r.cacheMiss > 0
-                      ? `${Math.round((r.cacheHit / (r.cacheHit + r.cacheMiss)) * 100)}%`
-                      : "—"}
+                    {cacheHitRate(r)}
                   </td>
                   <td className="px-3 py-2 text-right">{fmt(r.sessions)}</td>
                   <td className="w-28 px-3 py-2">

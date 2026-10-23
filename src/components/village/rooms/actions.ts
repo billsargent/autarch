@@ -4,4 +4,8 @@ export const ROOM_ACTIONS: Record<string, string[]> = {
   village: ["goals.board", "goals.new"],
   library: ["skills.browse", "skills.new"],
   workshop: ["jobs.board", "jobs.new"],
+  guardtower: ["activity.log", "activity.today"],
+  observatory: ["monitor.charts"],
+  vault: ["usage.ledger", "usage.totals"],
+  townhall: ["approvals.pending", "approvals.records"],
 };

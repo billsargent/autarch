@@ -9,10 +9,11 @@ this repository; get the full packs from their authors.
 - Source: https://limezu.itch.io/serenevillage
 - License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), as stated on the pack's
   page. The download contains no separate license file.
-- Files used: `tiles/serene-village-outside.png` (from `16x16_original/Serene Village - Outside.png`,
-  unmodified)
+- Files used, unmodified:
+  - `tiles/serene-village-outside.png` (`16x16_original/Serene Village - Outside.png`)
+  - `tiles/serene-village-inside.png` (`16x16_original/Serene Village - Inside.png`)
 - Used for the grass, dirt roads, pond, trees, flowers, signpost, mailbox and the cottage and
-  library houses.
+  library houses outside, and for the walls, windows, rugs, desks, tables and shelves inside.
 
 ## Ninja Adventure — Pixel-boy and AAA
 
@@ -24,12 +25,17 @@ this repository; get the full packs from their authors.
   - `tiles/ninja-house.png` (`Backgrounds/Tilesets/TilesetHouse.png`)
   - `tiles/ninja-element.png` (`Backgrounds/Tilesets/TilesetElement.png`)
   - `tiles/ninja-nature.png` (`Backgrounds/Tilesets/TilesetNature.png`)
+  - `tiles/ninja-floor.png` (`Backgrounds/Tilesets/Interior/TilesetInteriorFloor.png`)
+  - `tiles/ninja-wall.png` (`Backgrounds/Tilesets/Interior/TilesetWallSimple.png`)
+  - `tiles/ninja-camp.png` (`Backgrounds/Tilesets/tileset_camp.png`)
   - `characters/*.png` (`Actor/Character/<Name>/SpriteSheet.png`)
 - Used for the town hall, workshop, market, shops, observatory, guard tower, vault, lamps, some
-  trees, and the villagers.
+  trees and the villagers outside; and inside, for the floors, wall rims, furniture, crates,
+  barrels, chests, maps and lanterns.
 
 ## Generated files
 
-`village.png` and `village.tmj` are composed from the tiles above by `npm run village:map`
+Every scene's `scenes/<id>.png` and `scenes/<id>.tmj` (the village and each room) is composed
+from the tiles above by `npm run village:map`
 (`scripts/build-village-map.ts`). They are adaptations of the works above and carry the same
 credits.

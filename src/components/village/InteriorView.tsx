@@ -11,6 +11,7 @@ import SceneView, { type VillagerSpec } from "./SceneView";
 import ApprovalPrompt from "./ApprovalPrompt";
 import ParchmentDialog from "./ParchmentDialog";
 import { ROOMS } from "./rooms";
+import { useDeferredApprovals } from "./useDeferredApprovals";
 
 // A building's interior: the room's art, its furniture as hotspots, and the
 // room's dialogs. The agent is shown here only when its real state puts it in
@@ -29,8 +30,11 @@ export default function InteriorView({ sceneId }: { sceneId: string }) {
   const [action, setAction] = useState<string | null>(null);
   const [opened, setOpened] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [deferred, setDeferred] = useState<number[]>([]);
-  const showPrompt = data.pending.length > 0 && !data.pending.every((p) => deferred.includes(p.id));
+  const [deferred, setDeferred] = useDeferredApprovals();
+  // In the town hall the clerk's desk is where approvals live, so the pop-up
+  // stays away and "waiting" opens the desk instead.
+  const atTownHall = sceneId === "townhall";
+  const showPrompt = !atTownHall && data.pending.length > 0 && !data.pending.every((p) => deferred.includes(p.id));
 
   function open(act: string | undefined) {
     if (!act) return;
@@ -62,7 +66,9 @@ export default function InteriorView({ sceneId }: { sceneId: string }) {
         </Link>
         <h1 className="village-pixel min-w-0 flex-1 truncate text-sm text-[#fff6e0]">{scene.title}</h1>
         {data.pending.length > 0 && (
-          <button onClick={() => setDeferred([])} className="village-btn village-btn-danger animate-pulse px-3 py-1.5 text-xs motion-reduce:animate-none">
+          <button
+            onClick={() => (atTownHall ? open("approvals.pending") : setDeferred([]))}
+            className="village-btn village-btn-danger animate-pulse px-3 py-1.5 text-xs motion-reduce:animate-none">
             ❗ {data.pending.length} waiting
           </button>
         )}

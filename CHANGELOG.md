@@ -3,6 +3,25 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — Four more rooms
+
+- **The guard tower (#91):** the logbook is the activity log (filter by outcome, open any entry
+  for its exact input, output, risk reason and who decided), and the tally board shows today's
+  sessions, actions, steps, tokens and cost.
+- **The observatory (#92):** the star charts are the system monitor: machine, uptime, CPU, load
+  and memory gauges, disks and the busiest processes, refreshed every 15 seconds (or on demand).
+- **The vault (#93):** the coffers hold the spending totals (today, week, month, year, all time)
+  and the ledger breaks them down by day, week, month or year.
+- **The town hall (#94):** the clerk's desk lists everything waiting on your approval, with the
+  exact input, risk and reason, a note for the agent, and approve or deny; the records cabinet
+  keeps the recent decisions. Inside the town hall, the approval pop-up stays away and the
+  "waiting" button opens the desk.
+- **"Decide later" sticks** for the rest of the browser session, so the same approval prompt no
+  longer pops up again in every room. New requests still interrupt.
+- **The activity log can show cancelled calls** (#41), on the old page too.
+- Every interior now shares one wall-and-floor shell, and the old Activity, System monitor,
+  Usage and Approvals pages use the same data hooks as the rooms.
+
 ## 2026-10-23 — Running as an ordinary user
 
 - **The services run as an `autarch` user, not root (#13).** The units are renamed

@@ -1,46 +1,15 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
-import type { ToolExecutionRow } from "@/lib/agent/clientTypes";
+import { Fragment, useState } from "react";
 import { RISK_COLORS, STATUS_COLORS } from "@/lib/agent/clientTypes";
-
-interface StatsData {
-  today: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-    costUsd: number;
-    actionsUsed: number;
-    stepsUsed: number;
-  };
-  todaySessionCount: number;
-}
+import { ACTIVITY_FILTERS, filterActivity, useActivity, type ActivityFilter } from "./data/useActivity";
 
 export default function ActivityView() {
-  const [rows, setRows] = useState<ToolExecutionRow[]>([]);
-  const [filter, setFilter] = useState<string>("all");
+  const { rows, stats } = useActivity();
+  const [filter, setFilter] = useState<ActivityFilter>("all");
   const [expanded, setExpanded] = useState<number | null>(null);
-  const [stats, setStats] = useState<StatsData | null>(null);
 
-  const load = useCallback(async () => {
-    const [actRes, statsRes] = await Promise.all([
-      fetch("/api/activity?limit=150").then((r) => r.json()),
-      fetch("/api/stats").then((r) => r.json()),
-    ]);
-    setRows(actRes.executions || []);
-    setStats(statsRes);
-  }, []);
-
-  useEffect(() => {
-    const first = setTimeout(load, 0);
-    const id = setInterval(load, 20000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(id);
-    };
-  }, [load]);
-
-  const filtered = rows.filter((r) => (filter === "all" ? true : r.status === filter));
+  const filtered = filterActivity(rows, filter);
 
   return (
     <div className="h-full overflow-y-auto px-8 py-6">
@@ -52,10 +21,10 @@ export default function ActivityView() {
           </div>
           <select
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => setFilter(e.target.value as ActivityFilter)}
             className="rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-xs"
           >
-            {["all", "success", "error", "awaiting_approval", "approved", "denied", "blocked", "rate_limited"].map((s) => (
+            {ACTIVITY_FILTERS.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>

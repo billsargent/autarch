@@ -12,6 +12,7 @@ import VillageHud from "./VillageHud";
 import TalkDrawer from "./TalkDrawer";
 import ApprovalPrompt from "./ApprovalPrompt";
 import { ROOMS } from "./rooms";
+import { useDeferredApprovals } from "./useDeferredApprovals";
 
 function plain(text: string, max: number): string {
   const flat = text.replace(/[#*_`>[\]]+/g, "").replace(/\s+/g, " ").trim();
@@ -50,7 +51,7 @@ export default function VillageView() {
   const [action, setAction] = useState<string | null>(null);
   const [opened, setOpened] = useState(0);
   const VillageRoom = ROOMS.village;
-  const [deferred, setDeferred] = useState<number[]>([]);
+  const [deferred, setDeferred] = useDeferredApprovals();
   const showPrompt = data.pending.length > 0 && !data.pending.every((p) => deferred.includes(p.id));
   const promptQueue = data.pending.filter((p) => !deferred.includes(p.id));
 

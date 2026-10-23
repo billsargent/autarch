@@ -2,21 +2,7 @@
 
 import { useState } from "react";
 import type { ToolExecutionRow } from "@/lib/agent/clientTypes";
-
-const RISK_WORDS: Record<string, { label: string; tone: string }> = {
-  low: { label: "Low risk", tone: "#5f8a3c" },
-  medium: { label: "Medium risk — changes files or makes network requests", tone: "#c58a1b" },
-  high: { label: "High risk — changes the system", tone: "#d9643a" },
-  critical: { label: "Critical — elevated, destructive or hard to undo", tone: "#b3261e" },
-  blocked: { label: "Normally blocked — a supervisor override is on", tone: "#7a1712" },
-};
-
-function describe(p: ToolExecutionRow): { headline: string; detail: string } {
-  const input = (p.input ?? {}) as Record<string, unknown>;
-  if (typeof input.command === "string") return { headline: "run a command", detail: input.command };
-  if (typeof input.path === "string") return { headline: `use ${p.tool} on a file`, detail: JSON.stringify(input, null, 2) };
-  return { headline: `use ${p.tool}`, detail: JSON.stringify(input, null, 2) };
-}
+import { RISK_WORDS, describeToolCall as describe } from "./tones";
 
 interface ApprovalPromptProps {
   agentName: string;

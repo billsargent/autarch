@@ -166,4 +166,5 @@ export const STATUS_COLORS: Record<string, string> = {
   denied: "text-rose-400",
   blocked: "text-rose-300",
   rate_limited: "text-orange-400",
+  cancelled: "text-neutral-400",
 };

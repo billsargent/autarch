@@ -1,49 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type { ToolExecutionRow } from "@/lib/agent/clientTypes";
+import { useState } from "react";
 import { RISK_COLORS, STATUS_COLORS } from "@/lib/agent/clientTypes";
-
-function formatInput(input: unknown) {
-  if (!input || typeof input !== "object") return null;
-  const entries = Object.entries(input as Record<string, unknown>);
-  if (!entries.length) return null;
-  return entries.map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`).join("\n");
-}
+import { formatToolInput as formatInput, useApprovals, type Decision } from "./data/useApprovals";
 
 export default function ApprovalsView() {
-  const [pending, setPending] = useState<ToolExecutionRow[]>([]);
-  const [recent, setRecent] = useState<ToolExecutionRow[]>([]);
+  const { pending, decided, decide: send } = useApprovals();
   const [busyId, setBusyId] = useState<number | null>(null);
   const [note, setNote] = useState<Record<number, string>>({});
   const [errors, setErrors] = useState<Record<number, string>>({});
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/approvals").then((r) => r.json());
-    setPending(res.pending || []);
-    setRecent(res.recent || []);
-  }, []);
-
-  useEffect(() => {
-    const first = setTimeout(load, 0);
-    const id = setInterval(load, 15000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(id);
-    };
-  }, [load]);
-
-  async function decide(id: number, decision: "approved" | "denied") {
+  async function decide(id: number, decision: Decision) {
     setBusyId(id);
     try {
-      const res = await fetch(`/api/approvals/${id}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ decision, note: note[id] }),
-      });
-      const data = await res.json().catch(() => ({}));
-      setErrors((prev) => ({ ...prev, [id]: res.ok ? "" : data.error || `HTTP ${res.status}` }));
-      await load();
+      const res = await send(id, decision, note[id]);
+      setErrors((prev) => ({ ...prev, [id]: res.ok ? "" : res.error }));
     } finally {
       setBusyId(null);
     }
@@ -107,8 +78,7 @@ export default function ApprovalsView() {
 
         <h2 className="mt-10 text-sm font-semibold text-neutral-400">Recent decisions</h2>
         <div className="mt-3 space-y-2">
-          {recent
-            .filter((r) => r.status !== "awaiting_approval")
+          {decided
             .slice(0, 15)
             .map((r) => (
               <div key={r.id} className="flex items-center justify-between rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-2 text-xs">
