@@ -12,6 +12,7 @@ import ApprovalPrompt from "./ApprovalPrompt";
 import ParchmentDialog from "./ParchmentDialog";
 import { ROOMS } from "./rooms";
 import { useDeferredApprovals } from "./useDeferredApprovals";
+import { useVillageClock } from "./useVillageClock";
 
 // A building's interior: the room's art, its furniture as hotspots, and the
 // room's dialogs. Villagers are shown here only when what they're really doing
@@ -26,7 +27,8 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
   const owner = isCottage ? (data.villagers.find((v) => v.id === agentId) ?? mayor) : null;
   const title = owner ? `${owner.name}'s cottage` : scene.title;
 
-  const moods = data.villagers.map((v) => ({ v, mood: villagerMood(snapshotOf(v, data.paused)) }));
+  const { phase, night } = useVillageClock(data.bedtime, data.wakeTime);
+  const moods = data.villagers.map((v) => ({ v, mood: villagerMood(snapshotOf(v, data.paused, night)) }));
   const here = moods.filter(({ v, mood }) => building && MOOD_PLACE[mood] === building.id && (!isCottage || v.id === owner?.id));
   const away = owner && !here.some((h) => h.v.id === owner.id) ? moods.find((m) => m.v.id === owner.id) : null;
 
@@ -90,7 +92,7 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
 
       <SceneView
         scene={scene}
-        night={data.paused}
+        light={data.paused ? "frozen" : phase}
         labels="hover"
         onPlace={(p) => open(p.action)}
         hints={<span>click the furniture</span>}

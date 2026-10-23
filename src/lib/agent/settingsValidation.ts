@@ -1,4 +1,5 @@
 import os from "node:os";
+import { parseHM } from "./daynight";
 import path from "node:path";
 import { PROJECT_ROOT } from "./config";
 
@@ -16,7 +17,8 @@ type Rule =
   | { kind: "url" }
   | { kind: "tools" }
   | { kind: "paths" }
-  | { kind: "workspace" };
+  | { kind: "workspace" }
+  | { kind: "time" };
 
 const RULES: Record<string, Rule> = {
   autonomyMode: { kind: "enum", values: ["manual", "balanced", "autonomous", "unrestricted"] },
@@ -49,6 +51,8 @@ const RULES: Record<string, Rule> = {
   outputPricePerMTok: { kind: "number", min: 0, max: 1000 },
   cacheHitInputPricePerMTok: { kind: "number", min: 0, max: 1000 },
   townDailyBudgetUsd: { kind: "number", min: 0, max: 10000, nullable: true },
+  bedtime: { kind: "time" },
+  wakeTime: { kind: "time" },
   allowNetworkFetch: { kind: "bool" },
   paused: { kind: "bool" },
   humanAtKeyboard: { kind: "bool" },
@@ -112,6 +116,10 @@ export function validateSettingsPatch(
         clean[key] = n;
         break;
       }
+      case "time":
+        if (typeof value !== "string" || parseHM(value) === null) return fail("must be a time like 22:00.");
+        clean[key] = value.trim().padStart(5, "0");
+        break;
       case "bool":
         if (typeof value !== "boolean") return fail("must be true or false.");
         clean[key] = value;

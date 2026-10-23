@@ -270,6 +270,10 @@ if (!globalForDb.__agentLabSqlite) {
       sqlite.exec(`ALTER TABLE ${table} ADD COLUMN agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL`);
     }
   }
+  if (!existingCols("agent_settings").includes("bedtime")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN bedtime TEXT NOT NULL DEFAULT '22:00'");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN wake_time TEXT NOT NULL DEFAULT '07:00'");
+  }
   if (!existingCols("agent_settings").includes("town_daily_budget_usd")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN town_daily_budget_usd REAL");
   }

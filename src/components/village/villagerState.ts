@@ -7,12 +7,17 @@ export interface AgentSnapshot {
   paused: boolean;
   running: boolean;
   pendingApprovals: number;
+  // Night by the village clock (#100).
+  night?: boolean;
 }
 
 // Precedence: a paused village sleeps no matter what; a pending approval
-// outranks work because the agent is blocked on the human.
+// outranks work because the agent is blocked on the human. At night a
+// villager sleeps unless the human has them awake (talking, or waiting on an
+// answer).
 export function villagerMood(s: AgentSnapshot): Mood {
   if (s.paused) return "asleep";
+  if (s.night && !s.running && !s.pendingApprovals) return "asleep";
   if (s.pendingApprovals > 0) return "waiting";
   if (s.running) return "working";
   return "idle";
@@ -43,7 +48,7 @@ export function moodLabel(mood: Mood, name: string, strolling = false): string {
     case "waiting":
       return `${name} is waiting at the town hall for your okay`;
     case "asleep":
-      return `${name} is resting at home`;
+      return `${name} is asleep at home`;
     default:
       return `${name} is relaxing at home`;
   }

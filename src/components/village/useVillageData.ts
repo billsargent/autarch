@@ -5,8 +5,10 @@ import type { AgentRow, ToolExecutionRow } from "@/lib/agent/clientTypes";
 
 export interface VillageData {
   loaded: boolean;
-  // The whole village is paused ("Lights out").
+  // The whole village is paused ("Pause everyone").
   paused: boolean;
+  bedtime: string;
+  wakeTime: string;
   // The villagers and what each is up to (#55).
   villagers: AgentRow[];
   pending: ToolExecutionRow[];
@@ -18,6 +20,8 @@ export interface VillageData {
 const EMPTY: VillageData = {
   loaded: false,
   paused: false,
+  bedtime: "22:00",
+  wakeTime: "07:00",
   villagers: [],
   pending: [],
   spentToday: 0,
@@ -43,7 +47,7 @@ export function useVillageData() {
       const [agents, approvals, settings, stats, goals, notifs] = await Promise.all([
         getJson<{ agents: AgentRow[] }>("/api/agents"),
         getJson<{ pending: ToolExecutionRow[] }>("/api/approvals"),
-        getJson<{ settings: { paused: boolean } }>("/api/settings"),
+        getJson<{ settings: { paused: boolean; bedtime: string; wakeTime: string } }>("/api/settings"),
         getJson<{ today: { costUsd: number } }>("/api/stats"),
         getJson<{ goals: Array<{ status: string }> }>("/api/goals"),
         getJson<{ unread: unknown[] }>("/api/notifications"),
@@ -51,6 +55,8 @@ export function useVillageData() {
       setData({
         loaded: true,
         paused: Boolean(settings.settings?.paused),
+        bedtime: settings.settings?.bedtime ?? "22:00",
+        wakeTime: settings.settings?.wakeTime ?? "07:00",
         villagers: agents.agents ?? [],
         pending: approvals.pending ?? [],
         spentToday: Number(stats.today?.costUsd ?? 0),
@@ -77,6 +83,6 @@ export function useVillageData() {
 }
 
 // What a villager is doing, from their own state and the village's.
-export function snapshotOf(v: AgentRow, villagePaused: boolean) {
-  return { paused: villagePaused || v.status === "paused", running: v.working, pendingApprovals: v.waiting };
+export function snapshotOf(v: AgentRow, villagePaused: boolean, night = false) {
+  return { paused: villagePaused || v.status === "paused", running: v.working, pendingApprovals: v.waiting, night };
 }

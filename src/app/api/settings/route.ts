@@ -91,6 +91,8 @@ export async function PUT(req: Request) {
     "maxOutputTokens",
     "cacheHitInputPricePerMTok",
     "townDailyBudgetUsd",
+    "bedtime",
+    "wakeTime",
   ];
   const patch: Record<string, unknown> = {};
   for (const key of allowedKeys) {

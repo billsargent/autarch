@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { SPRITE, type Place, type SceneManifest } from "./manifest";
 import { nearestWaypoint, shortestPath } from "./path";
+import type { DayPhase } from "@/lib/agent/daynight";
 
 // A pixel-art scene (the village or a room): the art scaled to fit, pan and
 // zoom, clickable places, villagers walking the waypoint graph, night, and an
@@ -38,7 +39,8 @@ export interface VillagerSpec {
 interface SceneViewProps {
   scene: SceneManifest;
   villagers: VillagerSpec[];
-  night?: boolean;
+  // The light: the time of day (#100), or "frozen" while everyone is paused.
+  light?: SceneLight;
   // "signs": always-visible signs above places (the village);
   // "hover": a label appears on hover or keyboard focus (rooms).
   labels: "signs" | "hover";
@@ -273,7 +275,9 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
 // The scene
 // ---------------------------------------------------------------------------
 
-export default function SceneView({ scene, villagers, night = false, labels, onPlace, hints, children }: SceneViewProps) {
+export type SceneLight = DayPhase | "frozen";
+
+export default function SceneView({ scene, villagers, light = "day", labels, onPlace, hints, children }: SceneViewProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(MIN_ZOOM);
@@ -398,14 +402,11 @@ export default function SceneView({ scene, villagers, night = false, labels, onP
             className="absolute inset-0 h-full w-full"
             style={{ imageRendering: "pixelated", display: mapReady ? "block" : "none" }}
           />
-          {night && (
-            <>
-              <div className="village-night pointer-events-none absolute inset-0" />
-              {scene.lamps.map((l, i) => (
-                <div key={i} className="village-lamp pointer-events-none absolute" style={{ left: l.x - 120, top: l.y - 120, width: 240, height: 240 }} />
-              ))}
-            </>
-          )}
+          {light !== "day" && <div className={`village-light-${light} pointer-events-none absolute inset-0`} data-light={light} />}
+          {(light === "dusk" || light === "night") &&
+            scene.lamps.map((l, i) => (
+              <div key={i} className="village-lamp pointer-events-none absolute" style={{ left: l.x - 120, top: l.y - 120, width: 240, height: 240 }} />
+            ))}
           <PlaceHotspots scene={scene} labels={labels} onPlace={(p) => !editMode && onPlace(p)} />
           {villagers.map((v) => (
             <WalkingVillager key={v.id} scene={scene} v={v} />

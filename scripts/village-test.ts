@@ -7,6 +7,7 @@ import { ROOM_ACTIONS } from "../src/components/village/rooms/actions";
 import { nearestWaypoint, shortestPath, type Edge, type Waypoint } from "../src/components/village/path";
 import { MOOD_PLACE, bubbleLine, nextHangout, standOffsets, villagerMood } from "../src/components/village/villagerState";
 import fs from "node:fs";
+import { dayPhase, isNight, nextWake, parseHM } from "../src/lib/agent/daynight";
 import path from "node:path";
 
 let failures = 0;
@@ -103,6 +104,19 @@ check(
   [],
 );
 check("nothing going on means idle", villagerMood({ paused: false, running: false, pendingApprovals: 0 }), "idle");
+
+// --- day and night (#100) -----------------------------------------------------------
+const at = (h: number, m = 0) => new Date(2026, 9, 24, h, m);
+check("times are read", [parseHM("07:30"), parseHM("7:05"), parseHM("24:00"), parseHM("noon")], [450, 425, null, null]);
+check("night crosses midnight (22:00–07:00)", [21, 22, 23, 0, 3, 6, 7, 12].map((h) => isNight(at(h, 30 * Number(h === 6)), "22:00", "07:00")), [false, true, true, true, true, true, false, false]);
+check("a night that doesn't cross midnight (01:00–05:00)", [0, 1, 4, 5].map((h) => isNight(at(h), "01:00", "05:00")), [false, true, true, false]);
+check("bedtime equal to wake-up means no night", isNight(at(3), "07:00", "07:00"), false);
+check("dawn, day, dusk and night", [at(7, 30), at(12), at(21), at(23)].map((d) => dayPhase(d, "22:00", "07:00")), ["dawn", "day", "dusk", "night"]);
+check("the next wake-up is tomorrow after it's passed", nextWake(at(23), "07:00").getDate(), 25);
+check("…and today before it", nextWake(at(3), "07:00").getDate(), 24);
+check("at night a free villager sleeps", villagerMood({ paused: false, running: false, pendingApprovals: 0, night: true }), "asleep");
+check("…but one you're talking to is awake", villagerMood({ paused: false, running: true, pendingApprovals: 0, night: true }), "working");
+check("…and one waiting on you waits", villagerMood({ paused: false, running: false, pendingApprovals: 1, night: true }), "waiting");
 
 // --- several villagers ------------------------------------------------------------
 check("one villager stands where they are", standOffsets(["c"]), [0]);

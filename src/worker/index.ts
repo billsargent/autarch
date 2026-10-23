@@ -7,6 +7,7 @@ import { nextCronRun } from "@/lib/agent/cron";
 import { reapStaleSessions } from "@/lib/agent/sessions";
 import { requestCancel } from "@/lib/agent/turnLock";
 import { ensureMayor } from "@/lib/agent/agents";
+import { isNight, nextWake } from "@/lib/agent/daynight";
 import { agents } from "@/db/schema";
 
 // Standalone background scheduler for the agent. Run with: npm run worker
@@ -157,10 +158,20 @@ function shutdown(signal: string) {
   }, SHUTDOWN_GRACE_MS).unref();
 }
 
+let sleptLogged = false;
+
 async function runDueJobs() {
   if (stopping) return;
   const settings = await getSettings();
   if (settings.paused) return; // global kill switch: don't start anything
+  // Night (#100): the village sleeps. Nothing autonomous starts; jobs that fall
+  // due stay due and run after wake-up.
+  if (isNight(new Date(), settings.bedtime, settings.wakeTime)) {
+    if (!sleptLogged) console.log(`[worker] night: the village sleeps until ${nextWake(new Date(), settings.wakeTime).toLocaleTimeString()}`);
+    sleptLogged = true;
+    return;
+  }
+  sleptLogged = false;
 
   // Jobs of villagers who are resting (paused) or have left wait.
   const working = new Set(

@@ -62,6 +62,8 @@ export interface SettingsRow {
   workspaceDir: string;
   enabledTools: string[];
   townDailyBudgetUsd: number | null;
+  bedtime: string;
+  wakeTime: string;
   extraProtectedPaths: string[];
   systemPromptExtra: string | null;
   staticCorePrompt: string | null;

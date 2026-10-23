@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { AgentRow, SettingsRow } from "@/lib/agent/clientTypes";
-import { DEFAULT_PERSONA } from "@/lib/agent/persona";
+import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 import { CHARACTER_KEYS, CHARACTER_LABELS, VILLAGER_COLORS } from "@/lib/agent/villagerLooks";
 import { useVillagers, type VillagerInput } from "../../data/useVillagers";
 import { ConfirmDialog } from "../ParchmentDialog";
@@ -147,7 +147,8 @@ function VillagerEditor({
   const townTools = tools.filter((t) => settings.enabledTools.includes(t.name));
   const [name, setName] = useState(villager?.name ?? "");
   const [role, setRole] = useState(villager?.role ?? "Villager");
-  const [persona, setPersona] = useState(villager?.persona ?? "");
+  // Starts with the default personality written out, ready to edit.
+  const [persona, setPersona] = useState(villager?.persona ?? DEFAULT_PERSONA);
   const [character, setCharacter] = useState(villager?.character ?? CHARACTER_KEYS.find((c) => c !== "master") ?? "villager");
   const [color, setColor] = useState(villager?.color ?? VILLAGER_COLORS[1]);
   const [model, setModel] = useState(villager?.model ?? "");
@@ -171,7 +172,7 @@ function VillagerEditor({
     const res = await onSave({
       name,
       role,
-      persona: persona.trim() || null,
+      persona: personaToSave(persona),
       character,
       color,
       model: model.trim() || null,
@@ -210,8 +211,15 @@ function VillagerEditor({
       </div>
       <label className="block text-xs font-semibold">
         Personality
-        <textarea name="persona" value={persona} onChange={(e) => setPersona(e.target.value)} rows={3} placeholder={DEFAULT_PERSONA} className={`${input} resize-y`} />
-        <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">Who they are, in your words. Empty = the friendly villager shown.</span>
+        <textarea name="persona" value={persona} onChange={(e) => setPersona(e.target.value)} rows={4} className={`${input} resize-y`} />
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 font-normal text-[11px] text-[#6b4a2e]">
+          Who they are, in your words — edit or add to the default.
+          {persona.trim() !== DEFAULT_PERSONA && (
+            <button type="button" onClick={() => setPersona(DEFAULT_PERSONA)} className="underline">
+              Start again from the default
+            </button>
+          )}
+        </span>
         {fieldError("persona")}
       </label>
       <fieldset>

@@ -13,7 +13,7 @@ import {
 import { jobSchedule, useJobs } from "../../data/useJobs";
 import VillagersPage from "./VillagersPage";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
-import { DEFAULT_PERSONA } from "@/lib/agent/persona";
+import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 
 // The Mayor's ledger in the town hall: every setting, one page per section,
 // with the server's validation errors shown beside the field they belong to.
@@ -129,7 +129,7 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
         <Section title="Pause & chat">
           <div className="flex flex-wrap items-center gap-3 rounded border-2 border-[#3b2716] bg-[#fffaf0] p-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">{settings.paused ? "⏸ Everyone is paused" : "The village is at work"}</p>
+              <p className="text-sm font-semibold">{settings.paused ? "❄ Everyone is paused" : "The village is at work"}</p>
               <p className="text-xs text-[#6b4a2e]">
                 {settings.paused
                   ? "All tool use and scheduled work is frozen. Chat still works; nothing runs until you resume."
@@ -140,8 +140,19 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
               onClick={() => save({ paused: !settings.paused })}
               className={`village-btn px-3 py-2 text-xs ${settings.paused ? "village-btn-go" : "village-btn-danger"}`}
             >
-              {settings.paused ? "▶ Resume" : "⏸ Pause everyone"}
+              {settings.paused ? "▶ Resume everyone" : "❄ Pause everyone"}
             </button>
+          </div>
+          <div className="rounded border-2 border-[#d8c49a] p-3">
+            <p className="text-xs font-semibold">Day and night</p>
+            <p className="text-[11px] text-[#6b4a2e]">
+              By the computer&apos;s own clock. At night the villagers sleep and nothing starts on its own; jobs that fall due wait
+              until morning. You can still knock and chat, and approvals still work.
+            </p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              <TextField s={s} settings={settings} field="bedtime" label="Bedtime" type="time" />
+              <TextField s={s} settings={settings} field="wakeTime" label="Wake-up" type="time" />
+            </div>
           </div>
           <Toggle
             label="Human at the keyboard"
@@ -419,17 +430,16 @@ function IdentityPage({ s, settings }: { s: Settings; settings: SettingsRow }) {
         <textarea
           name="persona"
           key={`persona:${settings.persona ?? ""}`}
-          defaultValue={settings.persona ?? ""}
+          defaultValue={settings.persona ?? DEFAULT_PERSONA}
           onBlur={(e) => {
-            const v = e.target.value.trim() || null;
+            const v = personaToSave(e.target.value);
             if (v !== (settings.persona ?? null)) save({ persona: v });
           }}
-          rows={3}
-          placeholder={DEFAULT_PERSONA}
+          rows={4}
           className={`${input} resize-y`}
         />
         <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">
-          Who {settings.agentName} is, in your words: how they talk and what they’re like. Leave it empty for the friendly villager shown.
+          Who {settings.agentName} is, in your words: how they talk and what they’re like. Edit or add to the default; clear the box to go back to it.
         </span>
         <FieldError msg={s.fieldErrors.persona} />
       </label>
@@ -696,7 +706,21 @@ function NumberField({ s, settings, field, label, help, step }: { s: Settings; s
   );
 }
 
-function TextField({ s, settings, field, label, help }: { s: Settings; settings: SettingsRow; field: "agentName" | "workspaceDir"; label: string; help?: string }) {
+function TextField({
+  s,
+  settings,
+  field,
+  label,
+  help,
+  type = "text",
+}: {
+  s: Settings;
+  settings: SettingsRow;
+  field: "agentName" | "workspaceDir" | "bedtime" | "wakeTime";
+  label: string;
+  help?: string;
+  type?: "text" | "time";
+}) {
   const error = s.fieldErrors[field];
   const [draft, setDraft] = useDraft(settings[field], error);
   const commit = () => {
@@ -708,6 +732,7 @@ function TextField({ s, settings, field, label, help }: { s: Settings; settings:
       {label}
       <input
         name={field}
+        type={type}
         value={draft}
         aria-invalid={Boolean(error)}
         onChange={(e) => setDraft(e.target.value)}

@@ -3,6 +3,20 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Day and night
+
+- **The village keeps real time (#100).** Bedtime and wake-up (defaults 22:00 and 07:00) are in
+  the Mayor's ledger → Pause & chat. At night the villagers go home and sleep 💤, and nothing
+  starts on its own: jobs that fall due wait until morning. You can still knock and chat (a woken
+  villager knows it's night and keeps it short), and approvals still work.
+- **The light follows the clock:** a pink dawn, a warm dusk with the lamps lit, and night. The
+  village bar shows the time.
+- **"Pause everyone" looks different from night:** the village frosts over and every villager
+  sleeps until you resume. The button now says what it does.
+- **The personality box starts with the default text** (new villagers, the Mayor's Identity
+  page and Settings), so you can edit or add to it instead of starting from nothing. Left as it
+  is, it keeps following the default.
+
 ## 2026-10-24 — Villagers in the village
 
 - **Welcome new villagers.** The Mayor's ledger has a **Villagers** page: everyone in the

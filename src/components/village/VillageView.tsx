@@ -15,17 +15,21 @@ import ParchmentDialog from "./ParchmentDialog";
 import VillagerPortrait from "./VillagerPortrait";
 import { ROOMS } from "./rooms";
 import { useDeferredApprovals } from "./useDeferredApprovals";
+import { useVillageClock } from "./useVillageClock";
 
 export default function VillageView() {
   const router = useRouter();
   const { data, refresh, mayor } = useVillageData();
   const villagers = data.villagers;
+  // Real local time sets the light and puts villagers to bed (#100); the
+  // same tick fades speech bubbles.
+  const { now: clock, time, phase, night } = useVillageClock(data.bedtime, data.wakeTime);
 
   // Idle villagers stroll between hangouts (plaza, market, gates, home…), each
   // on their own timer: a first walk within a few seconds, then every 20–50 s.
   // Working, waiting and sleeping keep a villager at their building.
   const [strolls, setStrolls] = useState<Record<number, string | null>>({});
-  const idleIds = villagers.filter((v) => villagerMood(snapshotOf(v, data.paused)) === "idle").map((v) => v.id);
+  const idleIds = villagers.filter((v) => villagerMood(snapshotOf(v, data.paused, night)) === "idle").map((v) => v.id);
   const idleKey = idleIds.join(",");
   useEffect(() => {
     const ids = idleKey ? idleKey.split(",").map(Number) : [];
@@ -43,13 +47,6 @@ export default function VillageView() {
     }
     return () => timers.forEach(clearTimeout);
   }, [idleKey]);
-
-  // Speech bubbles show the last thing said, briefly, then fade.
-  const [clock, setClock] = useState(() => Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setClock(Date.now()), 5000);
-    return () => clearInterval(t);
-  }, []);
 
   // Who you're talking to, whose cottage to visit, and outdoor dialogs.
   const [talkingTo, setTalkingTo] = useState<number | null>(null);
@@ -109,7 +106,7 @@ export default function VillageView() {
 
   // Where each villager is headed, and what the village shows of them.
   const plans = villagers.map((v) => {
-    const mood = villagerMood(snapshotOf(v, data.paused));
+    const mood = villagerMood(snapshotOf(v, data.paused, night));
     const home = VILLAGE.places.find((p) => p.id === MOOD_PLACE[mood]) ?? VILLAGE.places[0];
     const stroll = mood === "idle" ? strolls[v.id] : null;
     const target = stroll ?? home.door;
@@ -136,8 +133,11 @@ export default function VillageView() {
     onClick: () => talkTo(v.id),
   }));
 
-  const summary =
-    plans.length === 0
+  const summary = data.paused
+    ? "❄ Everyone is paused — nothing runs until you resume."
+    : night && plans.every((p) => p.mood === "asleep")
+      ? `🌙 The village is asleep until ${data.wakeTime}. You can still knock and talk.`
+      : plans.length === 0
       ? "The village is quiet."
       : plans.length === 1
         ? moodLabel(plans[0].mood, plans[0].v.name, plans[0].strolling)
@@ -157,6 +157,8 @@ export default function VillageView() {
         spentToday={data.spentToday}
         unread={data.unread}
         paused={data.paused}
+        time={time}
+        phase={phase}
         onShowApprovals={() => setDeferred([])}
         onTogglePause={togglePause}
         onShowMail={() => openAction("mail.open")}
@@ -164,7 +166,7 @@ export default function VillageView() {
 
       <SceneView
         scene={VILLAGE}
-        night={data.paused}
+        light={data.paused ? "frozen" : phase}
         labels="signs"
         onPlace={openPlace}
         hints={

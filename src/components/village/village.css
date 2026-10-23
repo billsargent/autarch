@@ -142,11 +142,27 @@
     animation: village-float 1.6s ease-in-out infinite;
   }
 
-  .village-night {
+  /* The light over a scene: time of day (#100), or frozen while paused. */
+  .village-light-dawn {
+    background: linear-gradient(#f2a3a0, #ffd9a8);
+    mix-blend-mode: multiply;
+    opacity: 0.32;
+  }
+  .village-light-dusk {
+    background: linear-gradient(#6b4a8c, #e0855a);
+    mix-blend-mode: multiply;
+    opacity: 0.45;
+  }
+  .village-light-night {
     background: #1d2340;
     mix-blend-mode: multiply;
     opacity: 0.72;
-    transition: opacity 1.2s;
+  }
+  .village-light-frozen {
+    background: #c9dcf2;
+    mix-blend-mode: color;
+    opacity: 0.85;
+    box-shadow: inset 0 0 120px 30px rgba(220, 236, 255, 0.85);
   }
   .village-lamp {
     background: radial-gradient(circle, rgba(255, 196, 110, 0.55), rgba(255, 196, 110, 0) 70%);

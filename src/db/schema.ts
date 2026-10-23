@@ -250,5 +250,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   cacheHitInputPricePerMTok: real("cache_hit_input_price_per_mtok").notNull().default(0.0028),
   // What the whole town may spend per day, in USD; empty = no town cap (#60).
   townDailyBudgetUsd: real("town_daily_budget_usd"),
+  // Day and night (#100): local "HH:MM". At night no autonomous work starts.
+  bedtime: text("bedtime").notNull().default("22:00"),
+  wakeTime: text("wake_time").notNull().default("07:00"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

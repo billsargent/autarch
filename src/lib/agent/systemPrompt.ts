@@ -7,6 +7,7 @@ import { workspaceSkillsDir } from "./config";
 import { SKILL_PROMPT_CHARS, SKILLS_IN_PROMPT } from "./limits";
 import type { AgentSettingsRow } from "./settingsStore";
 import { DEFAULT_PERSONA } from "./persona";
+import { isNight } from "./daynight";
 import type { AgentRow } from "./agents";
 
 
@@ -166,6 +167,9 @@ NOTIFICATIONS
       : "",
     settings.autonomyMode === "unrestricted"
       ? `⚠️ UNRESTRICTED MODE IS ACTIVE — the human has disabled all approvals and safety gates for risky testing. Every tool call will execute immediately with no approval, including destructive, secret-reading, and framework-modifying actions. The global Pause and hourly action cap still apply. You are fully responsible.`
+      : "",
+    isNight(new Date(), settings.bedtime, settings.wakeTime)
+      ? `🌙 It's night in the village (${settings.bedtime}–${settings.wakeTime}). You were asleep; the human knocked to talk. Keep it brief and don't start any work of your own until morning.`
       : "",
     settings.humanAtKeyboard
       ? `👤 HUMAN AT KEYBOARD — the operator is physically present at the machine right now. You may coordinate interactive tests with them (e.g. ask them to press keys, observe a screen, or click something and report back). Ask via chat or notify_human; never assume they'll do anything.`
