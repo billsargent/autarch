@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS conversations (
   title TEXT NOT NULL DEFAULT 'New session',
   summary TEXT,
   compacted_through_id INTEGER,
+  chat_mode TEXT NOT NULL DEFAULT 'agentic',
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   updated_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
@@ -219,6 +220,14 @@ if (!globalForDb.__agentLabSqlite) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN work_window_prompt TEXT");
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN focused_chat_prompt TEXT");
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN truncation_message TEXT");
+  }
+  // Chat mode moved from a global setting to each conversation. Backfill from
+  // the old global value so no existing conversation silently changes mode.
+  if (!existingCols("conversations").includes("chat_mode")) {
+    sqlite.exec("ALTER TABLE conversations ADD COLUMN chat_mode TEXT NOT NULL DEFAULT 'agentic'");
+    sqlite.exec(
+      "UPDATE conversations SET chat_mode = COALESCE((SELECT chat_mode FROM agent_settings ORDER BY id LIMIT 1), 'agentic')",
+    );
   }
   // Clean up stale FK references (conversations deleted without cascade).
   sqlite.exec("UPDATE jobs SET conversation_id = NULL WHERE conversation_id IS NOT NULL AND conversation_id NOT IN (SELECT id FROM conversations)");

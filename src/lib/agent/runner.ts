@@ -8,6 +8,7 @@ import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, executeTool } from "./tools";
 import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
+import { isChatMode, resolveToolAccess } from "./chatMode";
 
 type ChatMessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
@@ -123,7 +124,13 @@ export async function ensureConversation(conversationId?: number | null) {
     const rows = await db.select().from(conversations).where(eq(conversations.id, conversationId));
     if (rows.length) return rows[0];
   }
-  const inserted = await db.insert(conversations).values({ title: "New session" }).returning();
+  // New conversations start in the global default chat mode; after that each
+  // conversation keeps its own.
+  const { chatMode } = await getSettings();
+  const inserted = await db
+    .insert(conversations)
+    .values({ title: "New session", chatMode: isChatMode(chatMode) ? chatMode : "agentic" })
+    .returning();
   return inserted[0];
 }
 
@@ -326,38 +333,41 @@ export async function runAgentTurn(opts: {
     const maxSteps = isWorkWindow
       ? Math.max(settings.maxAgentSteps, Math.ceil(maxDurationMinutes * 2))
       : Math.max(1, settings.maxAgentSteps);
+    const tools = getEnabledToolDefinitions(settings.enabledTools as string[]);
+    // Direct user chat in a conversation-mode conversation: we DON'T expose
+    // tools at all (a tool call becomes impossible), and toolsForbidden refuses
+    // any call that still reaches execution. Each conversation's own toggle is
+    // the single explicit control. Scheduled, approval, and self-directed turns
+    // always keep tools.
+    const isDirectChat = Boolean(opts.userMessage) && !opts.jobId && !opts.trigger;
+    const { toolsAvailable, toolsForbidden } = resolveToolAccess({
+      isDirectChat,
+      chatMode: conversation.chatMode,
+      toolCount: tools.length,
+    });
     const systemPrompt = await buildSystemPrompt(settings, {
       trigger,
       jobId: opts.jobId ?? null,
       conversationId,
       maxDurationMinutes,
       maxSteps,
+      toolsAvailable,
     });
-    const tools = getEnabledToolDefinitions(settings.enabledTools as string[]);
 
     const historyRows = await loadHistory(conversationId);
     const built = await buildPromptMessages({ conversationId, rows: historyRows, settings, client });
     const apiMessages: ChatMessageParam[] = [{ role: "system", content: systemPrompt }, ...built];
-    // Direct user chat: in conversation mode we DON'T expose tools at all (a tool
-    // call becomes impossible); in agentic mode tools are always "auto" — the
-    // chat-mode toggle is the single explicit control. Scheduled, approval, and
-    // self-directed turns always keep tools.
-    const isDirectChat = Boolean(opts.userMessage) && !opts.jobId && !opts.trigger;
-    const conversationMode = isDirectChat && settings.chatMode === "conversation";
-    const toolsAvailable = tools.length > 0 && !conversationMode;
-    // Hard guarantee: in conversation mode, no tool call is ever executed.
-    const toolsForbidden = conversationMode;
     onEvent?.({
       type: "session_start",
       sessionId: session.id,
       toolsAvailable,
       model: settings.modelName,
-      chatMode: settings.chatMode,
+      chatMode: conversation.chatMode,
       toolsCount: tools.length,
     });
     if (process.env.DEBUG) {
       console.log(
-        `[turn] trigger=${opts.trigger ?? (opts.jobId ? "scheduled" : "chat")} chatMode=${settings.chatMode} model=${settings.modelName} tools=${tools.length} available=${toolsAvailable} conversationDirect=${conversationMode}`,
+        `[turn] trigger=${opts.trigger ?? (opts.jobId ? "scheduled" : "chat")} chatMode=${conversation.chatMode} model=${settings.modelName} tools=${tools.length} available=${toolsAvailable} forbidden=${toolsForbidden}`,
       );
     }
     let terminated = false;

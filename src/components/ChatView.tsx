@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationRow, MessageRow, ToolExecutionRow } from "@/lib/agent/clientTypes";
+import type { ChatMode } from "@/lib/agent/chatMode";
 import ChatComposer from "./ChatComposer";
 import { MessageList } from "./MessageList";
 
@@ -62,14 +63,15 @@ export default function ChatView() {
   const [liveStatusByConvo, setLiveStatusByConvo] = useState<Record<number, string | null>>({});
   const [runningByConvo, setRunningByConvo] = useState<Record<number, boolean>>({});
   const [unreadByConvo, setUnreadByConvo] = useState<Record<number, number>>({});
-  const [chatMode, setChatMode] = useState<"agentic" | "conversation">("agentic");
   const [modeError, setModeError] = useState<string | null>(null);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const loadSeq = useRef(0);
   const lastActiveRef = useRef<number | null>(null);
-  const modeToggleInFlight = useRef(false);
+  // Chat-mode switches still being saved, by conversation id, so a sidebar poll
+  // that started before the save can't flip the toggle back.
+  const pendingModes = useRef(new Map<number, ChatMode>());
   const lastMsgIdRef = useRef(0);
   const oldestLoadedRef = useRef<number | null>(null);
 
@@ -80,6 +82,10 @@ export default function ChatView() {
   useEffect(() => {
     lastActiveRef.current = activeId;
   }, [activeId]);
+
+  // Chat mode belongs to each conversation (new ones start in the default set
+  // in Settings).
+  const chatMode: ChatMode = conversations.find((c) => c.id === activeId)?.chatMode ?? "agentic";
 
   // Live console state for the currently-viewed conversation.
   const live = activeId ? liveByConvo[activeId] || [] : [];
@@ -97,6 +103,8 @@ export default function ChatView() {
       const created = await fetch("/api/conversations", { method: "POST" }).then((r) => r.json());
       list = [created.conversation];
     }
+    const pending = pendingModes.current;
+    if (pending.size) list = list.map((c) => (pending.has(c.id) ? { ...c, chatMode: pending.get(c.id)! } : c));
     setConversations(list);
     setActiveId((prev) => prev ?? list[0]?.id ?? null);
     const seen = readLastSeen();
@@ -118,22 +126,6 @@ export default function ChatView() {
     const t = setTimeout(loadConversations, 0);
     return () => clearTimeout(t);
   }, [loadConversations]);
-
-  // Load the global chat mode so the header toggle reflects reality, and reconcile
-  // periodically so a change made in Settings (or another tab) shows up here.
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const d = await fetch("/api/settings").then((r) => r.json());
-        if (!modeToggleInFlight.current && d.settings?.chatMode) setChatMode(d.settings.chatMode);
-      } catch {
-        /* ignore */
-      }
-    };
-    load();
-    const id = setInterval(load, 30000);
-    return () => clearInterval(id);
-  }, []);
 
   // Periodically refresh the sidebar so background work started by jobs (running
   // dots, unread badges, ordering) shows up even when you're not sending.
@@ -512,26 +504,30 @@ export default function ChatView() {
   }
 
   async function toggleChatMode() {
+    if (!activeId) return;
+    const id = activeId;
     const prev = chatMode;
-    const next: "agentic" | "conversation" = prev === "agentic" ? "conversation" : "agentic";
+    const next: ChatMode = prev === "agentic" ? "conversation" : "agentic";
+    const setMode = (mode: ChatMode) =>
+      setConversations((list) => list.map((c) => (c.id === id ? { ...c, chatMode: mode } : c)));
     setModeError(null);
-    setChatMode(next);
-    modeToggleInFlight.current = true;
+    setMode(next);
+    pendingModes.current.set(id, next);
     try {
-      const res = await fetch("/api/settings", {
-        method: "PUT",
+      const res = await fetch(`/api/conversations/${id}`, {
+        method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ chatMode: next }),
       });
       if (!res.ok) {
-        setChatMode(prev); // revert — the server didn't accept it
-        setModeError("Could not switch chat mode. Check Settings and try again.");
+        setMode(prev); // revert — the server didn't accept it
+        setModeError("Could not switch this conversation's chat mode. Try again.");
       }
     } catch {
-      setChatMode(prev);
+      setMode(prev);
       setModeError("Could not reach the server to switch chat mode.");
     } finally {
-      modeToggleInFlight.current = false;
+      pendingModes.current.delete(id);
     }
   }
 
@@ -585,6 +581,11 @@ export default function ChatView() {
                     {running && (
                       <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 align-middle" />
                     )}
+                    {c.chatMode === "conversation" && (
+                      <span className="mr-1" title="Conversation mode — no tools">
+                        💬
+                      </span>
+                    )}
                     {c.title || "New session"}
                   </button>
                 )}
@@ -634,12 +635,13 @@ export default function ChatView() {
             )}
             <button
               onClick={toggleChatMode}
+              disabled={!activeId}
               title={
                 chatMode === "agentic"
-                  ? "Agentic mode — may use tools. Click to switch to conversation mode."
-                  : "Conversation mode — no tools. Click to switch to agentic mode."
+                  ? "This conversation is agentic — the agent may use tools. Click to switch this conversation to conversation mode."
+                  : "This conversation is in conversation mode — no tools. Click to switch this conversation to agentic mode."
               }
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
                 chatMode === "agentic"
                   ? "border-cyan-700 bg-cyan-950/40 text-cyan-300 hover:bg-cyan-900/40"
                   : "border-neutral-700 bg-neutral-900 text-neutral-300 hover:bg-neutral-800"

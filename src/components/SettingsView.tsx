@@ -190,10 +190,10 @@ export default function SettingsView() {
           <div className="mt-4 border-t border-neutral-800 pt-3">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold text-neutral-300">Chat mode</p>
+                <p className="text-xs font-semibold text-neutral-300">Default chat mode for new conversations</p>
                 <p className="mt-0.5 text-[11px] text-neutral-500">
-                  Conversation mode answers without tools; agentic mode may use tools for tasks. Scheduled work is
-                  always agentic.
+                  Conversation mode answers without tools; agentic mode may use tools for tasks. Each conversation
+                  keeps its own mode — switch it from the chat header. Scheduled work is always agentic.
                 </p>
               </div>
               <div className="flex shrink-0 rounded-lg border border-neutral-700 bg-neutral-950 p-0.5 text-[11px]">

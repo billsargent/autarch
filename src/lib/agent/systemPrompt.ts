@@ -12,6 +12,9 @@ export interface PromptScope {
   conversationId?: number | null;
   maxDurationMinutes?: number;
   maxSteps?: number;
+  // Whether this turn exposes tools (false for a direct chat in a
+  // conversation-mode conversation). Defaults to true.
+  toolsAvailable?: boolean;
 }
 
 export async function buildSystemPrompt(settings: AgentSettingsRow, scope: PromptScope = {}): Promise<string> {
@@ -146,7 +149,7 @@ NOTIFICATIONS
     settings.humanAtKeyboard
       ? `👤 HUMAN AT KEYBOARD — the operator is physically present at the machine right now. You may coordinate interactive tests with them (e.g. ask them to press keys, observe a screen, or click something and report back). Ask via chat or notify_human; never assume they'll do anything.`
       : "",
-    settings.chatMode !== "conversation"
+    scope.toolsAvailable !== false
       ? `🤖 AGENTIC MODE IS ACTIVE — tools are available but think before you call them: answer small-talk/quick-questions directly; use tools only when you need system state, files, or to act.`
       : "",
   ]

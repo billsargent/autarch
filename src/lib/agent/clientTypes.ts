@@ -41,6 +41,7 @@ export interface JournalEntryRow {
 export interface ConversationRow {
   id: number;
   title: string;
+  chatMode: "agentic" | "conversation";
   createdAt: string;
   updatedAt: string;
   running?: boolean;

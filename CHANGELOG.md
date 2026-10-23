@@ -3,6 +3,18 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — Chat mode is per conversation
+
+- The agentic / conversation switch now belongs to **each conversation** instead of being one
+  global setting. Toggling it in the chat header changes only the open conversation; others keep
+  their own mode, and conversation-mode chats are marked 💬 in the sidebar.
+- The Settings switch is now the **default mode for new conversations**.
+- Existing conversations are migrated to whatever the global mode was, so nothing changes until
+  you switch one.
+- The "no tools in conversation mode" guarantee is unchanged: tools are not offered, and any tool
+  call that still reaches execution is refused.
+- New test: `npm run test:chatmode`.
+
 ## 2026-08-05 — Truncation model alert + tool retries
 
 - **Tool retries**: new `toolRetries` setting (Settings → Limits, default 1). A failed tool call

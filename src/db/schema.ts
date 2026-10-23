@@ -11,6 +11,7 @@ export const conversations = sqliteTable("conversations", {
   title: text("title").notNull().default("New session"),
   summary: text("summary"),
   compactedThroughId: integer("compacted_through_id"),
+  chatMode: text("chat_mode", { enum: ["agentic", "conversation"] }).notNull().default("agentic"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

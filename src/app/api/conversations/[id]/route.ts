@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { conversations, messages, toolExecutions, workSessions } from "@/db/schema";
 import { asc, desc, eq, and, gt, lt, count } from "drizzle-orm";
+import { CHAT_MODES, isChatMode } from "@/lib/agent/chatMode";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -74,11 +75,26 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
-  const title = typeof body.title === "string" ? body.title.trim() : "";
-  if (!title) return NextResponse.json({ error: "title is required" }, { status: 400 });
+  const patch: Partial<typeof conversations.$inferInsert> = {};
+  if ("title" in body) {
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    if (!title) return NextResponse.json({ error: "title must be a non-empty string" }, { status: 400 });
+    // Renaming bumps updatedAt (sidebar order); a mode switch alone does not.
+    patch.title = title.slice(0, 200);
+    patch.updatedAt = new Date();
+  }
+  if ("chatMode" in body) {
+    if (!isChatMode(body.chatMode)) {
+      return NextResponse.json({ error: `chatMode must be one of: ${CHAT_MODES.join(", ")}` }, { status: 400 });
+    }
+    patch.chatMode = body.chatMode;
+  }
+  if (!Object.keys(patch).length) {
+    return NextResponse.json({ error: "title or chatMode is required" }, { status: 400 });
+  }
   const updated = await db
     .update(conversations)
-    .set({ title: title.slice(0, 200), updatedAt: new Date() })
+    .set(patch)
     .where(eq(conversations.id, Number(id)))
     .returning();
   return updated.length ? NextResponse.json({ conversation: updated[0] }) : NextResponse.json({ error: "Not found" }, { status: 404 });
