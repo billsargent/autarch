@@ -10,7 +10,9 @@ import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, execute
 import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
 import { isChatMode, resolveToolAccess } from "./chatMode";
 import { HEARTBEAT_MS, TurnBusyError, claimTurn, heartbeat, isCancelRequested } from "./turnLock";
-import { agentModel, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
+import { BudgetError, actionsInLastHour, agentModel, budgetProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
+
+export { BudgetError } from "./agents";
 
 export { TurnBusyError } from "./turnLock";
 
@@ -182,15 +184,6 @@ async function loadHistory(conversationId: number) {
   return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.id));
 }
 
-async function countRecentActions(): Promise<number> {
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const rows = await db
-    .select({ count: dsql<number>`count(*)` })
-    .from(toolExecutions)
-    .where(and(gte(toolExecutions.requestedAt, oneHourAgo), inArray(toolExecutions.status, ["success", "approved"])));
-  return Number(rows[0]?.count ?? 0);
-}
-
 export type SessionTrigger = "chat" | "approval" | "scheduled" | "report";
 
 // Progress events emitted (optionally) during a turn so the UI can stream a
@@ -332,6 +325,10 @@ export async function runAgentTurn(opts: {
   if (agent.status === "dismissed") throw new Error(`${agent.name} has left the village, so they can't take part any more.`);
   const settings = settingsFor(agent, await getSettings());
   const villagerPaused = agent.status === "paused";
+  // Over today's budget (the villager's or the town's): refuse before
+  // anything is written (#60).
+  const overBudget = budgetProblem(agent, settings);
+  if (overBudget) throw new BudgetError(overBudget);
   const overrides = buildOverrides(settings);
   const trigger: SessionTrigger = opts.trigger ?? (opts.jobId ? "scheduled" : "chat");
   const maxDurationMinutes = opts.maxDurationMinutes ?? settings.maxSessionMinutes;
@@ -428,6 +425,7 @@ export async function runAgentTurn(opts: {
     }
     let terminated = false;
     let cancelled = false;
+    let budgetStopped = false;
     let ranTools = false;
     let lastStepHadTools = false;
     let lastContentEmpty = true;
@@ -452,6 +450,16 @@ export async function runAgentTurn(opts: {
           role: "event",
           content: `[CANCELLED] The human stopped this turn. No further work will run.`,
         });
+        newMessages.push(row);
+        break;
+      }
+
+      // A turn that has spent the day's budget stops here (#60).
+      const spentOut = step > 0 ? budgetProblem(agent, settings) : null;
+      if (spentOut) {
+        terminated = true;
+        budgetStopped = true;
+        const row = await insertMessage({ conversationId, role: "event", content: `[BUDGET] ${spentOut} This turn stopped here.` });
         newMessages.push(row);
         break;
       }
@@ -508,6 +516,18 @@ export async function runAgentTurn(opts: {
       accumulateUsage(session, usage, inputPrice, outputPrice, cacheHitPrice);
       const callCost = usageCost(usage, inputPrice, outputPrice, cacheHitPrice);
       session.stepsUsed = step + 1;
+      // Spending so far, written as it happens, so budgets (and the village)
+      // see a turn's cost while it runs.
+      await db
+        .update(workSessions)
+        .set({
+          stepsUsed: session.stepsUsed,
+          promptTokens: session.promptTokens,
+          completionTokens: session.completionTokens,
+          totalTokens: session.totalTokens,
+          costUsd: Number(session.costUsd.toFixed(6)),
+        })
+        .where(eq(workSessions.id, session.id));
 
       const assistantRow = await insertMessage({
         conversationId,
@@ -615,10 +635,14 @@ export async function runAgentTurn(opts: {
           output = "Turn cancelled by the human before this action ran.";
           resultContent = `CANCELLED: ${output}`;
         } else {
-          const recentCount = await countRecentActions();
-          if (recentCount >= settings.maxActionsPerHour) {
+          // The town's hourly cap, and the villager's own (#60).
+          const townLimitHit = actionsInLastHour(undefined, execution.id) >= settings.maxActionsPerHour;
+          const ownLimitHit = agent.maxActionsPerHour != null && actionsInLastHour(agent.id, execution.id) >= agent.maxActionsPerHour;
+          if (townLimitHit || ownLimitHit) {
             status = "rate_limited";
-            output = `Rate limit reached (${settings.maxActionsPerHour}/hour). Try again later or ask the human to raise the limit in Settings.`;
+            output = ownLimitHit
+              ? `${agent.name}'s limit is reached (${agent.maxActionsPerHour} actions/hour). Try again later or ask the human to raise it.`
+              : `The village's rate limit is reached (${settings.maxActionsPerHour}/hour). Try again later or ask the human to raise the limit in Settings.`;
             resultContent = `RATE LIMITED: ${output}`;
           } else {
             const auto = autonomyAllowsAuto(mode, risk.risk);
@@ -788,7 +812,7 @@ export async function runAgentTurn(opts: {
     await finishSession(
       session,
       cancelled || terminated ? "terminated" : "completed",
-      cancelled ? "cancelled by human" : terminated ? "time limit reached" : undefined,
+      cancelled ? "cancelled by human" : budgetStopped ? "budget reached" : terminated ? "time limit reached" : undefined,
     );
   } catch (err) {
     await finishSession(session, "failed", err instanceof Error ? err.message : String(err));

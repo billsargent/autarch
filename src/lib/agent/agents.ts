@@ -237,3 +237,45 @@ export function villagerStates(ids: number[], now = new Date()): Map<number, Vil
   }
   return out;
 }
+
+// --- budgets (#60) ------------------------------------------------------------------
+
+// A turn refused (or stopped) because a daily budget is spent.
+export class BudgetError extends Error {
+  status = 429;
+}
+
+const usd = (n: number) => `$${n.toFixed(2)}`;
+
+// Why this villager can't spend any more today, or null if they can.
+export function budgetProblem(agent: AgentRow, settings: AgentSettingsRow, now = new Date()): string | null {
+  if (agent.dailyBudgetUsd != null) {
+    const spent = spentToday(agent.id, now);
+    if (spent >= agent.dailyBudgetUsd) {
+      return `${agent.name} has spent today's budget (${usd(spent)} of ${usd(agent.dailyBudgetUsd)}). It starts again at midnight, or you can raise it in the Mayor's ledger.`;
+    }
+  }
+  if (settings.townDailyBudgetUsd != null) {
+    const spent = townSpentToday(now);
+    if (spent >= settings.townDailyBudgetUsd) {
+      return `The village has spent today's budget (${usd(spent)} of ${usd(settings.townDailyBudgetUsd)}). It starts again at midnight, or you can raise it in the Mayor's ledger.`;
+    }
+  }
+  return null;
+}
+
+// Tool actions in the last hour: one villager's, or the whole village's. The
+// call being checked is already recorded (as it starts), so it's left out.
+export function actionsInLastHour(agentId?: number, excludeId = 0, now = Date.now()): number {
+  const since = Math.floor(now / 1000) - 3600;
+  const row = (
+    agentId
+      ? sqlite
+          .prepare("SELECT COUNT(*) AS n FROM tool_executions WHERE agent_id = ? AND requested_at >= ? AND status IN ('success', 'approved') AND id <> ?")
+          .get(agentId, since, excludeId)
+      : sqlite
+          .prepare("SELECT COUNT(*) AS n FROM tool_executions WHERE requested_at >= ? AND status IN ('success', 'approved') AND id <> ?")
+          .get(since, excludeId)
+  ) as { n: number };
+  return row.n;
+}

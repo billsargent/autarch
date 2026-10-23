@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { jobs, workSessions, conversations } from "@/db/schema";
 import { eq, and, gte, lte, ne, inArray, asc, desc, count } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "@/lib/agent/settingsStore";
-import { TurnBusyError, runAgentTurn, type SessionTrigger } from "@/lib/agent/runner";
+import { BudgetError, TurnBusyError, runAgentTurn, type SessionTrigger } from "@/lib/agent/runner";
 import { nextCronRun } from "@/lib/agent/cron";
 import { reapStaleSessions } from "@/lib/agent/sessions";
 import { requestCancel } from "@/lib/agent/turnLock";
@@ -246,6 +246,10 @@ async function runDueJobs() {
           .set({ lastStatus: "waiting", lastError: "Its conversation was busy; it will run when it's free.", updatedAt: new Date() })
           .where(eq(jobs.id, job.id));
         console.log(`[worker] job #${job.id} "${job.name}" waiting: its conversation is busy`);
+      } else if (err instanceof BudgetError) {
+        // Over budget: skip this run; it comes round again at its next time.
+        await db.update(jobs).set({ lastStatus: "skipped", lastError: msg, updatedAt: new Date() }).where(eq(jobs.id, job.id));
+        console.log(`[worker] job #${job.id} "${job.name}" skipped: ${msg}`);
       } else {
         await db
           .update(jobs)

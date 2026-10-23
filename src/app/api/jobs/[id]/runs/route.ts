@@ -5,6 +5,7 @@ import { and, eq, desc } from "drizzle-orm";
 import { runAgentTurn } from "@/lib/agent/runner";
 import { getSettings } from "@/lib/agent/settingsStore";
 import { TurnBusyError, isConversationBusy } from "@/lib/agent/turnLock";
+import { BudgetError, budgetProblem, getAgent } from "@/lib/agent/agents";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .where(and(eq(workSessions.jobId, jobId), eq(workSessions.status, "running")))
     .limit(1);
   if (runningOfJob.length) return NextResponse.json({ error: "This job is already running." }, { status: 409 });
+  const over = budgetProblem(await getAgent(job[0].agentId), settings);
+  if (over) return NextResponse.json({ error: over }, { status: 429 });
   if (job[0].conversationId && isConversationBusy(job[0].conversationId)) {
     return NextResponse.json(
       { error: "The agent is already working in this job's conversation. Try again when it's done." },
@@ -67,7 +70,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     .catch(async (err) => {
       const msg = err instanceof Error ? err.message : String(err);
       // Lost the race for a busy conversation: nothing ran.
-      const lastStatus = err instanceof TurnBusyError ? "skipped" : "failed";
+      const lastStatus = err instanceof TurnBusyError || err instanceof BudgetError ? "skipped" : "failed";
       await db.update(jobs).set({ lastStatus, lastError: msg, updatedAt: new Date() }).where(eq(jobs.id, jobId));
     });
 

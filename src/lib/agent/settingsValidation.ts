@@ -9,7 +9,7 @@ import { PROJECT_ROOT } from "./config";
 
 type Rule =
   | { kind: "int"; min: number; max: number }
-  | { kind: "number"; min: number; max: number }
+  | { kind: "number"; min: number; max: number; nullable?: boolean }
   | { kind: "bool" }
   | { kind: "enum"; values: readonly string[] }
   | { kind: "text"; max: number; nullable?: boolean; min?: number }
@@ -48,6 +48,7 @@ const RULES: Record<string, Rule> = {
   inputPricePerMTok: { kind: "number", min: 0, max: 1000 },
   outputPricePerMTok: { kind: "number", min: 0, max: 1000 },
   cacheHitInputPricePerMTok: { kind: "number", min: 0, max: 1000 },
+  townDailyBudgetUsd: { kind: "number", min: 0, max: 10000, nullable: true },
   allowNetworkFetch: { kind: "bool" },
   paused: { kind: "bool" },
   humanAtKeyboard: { kind: "bool" },
@@ -99,6 +100,11 @@ export function validateSettingsPatch(
     switch (rule.kind) {
       case "int":
       case "number": {
+        // An empty optional number (e.g. no town budget) clears it.
+        if (rule.kind === "number" && rule.nullable && (value === null || value === "")) {
+          clean[key] = null;
+          break;
+        }
         const n = typeof value === "number" ? value : typeof value === "string" && value.trim() !== "" ? Number(value) : NaN;
         if (!Number.isFinite(n)) return fail("must be a number.");
         if (rule.kind === "int" && !Number.isInteger(n)) return fail("must be a whole number.");

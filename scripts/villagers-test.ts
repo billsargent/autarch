@@ -162,6 +162,61 @@ async function main() {
   check("…and nobody can talk to them any more", refused.includes("left the village"), true);
   check("…but what they did stays on record", (await db.select().from(agents).where(eq(agents.id, tom.id)))[0].status, "dismissed");
 
+  // --- budgets (#60) -------------------------------------------------------------------
+  const { workSessions } = await import("../src/db/schema");
+  const chatRoute = await import("../src/app/api/chat/route");
+  const ann = (await add({ name: "Ann", dailyBudgetUsd: 0.000001 })).agent;
+  fake.script.push(
+    { tools: [{ name: "list_directory", args: { path: "." } }] },
+    { tools: [{ name: "list_directory", args: { path: "." } }] },
+    { text: "never reached" },
+  );
+  const { conversationId: annChat } = await runAgentTurn({ userMessage: "busy day?", agentId: ann.id });
+  const annMsgs = await db.select().from((await import("../src/db/schema")).messages).where(eq((await import("../src/db/schema")).messages.conversationId, annChat));
+  check("a turn that spends the day's budget stops at the next step", annMsgs.some((m) => m.content?.startsWith("[BUDGET] Ann has spent today's budget")), true);
+  const annSession = (await db.select().from(workSessions).where(eq(workSessions.conversationId, annChat)))[0];
+  check("…recorded as stopped for the budget", [annSession.status, annSession.reason], ["terminated", "budget reached"]);
+  check("…and what she spent counts towards today", villagers.spentToday(ann.id) > 0, true);
+  const before = annMsgs.length;
+  let budgetErr: unknown = null;
+  try {
+    await runAgentTurn({ conversationId: annChat, userMessage: "one more?" });
+  } catch (err) {
+    budgetErr = err;
+  }
+  check("her next turn is refused with the reason", budgetErr instanceof villagers.BudgetError && /spent today's budget/.test((budgetErr as Error).message), true);
+  check("…before anything is written", (await db.select().from((await import("../src/db/schema")).messages).where(eq((await import("../src/db/schema")).messages.conversationId, annChat))).length, before);
+  const chatRefused = await chatRoute.POST(req("/api/chat", "POST", { conversationId: annChat, message: "hi" }));
+  check("chat says so straight away (429)", [chatRefused.status, (await chatRefused.json()).error?.includes("starts again at midnight")], [429, true]);
+
+  // A villager's own hourly action limit.
+  const bea = (await add({ name: "Bea", maxActionsPerHour: 1 })).agent;
+  fake.script.length = 0; // Ann's turn stopped before using all its replies
+  fake.script.push(
+    {
+      tools: [
+        { name: "list_directory", args: { path: "." } },
+        { name: "list_directory", args: { path: "." } },
+      ],
+    },
+    { text: "ok" },
+  );
+  const { conversationId: beaChat } = await runAgentTurn({ userMessage: "look twice", agentId: bea.id });
+  const beaCalls = (await db.select().from(toolExecutions).where(eq(toolExecutions.conversationId, beaChat))).map((e) => e.status);
+  check("a villager's own hourly limit stops their extra actions", beaCalls, ["success", "rate_limited"]);
+
+  // The town's budget covers everyone.
+  await settingsRoute.PUT(req("/api/settings", "PUT", { townDailyBudgetUsd: 0.000001 }));
+  let townErr = "";
+  try {
+    await runAgentTurn({ userMessage: "hello", agentId: bea.id });
+  } catch (err) {
+    townErr = err instanceof Error ? err.message : "";
+  }
+  check("when the village's budget is spent, everyone stops", townErr.startsWith("The village has spent today's budget"), true);
+  await settingsRoute.PUT(req("/api/settings", "PUT", { townDailyBudgetUsd: "" }));
+  check("clearing the town budget removes the cap", (await getSettings()).townDailyBudgetUsd, null);
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

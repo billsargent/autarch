@@ -3,6 +3,10 @@ import { runAgentTurn, type AgentEvent } from "@/lib/agent/runner";
 import { isDeepSeekConfigured } from "@/lib/agent/deepseekClient";
 import { getSettings } from "@/lib/agent/settingsStore";
 import { isConversationBusy } from "@/lib/agent/turnLock";
+import { budgetProblem, getAgent } from "@/lib/agent/agents";
+import { db } from "@/db";
+import { conversations } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function POST(req: Request) {
   const settings = await getSettings();
@@ -17,6 +21,10 @@ export async function POST(req: Request) {
   if (!message || !message.trim()) {
     return NextResponse.json({ error: "message is required" }, { status: 400 });
   }
+  // Today's budget (#60): say so before starting. The runner checks again.
+  const [convo] = conversationId ? await db.select().from(conversations).where(eq(conversations.id, Number(conversationId))) : [];
+  const over = budgetProblem(await getAgent(convo?.agentId ?? (Number(agentId) || null)), settings);
+  if (over) return NextResponse.json({ error: over }, { status: 429 });
   // One turn per conversation (#18). The runner re-checks atomically when it
   // claims the conversation; this just answers early with a clear 409.
   if (conversationId && isConversationBusy(Number(conversationId))) {

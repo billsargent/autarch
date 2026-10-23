@@ -3,6 +3,17 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Budgets
+
+- **Daily budgets (#60).** Each villager can have a daily spending cap, and the village a
+  town-wide one. A villager over their budget (or a village over its budget) is refused with
+  the reason and when it resets; chat says so straight away, a scheduled job skips that run, and
+  a turn that crosses the line stops at its next step. Spending is recorded as each step happens,
+  so budgets see a turn's cost while it runs.
+- **Hourly action limits per villager,** on top of the town's.
+- **Fixed: the hourly action limit counted the action being checked,** so a limit of N allowed
+  only N − 1 actions.
+
 ## 2026-10-24 — Villagers, behind the scenes
 
 - **The village can have more than one villager (#55).** Each has a name, role, personality,
