@@ -10,13 +10,16 @@ interface ParchmentDialogProps {
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  // Fill the height, with no padding or scrolling of its own: for content that
+  // lays out its own scrolling areas (the chat).
+  tall?: boolean;
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 // A modal in the village style. Focus moves into it and stays there (Tab
 // wraps), Esc closes it, and focus returns to whatever opened it.
-export default function ParchmentDialog({ title, kicker, onClose, children, footer, wide }: ParchmentDialogProps) {
+export default function ParchmentDialog({ title, kicker, onClose, children, footer, wide, tall }: ParchmentDialogProps) {
   const titleId = useId();
   const boxRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -68,7 +71,7 @@ export default function ParchmentDialog({ title, kicker, onClose, children, foot
         aria-modal="true"
         aria-labelledby={titleId}
         className={`village-panel flex max-h-full w-full flex-col overflow-hidden rounded-lg border-4 border-[#3b2716] bg-[#f4ead5] text-[#3b2716] shadow-2xl ${
-          wide ? "max-w-3xl" : "max-w-lg"
+          tall ? "h-full max-w-5xl" : wide ? "max-w-3xl" : "max-w-lg"
         }`}
       >
         <div className="flex items-center gap-3 border-b-4 border-[#3b2716] bg-[#6b4a2e] px-4 py-2 text-[#f4ead5]">
@@ -82,7 +85,7 @@ export default function ParchmentDialog({ title, kicker, onClose, children, foot
             ✕
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+        <div className={tall ? "flex min-h-0 flex-1 flex-col" : "min-h-0 flex-1 overflow-y-auto p-4"}>{children}</div>
         {footer && <div className="flex flex-wrap items-center gap-2 border-t-2 border-[#d8c49a] bg-[#ead9b4] px-4 py-3">{footer}</div>}
       </div>
     </div>

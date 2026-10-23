@@ -27,6 +27,7 @@ export const TILESETS = {
   floor: { image: "village/tiles/ninja-floor.png", columns: 22, rows: 17 },
   wall: { image: "village/tiles/ninja-wall.png", columns: 10, rows: 11 },
   camp: { image: "village/tiles/ninja-camp.png", columns: 23, rows: 9 },
+  bed: { image: "village/tiles/ninja-bed.png", columns: 14, rows: 12 },
 } as const satisfies Record<string, Tileset>;
 
 export type TilesetId = keyof typeof TILESETS;
@@ -133,6 +134,10 @@ export const STAMPS = {
   book: s("camp", 7, 8),
   candle: s("camp", 13, 7),
   stumpSeat: s("camp", 3, 5),
+  hearth: s("camp", 12, 5, 2, 2),
+  // Ninja Adventure — beds
+  bedRed: s("bed", 0, 3, 2, 3),
+  bedBlueSingle: s("bed", 12, 3, 1, 2),
   plankFloor: s("floor", 17, 4),
   rimCornerBL: s("wall", 5, 4),
   rimCornerBR: s("wall", 9, 4),

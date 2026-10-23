@@ -37,8 +37,8 @@ export const VILLAGE_SCENE: SceneLayout = {
     {
       id: "cottages",
       label: "Cottages",
-      role: "Where agents rest — chat with them here",
-      href: "/",
+      role: "Where agents live — talk by the hearth, read the diary",
+      interior: "cottage",
       door: "cot",
       parts: [
         { stamp: "svHouseRed", col: 4, row: 18 },

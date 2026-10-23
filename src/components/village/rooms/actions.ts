@@ -8,4 +8,5 @@ export const ROOM_ACTIONS: Record<string, string[]> = {
   observatory: ["monitor.charts"],
   vault: ["usage.ledger", "usage.totals"],
   townhall: ["approvals.pending", "approvals.records"],
+  cottage: ["chat.open", "journal.open"],
 };

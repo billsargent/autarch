@@ -3,6 +3,22 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — The cottage
+
+- **The cottage (#95).** Click the cottages to go inside the agent's home.
+  - **The armchair by the hearth** is the full chat: every conversation (with running dots and
+    unread counts), new, rename and delete (with a confirmation), each conversation's own
+    agentic / just-talk mode, file upload, tool messages shown or hidden, live tool activity,
+    stop, and older messages as you scroll up. On a phone the conversation list becomes a picker.
+  - **The diary** is the journal: leave a note, mark entries done, delete them (with a
+    confirmation).
+- **"Full chat"** in the village's talk drawer opens the armchair. Rooms can be linked straight to
+  a piece of furniture with `?open=<action>`.
+- **Chat formatting reads well on parchment:** links, quotes, inline code and tables in the
+  village use the village colors.
+- The Chat and Journal pages now share their logic with the cottage (`useChat`, `useJournal`).
+  Deleting a journal entry on the old page now asks first.
+
 ## 2026-10-23 — Four more rooms
 
 - **The guard tower (#91):** the logbook is the activity log (filter by outcome, open any entry

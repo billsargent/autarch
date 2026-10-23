@@ -16,7 +16,7 @@ import { useDeferredApprovals } from "./useDeferredApprovals";
 // A building's interior: the room's art, its furniture as hotspots, and the
 // room's dialogs. The agent is shown here only when its real state puts it in
 // this building.
-export default function InteriorView({ sceneId }: { sceneId: string }) {
+export default function InteriorView({ sceneId, startAction }: { sceneId: string; startAction?: string }) {
   const scene = interiorManifest(sceneId)!;
   const Room = ROOMS[sceneId];
   const building = VILLAGE.places.find((p) => p.interior === sceneId);
@@ -27,7 +27,7 @@ export default function InteriorView({ sceneId }: { sceneId: string }) {
   const agentWhere = VILLAGE.places.find((p) => p.id === MOOD_PLACE[mood]);
 
   // Which furniture's dialogs are open; `opened` remounts the room UI each time.
-  const [action, setAction] = useState<string | null>(null);
+  const [action, setAction] = useState<string | null>(startAction ?? null);
   const [opened, setOpened] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deferred, setDeferred] = useDeferredApprovals();

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Markdown from "../Markdown";
 import { useConversation } from "./useConversation";
@@ -45,6 +46,13 @@ export default function TalkDrawer({ agentName, color, conversations, initialCon
       <header className="flex items-center gap-3 border-b-4 border-[#3b2716] bg-[#6b4a2e] px-4 py-3 text-[#f4ead5]">
         <span className="h-4 w-4 rounded-sm border-2 border-[#3b2716]" style={{ background: color }} />
         <h2 className="village-pixel flex-1 text-sm">Talking with {agentName}</h2>
+        <Link
+          href="/village/cottage?open=chat.open"
+          className="village-btn px-2 py-1 text-xs"
+          title="Every conversation, tool messages, uploads and live activity"
+        >
+          Full chat
+        </Link>
         <button onClick={onClose} className="village-btn px-2 py-1 text-xs" aria-label="Close">
           ✕
         </button>
@@ -82,7 +90,7 @@ export default function TalkDrawer({ agentName, color, conversations, initialCon
               <p className="village-pixel mb-1 text-[11px]" style={{ color }}>
                 {agentName}
               </p>
-              <Markdown>{m.content ?? ""}</Markdown>
+              <Markdown className="village-md">{m.content ?? ""}</Markdown>
             </div>
           ),
         )}

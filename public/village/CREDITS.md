@@ -28,10 +28,11 @@ this repository; get the full packs from their authors.
   - `tiles/ninja-floor.png` (`Backgrounds/Tilesets/Interior/TilesetInteriorFloor.png`)
   - `tiles/ninja-wall.png` (`Backgrounds/Tilesets/Interior/TilesetWallSimple.png`)
   - `tiles/ninja-camp.png` (`Backgrounds/Tilesets/tileset_camp.png`)
+  - `tiles/ninja-bed.png` (`Backgrounds/Tilesets/tileset_bed.png`)
   - `characters/*.png` (`Actor/Character/<Name>/SpriteSheet.png`)
 - Used for the town hall, workshop, market, shops, observatory, guard tower, vault, lamps, some
   trees and the villagers outside; and inside, for the floors, wall rims, furniture, crates,
-  barrels, chests, maps and lanterns.
+  barrels, chests, maps, lanterns, the hearth and the beds.
 
 ## Generated files
 

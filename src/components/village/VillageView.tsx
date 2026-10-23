@@ -83,7 +83,6 @@ export default function VillageView() {
       setAction(p.action);
       setOpened((n) => n + 1);
     }
-    else if (p.id === "cottages") setTalking(true);
     else if (p.href) router.push(p.href);
   }
 

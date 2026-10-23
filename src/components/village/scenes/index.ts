@@ -1,4 +1,5 @@
 import type { SceneLayout } from "../scene";
+import { COTTAGE_SCENE } from "./cottage";
 import { GUARDTOWER_SCENE } from "./guardtower";
 import { LIBRARY_SCENE } from "./library";
 import { OBSERVATORY_SCENE } from "./observatory";
@@ -17,6 +18,7 @@ export const INTERIORS: Record<string, SceneLayout> = {
   observatory: OBSERVATORY_SCENE,
   vault: VAULT_SCENE,
   townhall: TOWNHALL_SCENE,
+  cottage: COTTAGE_SCENE,
 };
 
 export const ALL_SCENES: SceneLayout[] = [VILLAGE_SCENE, ...Object.values(INTERIORS)];

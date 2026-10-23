@@ -160,3 +160,31 @@
     }
   }
 }
+
+/* Markdown on parchment (chat bubbles in the village). Outside the layers on
+   purpose: these must beat the dark-theme utility classes in Markdown.tsx. */
+.village-md a {
+  color: #2f5f9a;
+  text-decoration-color: #7a9cc4;
+}
+.village-md a:hover {
+  color: #1f4a7d;
+}
+.village-md blockquote {
+  color: #5a3d25;
+  border-color: #c9b27a;
+}
+.village-md hr {
+  border-color: #d8c49a;
+}
+.village-md :not(pre) > code {
+  background: #ead9b4;
+  color: #7a3a12;
+}
+.village-md thead {
+  background: #ead9b4;
+}
+.village-md th,
+.village-md td {
+  border-color: #c9b27a;
+}

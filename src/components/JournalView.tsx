@@ -1,15 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import type { JournalEntryRow } from "@/lib/agent/clientTypes";
-
-const CATEGORY_ICON: Record<string, string> = {
-  exploration: "🧭",
-  task: "✅",
-  reflection: "💭",
-  idea: "💡",
-  system: "🗒️",
-};
+import { JOURNAL_ICON as CATEGORY_ICON, useJournal } from "./data/useJournal";
 
 const STATUS_STYLE: Record<string, string> = {
   open: "bg-neutral-800 text-neutral-300",
@@ -19,50 +12,21 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 export default function JournalView() {
-  const [entries, setEntries] = useState<JournalEntryRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { entries, loaded, addNote: add, setStatus, remove: removeEntry } = useJournal();
+  const loading = !loaded;
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
 
-  const load = useCallback(async () => {
-    const res = await fetch("/api/journal").then((r) => r.json());
-    setEntries(res.entries || []);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    const first = setTimeout(load, 0);
-    const id = setInterval(load, 20000);
-    return () => {
-      clearTimeout(first);
-      clearInterval(id);
-    };
-  }, [load]);
-
   async function addNote() {
     if (!title.trim()) return;
-    await fetch("/api/journal", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title, body, category: "system", status: "open" }),
-    });
+    await add(title, body);
     setTitle("");
     setBody("");
-    load();
   }
 
-  async function setStatus(id: number, status: string) {
-    await fetch(`/api/journal/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
-    load();
-  }
-
-  async function remove(id: number) {
-    await fetch(`/api/journal/${id}`, { method: "DELETE" });
-    load();
+  async function remove(e: JournalEntryRow) {
+    if (!confirm(`Delete the journal entry "${e.title}"? This can't be undone.`)) return;
+    await removeEntry(e.id);
   }
 
   return (
@@ -128,7 +92,7 @@ export default function JournalView() {
                       </button>
                     )}
                     <button
-                      onClick={() => remove(e.id)}
+                      onClick={() => remove(e)}
                       className="rounded border border-neutral-700 px-1.5 py-0.5 text-[10px] text-red-400 hover:bg-neutral-800"
                     >
                       delete
