@@ -4,6 +4,7 @@ import { eq, and, gte, lte, ne, inArray, asc, desc, count } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "@/lib/agent/settingsStore";
 import { runAgentTurn, type SessionTrigger } from "@/lib/agent/runner";
 import { nextCronRun } from "@/lib/agent/cron";
+import { reapStaleSessions } from "@/lib/agent/sessions";
 
 // Standalone background scheduler for the agent. Run with: npm run worker
 // Polls the DB for due jobs, respects the human's global pause switch and
@@ -225,6 +226,9 @@ async function main() {
   }
   for (;;) {
     try {
+      // Clean up sessions left "running" by a crash, or nothing would ever run again.
+      const reaped = await reapStaleSessions();
+      if (reaped) console.log(`[worker] cleaned up ${reaped} interrupted session(s)`);
       await runDueJobs();
     } catch (err) {
       console.error("[worker] tick error:", err);

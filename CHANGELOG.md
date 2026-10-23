@@ -3,6 +3,31 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-23 — Safety fixes
+
+- **Package and service tools can no longer run injected commands (#2).** Names are checked against
+  Debian package and systemd unit naming rules, invalid ones are blocked before they reach the
+  approval queue, and the commands now run without a shell.
+- **Approvals need an explicit decision (#5).** A request without `"approved"` or `"denied"` is
+  rejected instead of counting as approval.
+- **Approvals are claimed atomically (#16),** so two clicks can't run a critical action twice.
+- **Approving while paused is refused (#17)** and the request stays waiting; it used to turn into a
+  permanent denial.
+- **Approval outcomes rewrite the right message (#15):** the tool result, not the agent's own text.
+- **A failing follow-up turn no longer makes a saved decision look failed (#85).** The follow-up
+  runs in the background and reports failures in the conversation.
+- **Chat output is sanitized (#6):** model-written HTML passes an allowlist (markdown, images,
+  video, audio), so iframes, scripts, forms and styles are dropped.
+- **Workspace files are served inert (#7):** HTML and scripts as plain text, every file sandboxed
+  and with `nosniff`, so an agent-written page can't act on the dashboard.
+- **The API key is never sent to the browser (#8),** including after saving settings.
+- **`query_database` is truly read-only (#10)** (separate read-only connection, statements checked
+  by SQLite) and refuses any query naming the API key column.
+- **Interrupted sessions no longer stall the worker (#23):** sessions left "running" by a crash are
+  cleaned up on every worker tick.
+- **The 8 skills the agent reads are now chosen alphabetically** on every OS.
+- New test suite: `npm run test:safety` (runs on a throwaway database).
+
 ## 2026-10-23 — Chat mode is per conversation
 
 - The agentic / conversation switch now belongs to **each conversation** instead of being one

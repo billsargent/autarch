@@ -11,16 +11,20 @@ import {
   HARD_PROTECTED_PATHS,
 } from "@/lib/agent/config";
 
+// Settings as the browser may see them: never the raw API key (#8).
+function publicSettings(settings: AgentSettingsRow) {
+  const { apiKey, ...safeSettings } = settings;
+  return {
+    ...safeSettings,
+    apiKeySet: Boolean(apiKey),
+    deepseekModels: (settings.deepseekModels as string[]) || [],
+  };
+}
+
 export async function GET() {
   const settings = await getSettings();
-  // Never return the raw API key to the browser.
-  const { apiKey, ...safeSettings } = settings;
   return NextResponse.json({
-    settings: {
-      ...safeSettings,
-      apiKeySet: Boolean(apiKey),
-      deepseekModels: (settings.deepseekModels as string[]) || [],
-    },
+    settings: publicSettings(settings),
     deepSeekConfigured: isDeepSeekConfigured(settings),
     availableTools: ALL_TOOL_DEFINITIONS.map((t) => ({ name: t.function.name, description: t.function.description })),
     hardSafeguards: {
@@ -80,5 +84,5 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Enabling unrestricted mode requires confirm: true." }, { status: 400 });
   }
   const updated = await updateSettings(patch as Partial<AgentSettingsRow>);
-  return NextResponse.json({ settings: updated });
+  return NextResponse.json({ settings: publicSettings(updated) });
 }

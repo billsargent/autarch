@@ -17,6 +17,7 @@
     "test:compact": "tsx scripts/compact-test.ts",
     "test:chatmode": "tsx scripts/chatmode-test.ts",
     "test:village": "tsx scripts/village-test.ts",
+    "test:safety": "tsx scripts/safety-test.ts",
     "pixelate": "tsx scripts/pixelate.ts",
     "village:map": "tsx scripts/build-village-map.ts"
   },
@@ -31,6 +32,7 @@
     "react-dom": "19.2.6",
     "react-markdown": "^10.1.0",
     "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1"
   },

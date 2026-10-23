@@ -1,11 +1,13 @@
-import { exec } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import fssync from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AgentSettingsRow } from "./settingsStore";
-import { db, sqlite } from "@/db";
+import Database from "better-sqlite3";
+import { db } from "@/db";
+import { DB_PATH } from "@/db/path";
 import { journalEntries, jobs, goals, notifications, conversations, messages } from "@/db/schema";
 import { eq, asc, desc, and, sql as dsql } from "drizzle-orm";
 import {
@@ -17,6 +19,8 @@ import {
   classifyFetchUrl,
   resolvePathSafe,
   buildOverrides,
+  invalidPackageArgs,
+  UNIT_NAME,
   type RiskResult,
   type SuperviseOverrides,
 } from "./risk";
@@ -24,6 +28,7 @@ import { MAX_OUTPUT_CHARS, MAX_FETCH_BYTES, MAX_DOWNLOAD_BYTES, workspaceSkillsD
 import { nextCronRun } from "./cron";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export function ensureWorkspace(dir: string) {
   if (!fssync.existsSync(dir)) {
@@ -710,10 +715,33 @@ async function getSystemStatus() {
   return { output: truncate(JSON.stringify(summary, null, 2)), summary: "system status" };
 }
 
+// Run a program directly (no shell), so arguments are never interpreted as
+// shell syntax. Optionally keep only the first `maxLines` lines of stdout.
+async function runFile(file: string, args: string[], timeoutSec: number, maxLines?: number) {
+  const shown = [file, ...args].join(" ");
+  const clip = (text: string) => (maxLines ? text.split("\n").slice(0, maxLines).join("\n") : text);
+  try {
+    const { stdout, stderr } = await execFileAsync(file, args, {
+      cwd: os.tmpdir(),
+      timeout: Math.max(1, timeoutSec) * 1000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    const output = truncate([clip(stdout), stderr].filter(Boolean).join("\n---stderr---\n") || "(no output)");
+    return { output, summary: `$ ${shown}` };
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; message?: string; killed?: boolean };
+    const output = truncate(
+      `Command failed.\n${e.killed ? "(timed out)\n" : ""}stdout:\n${clip(e.stdout || "")}\nstderr:\n${e.stderr || e.message || ""}`,
+    );
+    return { output, summary: `$ ${shown} (failed)` };
+  }
+}
+
 async function listProcesses(sortBy: "cpu" | "mem", limit: number) {
+  const rows = Math.min(200, Math.max(1, Math.floor(limit) || 20));
   const sortFlag = sortBy === "mem" ? "-%mem" : "-%cpu";
-  const { stdout } = await execAsync(`ps axo pid,ppid,%cpu,%mem,etime,comm --sort=${sortFlag} | head -n ${Math.max(1, limit) + 1}`);
-  return { output: truncate(stdout), summary: `top processes by ${sortBy}` };
+  const res = await runFile("ps", ["axo", "pid,ppid,%cpu,%mem,etime,comm", `--sort=${sortFlag}`], 15, rows + 1);
+  return { output: res.output, summary: `top processes by ${sortBy}` };
 }
 
 async function managePackage(
@@ -722,28 +750,33 @@ async function managePackage(
   dryRun: boolean,
   timeoutSec: number,
 ) {
-  const sim = dryRun ? "-s " : "";
-  let cmd: string;
+  // Same check the risk gate uses; refuse here too in case anything bypasses it.
+  const invalid = invalidPackageArgs(action, packages);
+  if (invalid) return { output: `Refused: ${invalid}`, summary: "manage_package refused" };
+  const sim = dryRun ? ["-s"] : [];
   if (action === "search") {
     const q = packages.join(" ");
-    cmd = q ? `apt-cache search --names-only '${q}' | head -n 40` : "apt-cache search '' 2>/dev/null | head -n 40";
-  } else if (action === "update") {
-    cmd = `sudo -n apt-get ${sim}update`;
-  } else if (action === "list") {
-    cmd = packages.length ? `dpkg -l ${packages.map((p) => `'${p}'`).join(" ")}` : `apt list --installed 2>/dev/null | head -n 100`;
-  } else if (action === "install") {
-    cmd = `sudo -n apt-get ${sim}install -y ${packages.map((p) => `'${p}'`).join(" ")}`;
-  } else if (action === "upgrade") {
-    cmd = packages.length ? `sudo -n apt-get ${sim}install --only-upgrade -y ${packages.map((p) => `'${p}'`).join(" ")}` : `sudo -n apt-get ${sim}upgrade -y`;
-  } else {
-    cmd = `sudo -n apt-get ${sim}remove -y ${packages.map((p) => `'${p}'`).join(" ")}`;
+    return runFile("apt-cache", ["search", "--names-only", q], timeoutSec, 40);
   }
-  return runShellCommand(cmd, "/tmp", timeoutSec);
+  if (action === "list") {
+    return packages.length ? runFile("dpkg", ["-l", ...packages], timeoutSec) : runFile("apt", ["list", "--installed"], timeoutSec, 100);
+  }
+  if (action === "update") return runFile("sudo", ["-n", "apt-get", ...sim, "update"], timeoutSec);
+  if (action === "install") return runFile("sudo", ["-n", "apt-get", ...sim, "install", "-y", ...packages], timeoutSec);
+  if (action === "upgrade") {
+    return packages.length
+      ? runFile("sudo", ["-n", "apt-get", ...sim, "install", "--only-upgrade", "-y", ...packages], timeoutSec)
+      : runFile("sudo", ["-n", "apt-get", ...sim, "upgrade", "-y"], timeoutSec);
+  }
+  return runFile("sudo", ["-n", "apt-get", ...sim, "remove", "-y", ...packages], timeoutSec);
 }
 
 async function manageService(action: string, service: string) {
-  const cmd = `sudo -n systemctl ${action} ${service}`;
-  return runShellCommand(cmd, "/tmp", 20);
+  if (!UNIT_NAME.test(service)) return { output: `Refused: invalid service name "${service}".`, summary: "manage_service refused" };
+  if (!["start", "stop", "restart", "enable", "disable", "status"].includes(action)) {
+    return { output: `Refused: unknown action "${action}".`, summary: "manage_service refused" };
+  }
+  return runFile("sudo", ["-n", "systemctl", action, service], 20);
 }
 
 async function fetchUrl(url: string, method: "GET" | "POST", body?: string) {
@@ -977,17 +1010,33 @@ async function postMessage(args: Record<string, unknown>, ctx?: ToolContext) {
   return { output: `Posted message to conversation #${targetConversation}.`, summary: `post_message #${targetConversation}` };
 }
 
+// query_database runs on its own read-only connection, so even a statement that
+// slipped past the checks below could not change anything (#10).
+let readOnlyConnection: Database.Database | null = null;
+function readOnlyDb(): Database.Database {
+  if (!readOnlyConnection) readOnlyConnection = new Database(DB_PATH, { readonly: true, fileMustExist: true });
+  return readOnlyConnection;
+}
+
 async function queryDatabase(args: Record<string, unknown>) {
   const raw = String(args.sql || "").trim().replace(/;+$/g, "").trim();
   if (!raw) return { output: "Provide a SELECT query.", summary: "query failed" };
   if (!/^(select|with)\b/i.test(raw)) {
     return { output: "Only read-only SELECT queries are allowed.", summary: "query blocked (non-select)" };
   }
-  if (/\b(insert|update|delete|drop|alter|truncate|create|grant|revoke|copy|vacuum|analyze|call|do|merge)\b/i.test(raw)) {
+  if (/\b(insert|update|delete|drop|alter|truncate|create|grant|revoke|copy|vacuum|analyze|call|do|merge|attach|detach|pragma)\b/i.test(raw)) {
     return { output: "Only read-only SELECT queries are allowed.", summary: "query blocked (write keyword)" };
   }
+  // Naming the key column in any form (alias, function, subquery) is refused,
+  // so the key can't be read out under another name (#10).
+  if (/api_?key/i.test(raw)) {
+    return { output: "Queries that mention the API key column are not allowed.", summary: "query blocked (secret column)" };
+  }
   try {
-    const stmt = sqlite.prepare(raw);
+    const stmt = readOnlyDb().prepare(raw);
+    if (!stmt.readonly || !stmt.reader) {
+      return { output: "Only read-only SELECT queries are allowed.", summary: "query blocked (not read-only)" };
+    }
     const rows = stmt.all() as Record<string, unknown>[];
     // Never leak the framework's own secrets back to the model (api_key, etc.).
     const sanitized = rows.map((r) => {

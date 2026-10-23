@@ -623,6 +623,9 @@ export async function runAgentTurn(opts: {
         });
         newMessages.push(toolMsgRow);
         apiMessages.push({ role: "tool", tool_call_id: call.id, content: resultContent });
+        // Point the execution at its tool message, so resolving an approval
+        // later rewrites that message (not the assistant's text).
+        await db.update(toolExecutions).set({ messageId: toolMsgRow.id }).where(eq(toolExecutions.id, execution.id));
       }
     }
 
@@ -729,68 +732,110 @@ export async function runAgentTurn(opts: {
   return { conversationId, newMessages };
 }
 
+// An approval that can't be resolved; `status` is the HTTP status to report.
+export class ApprovalError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
+
+// The tool message that recorded "PENDING HUMAN APPROVAL" for an execution.
+// New executions point at it directly; older ones pointed at the assistant
+// message, so fall back to finding it by the execution number it mentions.
+async function pendingToolMessageId(execution: typeof toolExecutions.$inferSelect): Promise<number | null> {
+  if (execution.messageId) {
+    const rows = await db.select({ id: messages.id, role: messages.role }).from(messages).where(eq(messages.id, execution.messageId));
+    if (rows[0]?.role === "tool") return rows[0].id;
+  }
+  if (!execution.conversationId) return null;
+  const rows = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.conversationId, execution.conversationId),
+        eq(messages.role, "tool"),
+        dsql`${messages.content} like ${`PENDING HUMAN APPROVAL (execution #${execution.id},%`}`,
+      ),
+    )
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
+// Resolve a pending approval. The decision is saved (and an approved action
+// run) before this returns; the agent's follow-up turn then runs in the
+// background, so a failing follow-up never makes a saved decision look failed.
 export async function resolveApproval(executionId: number, decision: "approved" | "denied", note?: string) {
   const rows = await db.select().from(toolExecutions).where(eq(toolExecutions.id, executionId));
-  if (!rows.length) throw new Error("Execution not found");
+  if (!rows.length) throw new ApprovalError("Execution not found", 404);
   const execution = rows[0];
   if (execution.status !== "awaiting_approval") {
-    throw new Error(`Execution is not awaiting approval (status=${execution.status})`);
+    throw new ApprovalError(`This request was already decided (status=${execution.status}).`, 409);
   }
 
   const settings = await getSettings();
+  // While paused nothing runs, so an approval would be meaningless: refuse and
+  // leave the request waiting instead of quietly turning it into a denial.
+  if (decision === "approved" && settings.paused) {
+    throw new ApprovalError("The agent is paused. Resume it, then approve — this request is still waiting.", 409);
+  }
+
+  // Claim the request atomically so two clicks (or two tabs) can't both run it.
+  const claimed = await db
+    .update(toolExecutions)
+    .set({ status: decision, resolvedAt: new Date(), resolvedBy: "human" })
+    .where(and(eq(toolExecutions.id, executionId), eq(toolExecutions.status, "awaiting_approval")))
+    .returning({ id: toolExecutions.id });
+  if (!claimed.length) throw new ApprovalError("This request was already decided.", 409);
+
   let output = "";
   let status: typeof toolExecutions.$inferInsert.status = decision;
-  let heldByPause = false;
-
   if (decision === "approved") {
-    if (settings.paused) {
-      heldByPause = true;
-      status = "denied";
-      output = "Not run: the agent is globally PAUSED. Approvals are held until it is resumed.";
-    } else {
-      try {
-        const result = await executeTool(execution.tool, (execution.input as Record<string, unknown>) || {}, settings, {
-          conversationId: execution.conversationId,
-        });
-        output = result.output;
-        status = "approved";
-      } catch (err) {
-        status = "error";
-        output = err instanceof Error ? err.message : String(err);
-      }
+    try {
+      const result = await executeTool(execution.tool, (execution.input as Record<string, unknown>) || {}, settings, {
+        conversationId: execution.conversationId,
+      });
+      output = result.output;
+    } catch (err) {
+      status = "error";
+      output = err instanceof Error ? err.message : String(err);
     }
   } else {
     output = note || "Denied by human operator.";
   }
+  await db.update(toolExecutions).set({ status, output }).where(eq(toolExecutions.id, executionId));
 
-  await db
-    .update(toolExecutions)
-    .set({ status, output, resolvedAt: new Date(), resolvedBy: "human" })
-    .where(eq(toolExecutions.id, executionId));
-
-  // Rewrite the original tool message so the model's history reflects the real
-  // outcome instead of permanently reading "PENDING HUMAN APPROVAL ... has NOT run yet".
-  if (execution.messageId) {
+  // Rewrite the tool message so the model's history reflects the real outcome
+  // instead of permanently reading "PENDING HUMAN APPROVAL ... has NOT run yet".
+  const toolMessageId = await pendingToolMessageId(execution);
+  if (toolMessageId) {
     const outcome =
       decision === "approved"
-        ? heldByPause
-          ? `APPROVED-HELD — the human approved this "${execution.tool}" request but it did NOT run because the agent is paused.\n${output}`
+        ? status === "error"
+          ? `APPROVED — the human approved this "${execution.tool}" request, but it failed.\nError:\n${output}`
           : `APPROVED — the human approved this "${execution.tool}" request and it ran.\nResult:\n${output}`
         : `DENIED — the human rejected this "${execution.tool}" request.${note ? ` Reason: ${note}` : ""} It did NOT run.`;
-    await db.update(messages).set({ content: outcome }).where(eq(messages.id, execution.messageId));
+    await db.update(messages).set({ content: outcome }).where(eq(messages.id, toolMessageId));
   }
 
-  // If the action was held by the global pause, don't spin up a session just to
-  // have every tool call blocked; the approvals UI + rewritten message show why.
-  if (heldByPause) return null;
-
-  const eventNote =
-    decision === "approved"
-      ? `Human approved your "${execution.tool}" request (execution #${execution.id}). Result:\n${output}`
-      : `Human DENIED your "${execution.tool}" request (execution #${execution.id}). ${note ? `Reason: ${note}` : ""}`;
-
-  if (execution.conversationId) {
-    return runAgentTurn({ conversationId: execution.conversationId, eventNote, trigger: "approval" });
+  const conversationId = execution.conversationId;
+  if (conversationId) {
+    const eventNote =
+      decision === "approved"
+        ? `Human approved your "${execution.tool}" request (execution #${execution.id}). Result:\n${output}`
+        : `Human DENIED your "${execution.tool}" request (execution #${execution.id}). ${note ? `Reason: ${note}` : ""}`;
+    void runAgentTurn({ conversationId, eventNote, trigger: "approval" }).catch(async (err) => {
+      await insertMessage({
+        conversationId,
+        role: "event",
+        content: `[FOLLOW-UP FAILED] Your decision on execution #${execution.id} was saved, but the agent's follow-up turn failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      }).catch(() => {});
+    });
   }
-  return null;
+  return { executionId, status, output };
 }

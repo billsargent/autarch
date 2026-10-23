@@ -16,6 +16,7 @@ export default function ApprovalsView() {
   const [recent, setRecent] = useState<ToolExecutionRow[]>([]);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [note, setNote] = useState<Record<number, string>>({});
+  const [errors, setErrors] = useState<Record<number, string>>({});
 
   const load = useCallback(async () => {
     const res = await fetch("/api/approvals").then((r) => r.json());
@@ -35,11 +36,13 @@ export default function ApprovalsView() {
   async function decide(id: number, decision: "approved" | "denied") {
     setBusyId(id);
     try {
-      await fetch(`/api/approvals/${id}`, {
+      const res = await fetch(`/api/approvals/${id}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ decision, note: note[id] }),
       });
+      const data = await res.json().catch(() => ({}));
+      setErrors((prev) => ({ ...prev, [id]: res.ok ? "" : data.error || `HTTP ${res.status}` }));
       await load();
     } finally {
       setBusyId(null);
@@ -81,6 +84,7 @@ export default function ApprovalsView() {
                 placeholder="Optional note (shown to the agent, especially useful when denying)"
                 className="mt-3 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs outline-none"
               />
+              {errors[p.id] && <p className="mt-2 text-xs text-red-400">{errors[p.id]}</p>}
               <div className="mt-3 flex gap-2">
                 <button
                   disabled={busyId === p.id}

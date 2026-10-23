@@ -25,8 +25,12 @@ const MIME: Record<string, string> = {
   ".json": "application/json",
   ".log": "text/plain",
   ".csv": "text/csv",
-  ".html": "text/html",
-  ".js": "text/javascript",
+  // Never served as live HTML or script on the dashboard's origin (#7).
+  ".html": "text/plain; charset=utf-8",
+  ".htm": "text/plain; charset=utf-8",
+  ".js": "text/plain; charset=utf-8",
+  ".mjs": "text/plain; charset=utf-8",
+  ".xml": "text/plain; charset=utf-8",
   ".ts": "text/plain",
   ".py": "text/plain",
   ".sh": "text/plain",
@@ -58,7 +62,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     return new Response(new Uint8Array(data), {
       headers: {
         "content-type": MIME[ext] || "application/octet-stream",
-        "content-disposition": `inline; filename="${path.basename(resolved)}"`,
+        "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(path.basename(resolved))}`,
+        // The agent writes these files, so treat them as untrusted: no
+        // scripts, forms or plugins even if opened directly (SVGs included),
+        // and no content-type guessing.
+        "content-security-policy": "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'",
+        "x-content-type-options": "nosniff",
       },
     });
   } catch {

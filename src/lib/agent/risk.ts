@@ -284,11 +284,38 @@ export function classifyShellCommand(command: string, overrides?: SuperviseOverr
   return { risk: "medium", reason: "Unrecognized command pattern; treated as medium risk by default." };
 }
 
+// Package and service names are checked against their real naming rules
+// before anything runs, and the commands run without a shell, so a name can
+// never smuggle in a command (#2).
+// Debian package names (lowercase letters, digits, + - .), optional :arch.
+export const PACKAGE_NAME = /^[a-z0-9][a-z0-9+.-]*(:[a-z0-9]+)?$/;
+// apt-cache search terms: plain words only.
+export const PACKAGE_SEARCH = /^[A-Za-z0-9+._ -]{1,64}$/;
+// systemd unit names (letters, digits, : _ . @ -).
+export const UNIT_NAME = /^[A-Za-z0-9:_.@-]{1,128}$/;
+
+export function invalidPackageArgs(
+  action: "install" | "remove" | "upgrade" | "search" | "update" | "list",
+  packages: unknown,
+): string | null {
+  if (packages !== undefined && !Array.isArray(packages)) return "packages must be a list of names.";
+  const list = (packages as unknown[] | undefined) ?? [];
+  if (list.some((p) => typeof p !== "string")) return "packages must be a list of names.";
+  if (action === "search") {
+    const q = (list as string[]).join(" ");
+    return q && !PACKAGE_SEARCH.test(q) ? `Invalid search term "${q}" (letters, digits, + . _ - and spaces only).` : null;
+  }
+  const bad = (list as string[]).find((p) => !PACKAGE_NAME.test(p));
+  return bad !== undefined ? `Invalid package name "${bad}".` : null;
+}
+
 export function classifyPackageAction(
   action: "install" | "remove" | "upgrade" | "search" | "update" | "list",
   packages: string[],
   overrides?: SuperviseOverrides,
 ): RiskResult {
+  const invalid = invalidPackageArgs(action, packages);
+  if (invalid) return { risk: "blocked", reason: invalid };
   if (action === "search" || action === "list") {
     return { risk: "low", reason: "Read-only package query." };
   }
@@ -316,6 +343,10 @@ export function classifyServiceAction(
   service: string,
   overrides?: SuperviseOverrides,
 ): RiskResult {
+  if (!UNIT_NAME.test(service)) return { risk: "blocked", reason: `Invalid service name "${service}".` };
+  if (!["start", "stop", "restart", "enable", "disable", "status"].includes(action)) {
+    return { risk: "blocked", reason: `Unknown service action "${action}".` };
+  }
   const isProtected = PROTECTED_SERVICES.some((s) =>
     s.endsWith("*") ? service.startsWith(s.slice(0, -1)) : s === service,
   );
