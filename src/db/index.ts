@@ -306,6 +306,11 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     ended_at INTEGER
   )`);
+  if (!existingCols("agent_settings").includes("away_until")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN away_until INTEGER");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN away_started_at INTEGER");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN away_spend_cap_usd REAL NOT NULL DEFAULT 1");
+  }
   if (!existingCols("agent_settings").includes("meeting_cost_cap_usd")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN meeting_cost_cap_usd REAL NOT NULL DEFAULT 0.25");
   }

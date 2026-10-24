@@ -31,7 +31,8 @@ The Mayor is a villager with extra tools (section 3). There is exactly one Mayor
 
 No agent, the Mayor included, can ever:
 
-- **approve or deny a tool action** waiting for approval. Approvals are human-only;
+- **approve or deny a tool action** waiting for approval. Approvals are the owner's, with one
+  exception the owner switches on: away mode (below);
 - **change settings**, supervisor overrides, autonomy mode, or the town policy;
 - **lift the global pause**, or pause the whole town;
 - **raise any limit**, its own or anyone else's: budgets, caps, tools;
@@ -43,6 +44,20 @@ The owner can always:
 - **veto** any adopted idea, and edit, pause, resume or dismiss any agent;
 - choose whether hires need their approval (section 4);
 - talk to any villager at any time, night included.
+
+**Away mode.** The owner can say "I'm away until …" (the desk at home). Until then:
+
+- the Mayor looks at requests waiting for approval and may approve **low- and medium-risk** ones,
+  after a short talk-only review;
+- he never decides high-risk, critical or blocked requests, and never his own;
+- he never denies anything: whatever he doesn't approve waits for the owner;
+- he does nothing at night or while everyone is paused, and nothing once the village has spent
+  the away budget (`awaySpendCapUsd`) since the owner left;
+- each decision is recorded as his. When the owner is back, the desk shows what he approved.
+
+Away mode ends by itself at the end date, or when the owner says they're back. In the balanced
+autonomy mode, low and medium requests already run on their own, so away mode matters most in
+manual mode.
 
 These rules are enforced in code. The tools an agent can call simply don't include them, and the
 server refuses the matching requests from agents.

@@ -3,6 +3,21 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Away mode
+
+- **Going away? (#102)** At your desk at home, set "Back by" and press "I'm going away".
+  - Until then, the Mayor looks at requests waiting for your approval and may approve the low-
+    and medium-risk ones, after a short review.
+  - High-risk and critical requests, and his own, always wait for you.
+  - He never says no: what he doesn't approve waits for you.
+- **Limits:**
+  - nothing at night or while everyone is paused;
+  - he stops once the village has spent the away budget (default $1, Mayor's ledger → Limits).
+- **When you're back** ("I'm back", or at the end date), the desk lists what he approved.
+- In the balanced mode low and medium requests already run on their own, so this matters most
+  in manual mode.
+- The Limits page also has the budget per town meeting.
+
 ## 2026-10-24 — Town meetings
 
 - **Call a town meeting (#81).**

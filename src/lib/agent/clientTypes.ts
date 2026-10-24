@@ -67,6 +67,9 @@ export interface SettingsRow {
   hiringMode: "ask" | "auto";
   maxPopulation: number;
   meetingCostCapUsd: number;
+  awayUntil: string | null;
+  awayStartedAt: string | null;
+  awaySpendCapUsd: number;
   extraProtectedPaths: string[];
   systemPromptExtra: string | null;
   staticCorePrompt: string | null;
@@ -126,7 +129,7 @@ export interface WorkSessionRow {
   id: number;
   jobId: number | null;
   conversationId: number | null;
-  trigger: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting";
+  trigger: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review";
   status: "running" | "completed" | "terminated" | "skipped" | "failed";
   startedAt: string;
   endedAt: string | null;

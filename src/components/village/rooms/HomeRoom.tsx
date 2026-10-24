@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentRow } from "@/lib/agent/clientTypes";
 import { useApprovals } from "../../data/useApprovals";
 import { useHires } from "../../data/useHires";
@@ -95,6 +95,7 @@ function Desk({ onClose }: { onClose: () => void }) {
   const { waiting } = useHires();
   const { unread } = useNotifications();
   const [open, setOpen] = useState<"approvals" | "hires" | "letters" | null>(null);
+  const { villagers } = useVillagers(30000);
   if (open === "approvals") return <TownHallRoom action="approvals.pending" onClose={onClose} />;
   if (open === "hires") return <TownHallRoom action="hires.open" onClose={onClose} />;
   if (open === "letters") return <MailboxDialog onClose={onClose} />;
@@ -105,6 +106,7 @@ function Desk({ onClose }: { onClose: () => void }) {
   ];
   return (
     <ParchmentDialog kicker="Your home" title="Your desk" onClose={onClose}>
+      <AwayPanel nameOf={(id) => villagers.find((v) => v.id === id)?.name ?? "A villager"} />
       <p className="mb-3 text-xs text-[#6b4a2e]">The papers waiting on you.</p>
       <ul className="space-y-2">
         {papers.map((p) => (
@@ -118,6 +120,93 @@ function Desk({ onClose }: { onClose: () => void }) {
         ))}
       </ul>
     </ParchmentDialog>
+  );
+}
+
+// --- going away (#102) ---------------------------------------------------------------------
+
+interface AwayState {
+  away: boolean;
+  until: string | null;
+  since: string | null;
+  spent: number;
+  cap: number;
+  decisions: Array<{ id: number; tool: string; status: string; riskLevel: string; agentId: number | null; resolvedAt: number }>;
+}
+
+// Tomorrow evening, as a datetime-local value.
+function defaultReturn(): string {
+  const d = new Date(Date.now() + 2 * 86400_000);
+  d.setHours(18, 0, 0, 0);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+function AwayPanel({ nameOf }: { nameOf: (id: number | null) => string }) {
+  const [state, setState] = useState<AwayState | null>(null);
+  const [until, setUntil] = useState(defaultReturn);
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(async () => {
+    try {
+      setState(await fetch("/api/away").then((r) => r.json()));
+    } catch {
+      /* keep what we have */
+    }
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(reload, 0);
+    return () => clearTimeout(t);
+  }, [reload]);
+
+  async function save(patch: Record<string, unknown>) {
+    setError(null);
+    const res = await fetch("/api/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(patch) });
+    if (!res.ok) setError(((await res.json().catch(() => ({}))).error as string | undefined)?.replace(/^\w+: /, "") ?? `HTTP ${res.status}`);
+    await reload();
+  }
+
+  if (!state) return null;
+  const when = (iso: string) => new Date(iso).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return (
+    <div className="mb-3 rounded border-2 border-[#d8c49a] p-3 text-xs">
+      {state.away ? (
+        <>
+          <p className="font-semibold">🧳 You&apos;re away until {when(state.until!)}</p>
+          <p className="mt-0.5 text-[#6b4a2e]">
+            The Mayor may approve low- and medium-risk requests until the village has spent ${state.cap.toFixed(2)} (spent ${state.spent.toFixed(3)} so far). Anything riskier waits for you.
+          </p>
+          <button onClick={() => void save({ awayUntil: null })} className="village-btn village-btn-go mt-2 px-3 py-1.5 text-xs">
+            🏡 I&apos;m back
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="font-semibold">Going away?</p>
+          <p className="mt-0.5 text-[#6b4a2e]">The Mayor will look after the small requests while you&apos;re gone. High-risk ones always wait for you.</p>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <label className="block font-semibold">
+              Back by
+              <input type="datetime-local" name="awayUntil" value={until} onChange={(e) => setUntil(e.target.value)} className="mt-1 block rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 py-1 font-normal" />
+            </label>
+            <button onClick={() => void save({ awayUntil: new Date(until).toISOString() })} className="village-btn px-3 py-1.5 text-xs">
+              🧳 I&apos;m going away
+            </button>
+          </div>
+        </>
+      )}
+      {error && <p role="alert" className="mt-1 text-[#b3261e]">{error}</p>}
+      {state.decisions.length > 0 && (
+        <div className="mt-2">
+          <p className="font-semibold">{state.away ? "The Mayor has approved" : "While you were away, the Mayor approved"}</p>
+          <ul className="mt-1 space-y-0.5">
+            {state.decisions.slice(0, 8).map((d) => (
+              <li key={d.id}>
+                {nameOf(d.agentId)}: <span className="font-mono">{d.tool}</span> ({d.riskLevel} risk) — {d.status === "error" ? "it failed" : "it ran"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 

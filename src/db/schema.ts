@@ -84,7 +84,7 @@ export const workSessions = sqliteTable("work_sessions", {
   conversationId: integer("conversation_id").references(() => conversations.id, {
     onDelete: "set null",
   }),
-  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report", "message", "interview", "meeting"] }).notNull(),
+  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report", "message", "interview", "meeting", "review"] }).notNull(),
   status: text("status", {
     enum: ["running", "completed", "terminated", "skipped", "failed"],
   })
@@ -309,6 +309,12 @@ export const agentSettings = sqliteTable("agent_settings", {
   maxPopulation: integer("max_population").notNull().default(8),
   // What one town meeting may spend in all, in USD (#81).
   meetingCostCapUsd: real("meeting_cost_cap_usd").notNull().default(0.25),
+  // Away mode (#102): while the owner is away (until awayUntil), the Mayor
+  // may approve low- and medium-risk requests, until the village has spent
+  // awaySpendCapUsd since awayStartedAt.
+  awayUntil: integer("away_until", { mode: "timestamp" }),
+  awayStartedAt: integer("away_started_at", { mode: "timestamp" }),
+  awaySpendCapUsd: real("away_spend_cap_usd").notNull().default(1),
   // New tools already offered to this install (see settingsStore), so a tool
   // the owner switched off isn't switched back on.
   offeredTools: text("offered_tools", { mode: "json" }),

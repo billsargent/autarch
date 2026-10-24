@@ -18,7 +18,8 @@ type Rule =
   | { kind: "tools" }
   | { kind: "paths" }
   | { kind: "workspace" }
-  | { kind: "time" };
+  | { kind: "time" }
+  | { kind: "future"; maxDays: number };
 
 const RULES: Record<string, Rule> = {
   autonomyMode: { kind: "enum", values: ["manual", "balanced", "autonomous", "unrestricted"] },
@@ -55,6 +56,8 @@ const RULES: Record<string, Rule> = {
   hiringMode: { kind: "enum", values: ["ask", "auto"] },
   maxPopulation: { kind: "int", min: 1, max: 50 },
   meetingCostCapUsd: { kind: "number", min: 0.01, max: 100 },
+  awayUntil: { kind: "future", maxDays: 60 },
+  awaySpendCapUsd: { kind: "number", min: 0, max: 1000 },
   wakeTime: { kind: "time" },
   allowNetworkFetch: { kind: "bool" },
   paused: { kind: "bool" },
@@ -117,6 +120,19 @@ export function validateSettingsPatch(
         if (rule.kind === "int" && !Number.isInteger(n)) return fail("must be a whole number.");
         if (n < rule.min || n > rule.max) return fail(`must be between ${rule.min} and ${rule.max}.`);
         clean[key] = n;
+        break;
+      }
+      // A moment in the next few weeks (an ISO date), or null to clear it.
+      case "future": {
+        if (value === null || value === "") {
+          clean[key] = null;
+          break;
+        }
+        const t = typeof value === "string" ? Date.parse(value) : NaN;
+        if (!Number.isFinite(t)) return fail("must be a date and time.");
+        if (t <= Date.now()) return fail("must be in the future.");
+        if (t > Date.now() + rule.maxDays * 86400_000) return fail(`must be within ${rule.maxDays} days.`);
+        clean[key] = new Date(t);
         break;
       }
       case "time":

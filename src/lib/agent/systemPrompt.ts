@@ -17,7 +17,7 @@ const MAYOR_NOTE = `AS MAYOR
 
 
 export interface PromptScope {
-  trigger?: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting";
+  trigger?: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review";
   jobId?: number | null;
   conversationId?: number | null;
   maxDurationMinutes?: number;
@@ -175,6 +175,9 @@ NOTIFICATIONS
       : "",
     trigger === "message"
       ? `✉ A neighbour has asked you something (the latest "[… asks]" note). Answer them directly and briefly; your reply goes back to them. You can't send questions onward in this turn.`
+      : "",
+    trigger === "review"
+      ? `🧳 The owner is away and has trusted you to look at small requests while they're gone (the latest "[Approval request]" note). Approve it only if it's clearly safe, sensible and useful for the work it's part of; if you have any doubt, leave it for the owner. Explain in a sentence or two, then end with exactly one line: "DECISION: APPROVE" or "DECISION: LEAVE".`
       : "",
     trigger === "meeting"
       ? `🏛 You're at a town meeting in the town hall, with the owner and your neighbours. The latest "[Town meeting]" note is what's been said since you last spoke. Answer the latest question in a few sentences, in your own voice, from your own work and point of view. Add something new rather than repeating what others said.`

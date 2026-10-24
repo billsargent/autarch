@@ -96,6 +96,8 @@ export async function PUT(req: Request) {
     "hiringMode",
     "maxPopulation",
     "meetingCostCapUsd",
+    "awayUntil",
+    "awaySpendCapUsd",
   ];
   const patch: Record<string, unknown> = {};
   for (const key of allowedKeys) {
@@ -108,6 +110,8 @@ export async function PUT(req: Request) {
   }
   const checked = validateSettingsPatch(patch, ALL_TOOL_DEFINITIONS.map((t) => t.function.name));
   if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+  // Going away starts the away-mode spend count afresh (#102).
+  if (checked.patch.awayUntil) checked.patch.awayStartedAt = new Date();
   const updated = await updateSettings(checked.patch as Partial<AgentSettingsRow>);
   const clean = checked.patch as Partial<AgentSettingsRow>;
   if ("agentName" in clean || "persona" in clean) {

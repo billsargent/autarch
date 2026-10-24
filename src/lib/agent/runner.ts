@@ -184,7 +184,7 @@ async function loadHistory(conversationId: number) {
   return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.id));
 }
 
-export type SessionTrigger = "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting";
+export type SessionTrigger = "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review";
 
 // Progress events emitted (optionally) during a turn so the UI can stream a
 // live view of the agent's activity instead of only getting a final payload.
@@ -392,8 +392,9 @@ export async function runAgentTurn(opts: {
     // always keep tools.
     const isDirectChat = Boolean(opts.userMessage) && !opts.jobId && !opts.trigger;
     // A hiring interview (#99) and a town meeting (#81) are talk only: one
-    // model call, no tools.
-    const talkOnly = trigger === "interview" || trigger === "meeting";
+    // model call, no tools. So is the Mayor reviewing a request while the
+    // owner is away (#102).
+    const talkOnly = trigger === "interview" || trigger === "meeting" || trigger === "review";
     const { toolsAvailable, toolsForbidden } = resolveToolAccess({
       isDirectChat: isDirectChat || talkOnly,
       chatMode: talkOnly ? "conversation" : conversation.chatMode,
@@ -706,6 +707,8 @@ export async function runAgentTurn(opts: {
           .where(eq(toolExecutions.id, execution.id));
 
         onEvent?.({ type: "tool_result", tool: toolName, status, executionId: execution.id, output: resultContent });
+        // While the owner is away, the Mayor may look at it (#102).
+        if (status === "awaiting_approval") void import("./away").then((m) => m.considerWhileAway(execution.id)).catch(() => {});
 
         const toolMsgRow = await insertMessage({
           conversationId,
@@ -866,7 +869,9 @@ async function pendingToolMessageId(execution: typeof toolExecutions.$inferSelec
 // Resolve a pending approval. The decision is saved (and an approved action
 // run) before this returns; the agent's follow-up turn then runs in the
 // background, so a failing follow-up never makes a saved decision look failed.
-export async function resolveApproval(executionId: number, decision: "approved" | "denied", note?: string) {
+// `by`: the owner, or the Mayor while the owner is away (#102: he only ever
+// approves, and only what away mode lets him).
+export async function resolveApproval(executionId: number, decision: "approved" | "denied", note?: string, by: "human" | "mayor-away" = "human") {
   const rows = await db.select().from(toolExecutions).where(eq(toolExecutions.id, executionId));
   if (!rows.length) throw new ApprovalError("Execution not found", 404);
   const execution = rows[0];
@@ -884,7 +889,7 @@ export async function resolveApproval(executionId: number, decision: "approved" 
   // Claim the request atomically so two clicks (or two tabs) can't both run it.
   const claimed = await db
     .update(toolExecutions)
-    .set({ status: decision, resolvedAt: new Date(), resolvedBy: "human" })
+    .set({ status: decision, resolvedAt: new Date(), resolvedBy: by })
     .where(and(eq(toolExecutions.id, executionId), eq(toolExecutions.status, "awaiting_approval")))
     .returning({ id: toolExecutions.id });
   if (!claimed.length) throw new ApprovalError("This request was already decided.", 409);
@@ -911,13 +916,14 @@ export async function resolveApproval(executionId: number, decision: "approved" 
 
   // Rewrite the tool message so the model's history reflects the real outcome
   // instead of permanently reading "PENDING HUMAN APPROVAL ... has NOT run yet".
+  const who = by === "mayor-away" ? "the Mayor (the owner is away)" : "the human";
   const toolMessageId = await pendingToolMessageId(execution);
   if (toolMessageId) {
     const outcome =
       decision === "approved"
         ? status === "error"
-          ? `APPROVED — the human approved this "${execution.tool}" request, but it failed.\nError:\n${output}`
-          : `APPROVED — the human approved this "${execution.tool}" request and it ran.\nResult:\n${output}`
+          ? `APPROVED — ${who} approved this "${execution.tool}" request, but it failed.\nError:\n${output}`
+          : `APPROVED — ${who} approved this "${execution.tool}" request and it ran.\nResult:\n${output}`
         : `DENIED — the human rejected this "${execution.tool}" request.${note ? ` Reason: ${note}` : ""} It did NOT run.`;
     await db.update(messages).set({ content: outcome }).where(eq(messages.id, toolMessageId));
   }
@@ -926,7 +932,7 @@ export async function resolveApproval(executionId: number, decision: "approved" 
   if (conversationId) {
     const eventNote =
       decision === "approved"
-        ? `Human approved your "${execution.tool}" request (execution #${execution.id}). Result:\n${output}`
+        ? `${by === "mayor-away" ? "The Mayor (the owner is away)" : "Human"} approved your "${execution.tool}" request (execution #${execution.id}). Result:\n${output}`
         : `Human DENIED your "${execution.tool}" request (execution #${execution.id}). ${note ? `Reason: ${note}` : ""}`;
     void runWhenFree({ conversationId, eventNote, trigger: "approval" }).catch(async (err) => {
       await insertMessage({

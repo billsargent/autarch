@@ -477,6 +477,59 @@ async function main() {
   await patchMeeting(opened.meeting.id, { action: "close" });
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
 
+  // --- away mode (#102) ---------------------------------------------------------------------
+  const away = await import("../src/lib/agent/away");
+  await daytime();
+  const pend = async (agentId: number, riskLevel: "low" | "medium" | "high", tool = "list_goals") =>
+    (await db.insert(toolExecutions).values({ tool, input: {}, riskLevel, riskReason: "test", status: "awaiting_approval", agentId }).returning())[0].id;
+  const statusOf = async (id: number) => (await db.select().from(toolExecutions).where(eq(toolExecutions.id, id)))[0];
+  const quiet = await pend(cal.id, "low");
+  check("while the owner is home, the Mayor leaves requests alone", await away.considerWhileAway(quiet), "skipped");
+  const past = await settingsRoute.PUT(req("/api/settings", "PUT", { awayUntil: new Date(Date.now() - 60_000).toISOString() }));
+  check("you can't be away until the past", [past.status, (await past.json()).error], [400, "awayUntil: must be in the future."]);
+  await settingsRoute.PUT(req("/api/settings", "PUT", { awayUntil: new Date(Date.now() + 86400_000).toISOString(), awaySpendCapUsd: 5 }));
+  check("going away starts the away count", (await getSettings()).awayStartedAt != null, true);
+
+  fake.byAgent["Mayor Ada"] = [{ text: "Listing goals is harmless.\nDECISION: APPROVE" }];
+  const seenBefore = fake.seen.length;
+  check("away, the Mayor may approve a small request", await away.considerWhileAway(quiet), "approved");
+  const approvedRow = await statusOf(quiet);
+  check("…it runs, recorded as his decision", [approvedRow.status, approvedRow.resolvedBy], ["approved", "mayor-away"]);
+  const reviewStep = fake.seen.slice(seenBefore).find((x) => x.system.startsWith("You are Mayor Ada"));
+  check("…after a talk-only review", [reviewStep?.tools, reviewStep?.system.includes("The owner is away")], [[], true]);
+
+  fake.byAgent["Mayor Ada"] = [{ text: "Not sure about this one.\nDECISION: LEAVE" }];
+  const unsure = await pend(cal.id, "medium");
+  check("what he isn't sure of waits for the owner", [await away.considerWhileAway(unsure), (await statusOf(unsure)).status], ["left", "awaiting_approval"]);
+  const risky = await pend(cal.id, "high", "run_shell_command");
+  const seenRisky = fake.seen.length;
+  check("high-risk requests always wait for the owner (he isn't even asked)", [await away.considerWhileAway(risky), (await statusOf(risky)).status, fake.seen.length], ["skipped", "awaiting_approval", seenRisky]);
+  check("never his own requests", await away.considerWhileAway(await pend(mayor.id, "low")), "skipped");
+  await updateSettings({ awaySpendCapUsd: 0 });
+  check("nothing once the away budget is spent", await away.considerWhileAway(await pend(cal.id, "low")), "skipped");
+  await updateSettings({ awaySpendCapUsd: 5, bedtime: hm(new Date(Date.now() - 3600_000)), wakeTime: hm(new Date(Date.now() + 3600_000)) });
+  check("nothing at night", await away.considerWhileAway(await pend(cal.id, "low")), "skipped");
+  await daytime();
+
+  // A real turn: in manual mode a medium-risk request waits, and the Mayor sees to it.
+  await updateSettings({ autonomyMode: "manual" });
+  fake.byAgent["Mayor Ada"] = [{ text: "Fine.\nDECISION: APPROVE" }];
+  fake.byAgent.Cal = [{ tools: [{ name: "schedule_job", args: { name: "Sand the planks", intervalMinutes: 120 } }] }, { text: "Asked." }, { text: "Thanks, Mayor." }];
+  const { conversationId: calAway } = await runAgentTurn({ userMessage: "what are your goals?", agentId: cal.id });
+  let handled = null;
+  for (let i = 0; i < 50 && !handled; i++) {
+    const [row] = await db.select().from(toolExecutions).where(eq(toolExecutions.conversationId, calAway));
+    if (row?.resolvedBy === "mayor-away") handled = row;
+    else await new Promise((r) => setTimeout(r, 100));
+  }
+  check("a request made while away goes to the Mayor by itself", [handled?.tool, handled?.status, handled?.resolvedBy], ["schedule_job", "approved", "mayor-away"]);
+  await updateSettings({ autonomyMode: "balanced" });
+  const awayNow = await (await (await import("../src/app/api/away/route")).GET()).json();
+  check("the owner sees what he approved", [awayNow.away, awayNow.decisions.length], [true, 2]);
+  await settingsRoute.PUT(req("/api/settings", "PUT", { awayUntil: null }));
+  check("once back, the Mayor stops", await away.considerWhileAway(await pend(cal.id, "low")), "skipped");
+  await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });
