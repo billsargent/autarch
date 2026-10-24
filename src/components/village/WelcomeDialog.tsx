@@ -59,7 +59,7 @@ export default function WelcomeDialog() {
             <strong>Your desk</strong> at home holds what needs you: approvals, hire requests, letters and drafts.
           </li>
           <li>
-            Nothing risky runs without your say, and the village has a <strong>daily budget</strong> (Mayor&apos;s ledger → Limits).
+            Nothing risky runs without your say, and the village has a <strong>daily budget</strong>{" "}(Mayor&apos;s ledger → Limits).
           </li>
         </ul>
       </div>
