@@ -17,7 +17,7 @@ const MAYOR_NOTE = `AS MAYOR
 
 
 export interface PromptScope {
-  trigger?: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review";
+  trigger?: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review" | "vote";
   jobId?: number | null;
   conversationId?: number | null;
   maxDurationMinutes?: number;
@@ -175,6 +175,9 @@ NOTIFICATIONS
       : "",
     trigger === "message"
       ? `✉ A neighbour has asked you something (the latest "[… asks]" note). Answer them directly and briefly; your reply goes back to them. You can't send questions onward in this turn.`
+      : "",
+    trigger === "vote"
+      ? `🗳 The village is voting on an idea (the latest "[Vote]" note). Think about whether it's good for the village and worth the work, from your own point of view. Give your reason in one sentence, then end with exactly one line: "VOTE: YES", "VOTE: NO" or "VOTE: ABSTAIN".`
       : "",
     trigger === "review"
       ? `🧳 The owner is away and has trusted you to look at small requests while they're gone (the latest "[Approval request]" note). Approve it only if it's clearly safe, sensible and useful for the work it's part of; if you have any doubt, leave it for the owner. Explain in a sentence or two, then end with exactly one line: "DECISION: APPROVE" or "DECISION: LEAVE".`

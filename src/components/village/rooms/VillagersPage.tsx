@@ -116,6 +116,17 @@ export default function VillagersPage({ settings, tools }: { settings: SettingsR
                   >
                     {v.status === "paused" ? "▶ Let them work" : "⏸ Pause"}
                   </button>
+                  <button
+                    onClick={async () => {
+                      const res = await update(v.id, { daydream: !v.daydream });
+                      setError(res.ok ? null : res.error);
+                    }}
+                    aria-pressed={Boolean(v.daydream)}
+                    title="A few minutes every four hours, on their own budget, to explore and pin an idea for the village"
+                    className={`village-btn px-2 py-1 text-[11px] ${v.daydream ? "village-btn-go" : ""}`}
+                  >
+                    💭 Free time {v.daydream ? "on" : "off"}
+                  </button>
                   {!v.isMayor && (
                     <button onClick={() => setLeaving(v)} className="village-btn village-btn-danger px-2 py-1 text-[11px]">
                       Dismiss

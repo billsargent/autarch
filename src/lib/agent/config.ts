@@ -182,6 +182,9 @@ export const DEFAULT_ENABLED_TOOLS = [
   "pause_agent",
   "resume_agent",
   "call_meeting",
+  "call_vote",
+  // Ideas (#98): anyone may propose.
+  "propose_idea",
   "note_about",
   // Hiring (#99): the Mayor and directors.
   "propose_hire",

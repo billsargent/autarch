@@ -64,6 +64,8 @@ export async function runMayorTool(tool: string, args: Record<string, unknown>, 
       return resumeAgent(mayor, args, ctx);
     case "call_meeting":
       return callMeetingTool(mayor, args, ctx);
+    case "call_vote":
+      return callVoteTool(args, ctx);
     default:
       return refused(`unknown power "${tool}".`);
   }
@@ -223,4 +225,18 @@ function notesSummary(agentId: number): string {
   if (!rows.length) return "Neighbours' notes this week: none.";
   const latest = rows.slice(0, 3).map((r) => `${r.author ?? "someone"}: "${(r.body ?? "").slice(0, 120)}"`);
   return `Neighbours' notes this week: ${rows.length}. Latest: ${latest.join("; ")}.`;
+}
+
+// Put an idea to the vote now (#98).
+async function callVoteTool(args: Record<string, unknown>, ctx?: ToolContext): Promise<Result> {
+  const busy = notWhileAnswering(ctx);
+  if (busy) return busy;
+  const { callVote, IdeaError } = await import("./ideas");
+  try {
+    const idea = await callVote(Number(args.ideaId));
+    return { output: `The vote on idea #${idea.id} ("${idea.title}") is under way. The result goes on the notice board.`, summary: `vote #${idea.id}` };
+  } catch (err) {
+    if (err instanceof IdeaError) return refused(err.message.charAt(0).toLowerCase() + err.message.slice(1));
+    throw err;
+  }
 }

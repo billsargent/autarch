@@ -322,6 +322,7 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
           <TownBudgetField s={s} settings={settings} />
           <div className="grid gap-3 sm:grid-cols-2">
             <NumberField s={s} settings={settings} field="meetingCostCapUsd" label="Budget per town meeting (USD)" step="0.01" help="A meeting's round stops when it has spent this." />
+            <NumberField s={s} settings={settings} field="voteCostCapUsd" label="Budget per round of votes (USD)" step="0.01" help="A vote stops collecting when it has spent this." />
             <NumberField s={s} settings={settings} field="awaySpendCapUsd" label="Away-mode budget (USD)" step="0.01" help="While you're away, the Mayor stops approving once the village has spent this." />
           </div>
           <TextField

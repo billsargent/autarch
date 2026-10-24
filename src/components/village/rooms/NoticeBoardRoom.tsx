@@ -7,6 +7,7 @@ import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
 import VillagerPortrait from "../VillagerPortrait";
 import { useVillagers } from "../../data/useVillagers";
 import type { AgentRow } from "@/lib/agent/clientTypes";
+import IdeasBoard from "./IdeasBoard";
 import MoraleBoard from "./MoraleBoard";
 import type { RoomProps } from "./types";
 
@@ -14,7 +15,7 @@ import type { RoomProps } from "./types";
 // Same data and actions as the Goals page (useGoals). Ideas and votes join
 // the board with #98.
 
-type View = { kind: "board" } | { kind: "note"; id: number } | { kind: "pin" } | { kind: "morale" };
+type View = { kind: "board" } | { kind: "note"; id: number } | { kind: "pin" } | { kind: "morale" } | { kind: "ideas" };
 
 const field = "mt-1 w-full rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 py-1.5 text-sm font-normal outline-none";
 
@@ -36,6 +37,7 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
   const toBoard = () => setView({ kind: "board" });
 
   if (view.kind === "morale") return <MoraleBoard onBack={toBoard} onClose={onClose} />;
+  if (view.kind === "ideas") return <IdeasBoard onBack={toBoard} onClose={onClose} />;
 
   if (view.kind === "pin") {
     return (
@@ -102,7 +104,10 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
           <button onClick={() => setView({ kind: "pin" })} className="village-btn village-btn-primary px-3 py-2 text-xs">
             📌 Pin a new goal
           </button>
-          <button onClick={() => setView({ kind: "morale" })} className="village-btn ml-auto px-3 py-2 text-xs">
+          <button onClick={() => setView({ kind: "ideas" })} className="village-btn ml-auto px-3 py-2 text-xs">
+            💡 Ideas
+          </button>
+          <button onClick={() => setView({ kind: "morale" })} className="village-btn px-3 py-2 text-xs">
             😊 How everyone&apos;s doing
           </button>
         </>

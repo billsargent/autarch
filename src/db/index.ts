@@ -306,6 +306,31 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     ended_at INTEGER
   )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS ideas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    body TEXT,
+    proposed_by INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    rounds INTEGER NOT NULL DEFAULT 0,
+    last_vote_at INTEGER,
+    goal_id INTEGER,
+    decided_by TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    decided_at INTEGER
+  )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS votes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+    round INTEGER NOT NULL,
+    agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    choice TEXT NOT NULL,
+    reason TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  if (!existingCols("agent_settings").includes("vote_cost_cap_usd")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN vote_cost_cap_usd REAL NOT NULL DEFAULT 0.15");
+  }
   if (!existingCols("journal_entries").includes("subject_agent_id")) {
     sqlite.exec("ALTER TABLE journal_entries ADD COLUMN subject_agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL");
   }

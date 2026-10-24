@@ -173,6 +173,14 @@ async function runDueJobs() {
   }
   sleptLogged = false;
 
+  // Once a day, the village votes on the oldest open idea (#98).
+  try {
+    const voted = await (await import("@/lib/agent/ideas")).dailyVote();
+    if (voted) console.log(`[worker] the village is voting on idea #${voted}`);
+  } catch (err) {
+    console.error(`[worker] daily vote failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // Jobs of villagers who are resting (paused) or have left wait.
   const working = new Set(
     (await db.select({ id: agents.id }).from(agents).where(eq(agents.status, "active"))).map((a) => a.id),
@@ -218,10 +226,13 @@ async function runDueJobs() {
 
     const isReport = job.kind === "daily_report";
     const isSelfWork = job.kind === "self_work";
+    const isDaydream = job.kind === "daydream";
     const trigger: SessionTrigger = isReport ? "report" : "scheduled";
     const eventNote = isReport
       ? `[DAILY REPORT] It's time for your daily self-report. Look back at what you did over the past day (journal, sessions, tool executions), summarize it, note what you spent, and write your plan for today into your journal (category=reflection).`
-      : isSelfWork
+      : isDaydream
+        ? `[FREE TIME] Some free time (up to ${job.maxDurationMinutes} minutes, on your own budget). Look into something you're curious about that touches your work or the village: read, poke around, try a small experiment. If you come away with an idea worth the village's time, pin it with propose_idea (at most one). Jot what you found in your journal. Don't start big work.`
+        : isSelfWork
         ? `[SELF-DIRECTED WORK] Your initiative window is open (up to ${job.maxDurationMinutes} minutes). Review your goals and journal, pick the highest-value goal, and take real action on it — explore, build, test, or automate something. Act, don't plan. Journal what you did. Only notify the human if something genuinely needs their input.`
         : `[SCHEDULED WORK] Your scheduled job "${job.name}" is due — a work window just opened (up to ${job.maxDurationMinutes} minutes). ${job.instruction ? `Job instructions: ${job.instruction}` : "Decide what to do and get to work."}`;
 

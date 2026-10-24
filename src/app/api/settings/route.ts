@@ -98,6 +98,7 @@ export async function PUT(req: Request) {
     "meetingCostCapUsd",
     "awayUntil",
     "awaySpendCapUsd",
+    "voteCostCapUsd",
   ];
   const patch: Record<string, unknown> = {};
   for (const key of allowedKeys) {

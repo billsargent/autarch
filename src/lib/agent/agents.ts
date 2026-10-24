@@ -1,6 +1,6 @@
 import { db, sqlite } from "@/db";
-import { agents } from "@/db/schema";
-import { asc, eq, ne } from "drizzle-orm";
+import { agents, jobs } from "@/db/schema";
+import { and, asc, eq, ne } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { CHARACTER_KEYS, isCharacterKey, VILLAGER_COLORS } from "./villagerLooks";
 import { ABANDONED_AFTER_MS } from "./turnLock";
@@ -230,6 +230,8 @@ export interface VillagerState {
   talkingWith: number | null;
   // At the town meeting going on now (#81).
   inMeeting: boolean;
+  // Has free time (#59): their daydream job is on.
+  daydream: boolean;
 }
 
 // What each villager is up to right now: for the village to draw them.
@@ -285,6 +287,7 @@ export function villagerStates(ids: number[], now = new Date()): Map<number, Vil
       lastSaidAt: said ? said.created_at * 1000 : null,
       talkingWith: partner.get(id) ?? null,
       inMeeting: attending.has(id),
+      daydream: Boolean(sqlite.prepare("SELECT 1 FROM jobs WHERE agent_id = ? AND kind = 'daydream' AND enabled = 1").get(id)),
     });
   }
   return out;
@@ -372,4 +375,32 @@ export async function createVillager(value: NewVillager): Promise<AgentRow> {
 // How many live in the village now (the Mayor included).
 export function population(): number {
   return (sqlite.prepare("SELECT COUNT(*) AS n FROM agents WHERE status <> 'dismissed'").get() as { n: number }).n;
+}
+
+// --- free time (#59) -----------------------------------------------------------------
+
+export const DAYDREAM_EVERY_MINUTES = 240;
+export const DAYDREAM_MINUTES = 5;
+
+// Switches a villager's free time on or off: a short window every few hours,
+// on their own budget, where they explore and may pin an idea.
+export async function setDaydream(agent: AgentRow, on: boolean) {
+  const [job] = await db.select().from(jobs).where(and(eq(jobs.agentId, agent.id), eq(jobs.kind, "daydream"))).limit(1);
+  if (job) {
+    await db
+      .update(jobs)
+      .set({ enabled: on, ...(on ? { nextRunAt: new Date(Date.now() + 30 * 60_000) } : {}), updatedAt: new Date() })
+      .where(eq(jobs.id, job.id));
+  } else if (on) {
+    await db.insert(jobs).values({
+      name: `${agent.name}'s free time`,
+      instruction: "Free time: explore something you're curious about, and pin an idea for the village if one is worth it.",
+      kind: "daydream",
+      intervalMinutes: DAYDREAM_EVERY_MINUTES,
+      maxDurationMinutes: DAYDREAM_MINUTES,
+      enabled: true,
+      agentId: agent.id,
+      nextRunAt: new Date(Date.now() + 30 * 60_000),
+    });
+  }
 }

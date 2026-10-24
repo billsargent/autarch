@@ -558,6 +558,35 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
+  // Ideas (#98): anyone may pin one; the village votes.
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_idea",
+      description:
+        "Pin an idea for the village on the notice board: a project, an improvement, an event. The village votes on it; if it's adopted it becomes a town goal. Only ideas you'd really back; a few a day at most.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "The idea, in a few words." },
+          body: { type: "string", description: "Why it's worth doing and roughly how, in a few sentences." },
+        },
+        required: ["title"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "call_vote",
+      description: "Mayor only. Put an open idea from the notice board to a vote now (daytime only). Each villager votes once; a majority with quorum adopts it.",
+      parameters: {
+        type: "object",
+        properties: { ideaId: { type: "number" } },
+        required: ["ideaId"],
+      },
+    },
+  },
   // Notes about neighbours (#103): kept in your own diary.
   {
     type: "function" as const,
@@ -650,6 +679,10 @@ export function evaluateToolRisk(
       return { risk: "medium", reason: "The Mayor creating a recurring work schedule for a villager." };
     case "note_about":
       return { risk: "low", reason: "A note in the villager's own diary; no system access." };
+    case "propose_idea":
+      return { risk: "low", reason: "Pins an idea on the notice board; the village votes and the owner can veto." };
+    case "call_vote":
+      return { risk: "medium", reason: "The Mayor opening a vote: a short turn for every villager, within the round's cost cap." };
     case "call_meeting":
       return { risk: "medium", reason: "The Mayor calling a town meeting: a turn for every villager, within the meeting's cost cap." };
     case "propose_hire":
@@ -775,11 +808,14 @@ export async function executeTool(
     case "pause_agent":
     case "resume_agent":
     case "call_meeting":
+    case "call_vote":
       return (await import("./mayor")).runMayorTool(tool, args, ctx);
     case "propose_hire":
       return (await import("./hiring")).proposeHire(args, ctx);
     case "note_about":
       return noteAbout(args, ctx);
+    case "propose_idea":
+      return (await import("./ideas")).proposeIdeaTool(args, ctx);
     case "query_database":
       return queryDatabase(args);
     case "download_file":

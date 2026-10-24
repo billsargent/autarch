@@ -71,6 +71,7 @@ export interface SettingsRow {
   awayUntil: string | null;
   awayStartedAt: string | null;
   awaySpendCapUsd: number;
+  voteCostCapUsd: number;
   extraProtectedPaths: string[];
   systemPromptExtra: string | null;
   staticCorePrompt: string | null;
@@ -110,7 +111,7 @@ export interface JobRow {
   id: number;
   name: string;
   instruction: string;
-  kind: "interval" | "daily_report" | "self_work";
+  kind: "interval" | "daily_report" | "self_work" | "daydream";
   conversationId: number | null;
   intervalMinutes: number;
   maxDurationMinutes: number;
@@ -130,7 +131,7 @@ export interface WorkSessionRow {
   id: number;
   jobId: number | null;
   conversationId: number | null;
-  trigger: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review";
+  trigger: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review" | "vote";
   status: "running" | "completed" | "terminated" | "skipped" | "failed";
   startedAt: string;
   endedAt: string | null;
@@ -205,6 +206,7 @@ export interface AgentRow {
   area: string | null;
   managerId: number | null;
   inMeeting?: boolean;
+  daydream?: boolean;
   dailyBudgetUsd: number | null;
   maxActionsPerHour: number | null;
   createdAt: string;

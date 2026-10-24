@@ -552,6 +552,82 @@ async function main() {
   check("every villager is on the morale board", board.length, (await villagers.listVillagers()).length);
   check("…and Gus's notes from Cal count for him", board.find((b) => b.name === "Gus")?.reasons.some((r) => r.startsWith("7 notes from neighbours")), true);
 
+  // --- ideas and voting (#98), free time (#59) -------------------------------------------
+  const ideasLib = await import("../src/lib/agent/ideas");
+  const ideasRoute = await import("../src/app/api/ideas/route");
+  const ideaRoute = await import("../src/app/api/ideas/[id]/route");
+  const { ideas: ideasT } = await import("../src/db/schema");
+  await daytime();
+  check("quorum and majority", [
+    ideasLib.tally(["yes", "yes", "no"], 5).outcome,
+    ideasLib.tally(["yes"], 5).outcome,
+    ideasLib.tally(["yes", "no", "abstain"], 5).outcome,
+    ideasLib.tally(["no", "no", "yes"], 5).outcome,
+  ], ["adopted", "open", "open", "rejected"]);
+  const pin = (args: Record<string, unknown>) => executeTool("propose_idea", args, town, ctxCal).then((r) => r.output);
+  const pinned = await pin({ title: "A rope bridge over the stream", body: "Shorter walk to the fields." });
+  check("a villager can pin an idea", pinned.startsWith("Pinned idea #"), true);
+  await pin({ title: "Idea two" });
+  await pin({ title: "Idea three" });
+  check("a few a day at most", (await pin({ title: "Idea four" })).includes("3 ideas today"), true);
+  const ownerIdea = (await (await ideasRoute.POST(req("/api/ideas", "POST", { title: "Paint the town hall" }))).json()).idea;
+  check("the owner can pin one too", [ownerIdea.title, ownerIdea.proposedBy], ["Paint the town hall", null]);
+
+  const voters = await db.select().from(agents).where(eq(agents.status, "active"));
+  const castAll = (choice: (i: number) => string) => voters.forEach((v, i) => (fake.byAgent[v.name] = [{ text: `My reason ${i}.\nVOTE: ${choice(i)}` }]));
+  const settleIdea = async (id: number) => {
+    for (let i = 0; i < 100; i++) {
+      const row = (await ideasLib.listIdeas()).find((x) => x.id === id)!;
+      if (!row.voting) return row;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return (await ideasLib.listIdeas()).find((x) => x.id === id)!;
+  };
+  const bridgeId = Number(/#(\d+)/.exec(pinned)?.[1]);
+  castAll((i) => (i % 3 === 2 ? "NO" : "YES"));
+  const ideaPatch = (id: number, action: string) => ideaRoute.PATCH(req(`/api/ideas/${id}`, "PATCH", { action }), { params: Promise.resolve({ id: String(id) }) });
+  await ideaPatch(bridgeId, "vote");
+  const ropeIdea = await settleIdea(bridgeId);
+  check("everyone active votes, with a reason", [ropeIdea.votes.length, ropeIdea.votes.every((v) => v.reason?.startsWith("My reason"))], [voters.length, true]);
+  check("a majority with quorum adopts it as a town goal", [ropeIdea.status, ropeIdea.decidedBy, ropeIdea.goalId != null], ["adopted", "vote", true]);
+  const bridgeGoal = (await db.select().from(goals).where(eq(goals.id, ropeIdea.goalId!)))[0];
+  check("…the goal belongs to the town", [bridgeGoal.agentId, bridgeGoal.title], [null, "A rope bridge over the stream"]);
+  check("…and the owner is told", (await db.select().from(notifications).where(eq(notifications.title, "Adopted: A rope bridge over the stream"))).length, 1);
+  const voteStep = fake.seen.filter((x) => x.system.includes("The village is voting")).pop();
+  check("a vote is talk only", voteStep?.tools, []);
+  await ideaPatch(bridgeId, "veto");
+  check("the owner can veto, even after adoption, and its goal comes down", [(await settleIdea(bridgeId)).status, (await db.select().from(goals).where(eq(goals.id, ropeIdea.goalId!)))[0].status], ["vetoed", "abandoned"]);
+
+  const twoId = (await db.select().from(ideasT).where(eq(ideasT.title, "Idea two")))[0].id;
+  castAll((i) => (i % 3 === 2 ? "YES" : "NO"));
+  await ideaPatch(twoId, "vote");
+  check("more no than yes turns it down", (await settleIdea(twoId)).status, "rejected");
+
+  const threeId = (await db.select().from(ideasT).where(eq(ideasT.title, "Idea three")))[0].id;
+  await updateSettings({ voteCostCapUsd: 0.0000001 });
+  castAll(() => "YES");
+  await ideaPatch(threeId, "vote");
+  const short = await settleIdea(threeId);
+  check("when the round's budget runs out, no quorum: it stays open", [short.status, short.votes.length], ["open", 1]);
+  await updateSettings({ voteCostCapUsd: 0.15 });
+  check("the owner can adopt an idea straight away", [(await ideaPatch(ownerIdea.id, "adopt")).status, (await settleIdea(ownerIdea.id)).decidedBy], [200, "owner"]);
+  check("only the Mayor can call a vote", (await executeTool("call_vote", { ideaId: threeId }, town, ctxCal)).output, "Refused: only the Mayor can do that.");
+  castAll(() => "YES");
+  check("the Mayor can", (await power("call_vote", { ideaId: threeId })).startsWith(`The vote on idea #${threeId}`), true);
+  check("…and it's adopted", (await settleIdea(threeId)).status, "adopted");
+  check("one daily vote at most", await ideasLib.dailyVote(), null);
+  await updateSettings({ bedtime: hm(new Date(Date.now() - 3600_000)), wakeTime: hm(new Date(Date.now() + 3600_000)) });
+  const nightIdea = (await (await ideasRoute.POST(req("/api/ideas", "POST", { title: "Night idea" }))).json()).idea;
+  check("no votes at night", (await ideaPatch(nightIdea.id, "vote")).status, 409);
+  await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
+
+  await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { daydream: true }), { params: Promise.resolve({ id: String(dot.id) }) });
+  const dream = (await db.select().from(jobs).where(eq(jobs.agentId, dot.id))).find((j) => j.kind === "daydream");
+  check("free time is a short window of their own every few hours", [dream?.enabled, dream?.intervalMinutes, dream?.maxDurationMinutes], [true, 240, 5]);
+  check("…shown on the Villagers page", villagers.villagerStates([dot.id]).get(dot.id)?.daydream, true);
+  await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { daydream: false }), { params: Promise.resolve({ id: String(dot.id) }) });
+  check("…and can be switched off", villagers.villagerStates([dot.id]).get(dot.id)?.daydream, false);
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

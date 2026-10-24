@@ -3,6 +3,19 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Ideas, votes and free time
+
+- **Ideas on the notice board (#98).**
+  - Villagers pin ideas with `propose_idea` (a few a day), and you can pin your own.
+  - The village votes once a day in the daytime, or when you or the Mayor call a vote. Each
+    active villager votes yes, no or abstain with a one-line reason.
+  - More than half must vote. With more yes than no, the idea becomes a town goal and you're
+    told; with more no than yes, it's turned down.
+  - You can adopt any idea straight away, or veto it, even after it's adopted.
+  - Each round of votes has a budget (default $0.15, Mayor's ledger → Limits).
+- **Free time (#59).** Switch on "💭 Free time" for a villager on the Villagers page. Every four
+  hours they get a few minutes, on their own budget, to explore something and maybe pin an idea.
+
 ## 2026-10-24 — Sleeping in bed
 
 - **At night, villagers sleep in their beds (#111).** Visit someone's cottage after bedtime and

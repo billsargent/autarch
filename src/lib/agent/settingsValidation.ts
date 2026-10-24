@@ -58,6 +58,7 @@ const RULES: Record<string, Rule> = {
   meetingCostCapUsd: { kind: "number", min: 0.01, max: 100 },
   awayUntil: { kind: "future", maxDays: 60 },
   awaySpendCapUsd: { kind: "number", min: 0, max: 1000 },
+  voteCostCapUsd: { kind: "number", min: 0.01, max: 100 },
   wakeTime: { kind: "time" },
   allowNetworkFetch: { kind: "bool" },
   paused: { kind: "bool" },

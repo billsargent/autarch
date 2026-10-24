@@ -116,19 +116,37 @@ raises the cap first.
 
 ## 5. Ideas and voting
 
-Anyone can **propose an idea**: a villager during daytime work or a daydream, the Mayor, or the
-owner. Ideas are pinned on the **notice board**.
+Anyone can **propose an idea** (`propose_idea`): a villager at work, in free time or at a meeting;
+the Mayor; or the owner (on the notice board).
 
-A **vote** opens in the daytime, either on a schedule or when the Mayor calls a meeting.
+- A villager can pin at most three ideas a day.
+- At most twenty ideas can be open at once.
 
-1. Each **awake, active** villager casts one vote: **yes**, **no** or **abstain**, with a one-line
-   reason. A vote is one short model call, and a round has a **cost cap**.
+Ideas are pinned on the **notice board**.
+
+**Free time** is a villager's daydream window (#59). It's opt-in per villager on the Villagers
+page: a few minutes every four hours, on their own budget, to explore and pin an idea.
+
+A **vote** happens in the daytime only, and never while everyone is paused. It opens in one of
+three ways:
+
+- once a day by itself, on the oldest open idea that has been up for an hour;
+- when the owner puts an idea to a vote;
+- when the Mayor calls one (`call_vote`).
+
+The vote runs like this:
+
+1. Each **active** villager casts one vote: **yes**, **no** or **abstain**, with a one-line reason.
+   A vote is one short talk-only model call. A round stops when it reaches its **cost cap**
+   (`voteCostCapUsd`, default $0.15).
 2. **Quorum:** more than half of the active villagers must vote.
-3. **Adopted** when quorum is met and yes votes outnumber no votes. The idea becomes a **goal**,
-   and the Mayor assigns it.
-4. A **tie** or **no quorum** leaves the idea open for a later round.
-5. The owner can **veto** an idea at any time, before or after adoption. A veto cancels the
-   resulting goal and any jobs created for it.
+3. **Adopted** when quorum is met and yes votes outnumber no votes. The idea becomes a **town
+   goal**, the owner is told, and the Mayor can give the goal to someone.
+4. With quorum and more no than yes votes, the idea is **turned down**.
+5. A **tie** or **no quorum** leaves the idea open for a later round.
+6. The owner can **adopt** an open idea without a vote.
+7. The owner can **veto** an idea at any time, before or after adoption. A veto takes down the
+   resulting goal.
 
 Votes and reasons stay visible on the notice board.
 

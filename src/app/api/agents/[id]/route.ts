@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { agents, conversations, jobs } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { validateAgentInput } from "@/lib/agent/agents";
+import { setDaydream, validateAgentInput } from "@/lib/agent/agents";
 import { ALL_TOOL_DEFINITIONS } from "@/lib/agent/tools";
 import { requestCancel } from "@/lib/agent/turnLock";
 
@@ -30,6 +30,8 @@ export async function PATCH(req: Request, { params }: Params) {
     })
     .where(eq(agents.id, agent.id))
     .returning();
+  // Free time on or off (#59).
+  if (typeof body.daydream === "boolean") await setDaydream(updated, body.daydream);
   // Pausing stops what they're doing now, too.
   if (checked.value.status === "paused") {
     const theirs = await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.agentId, agent.id));

@@ -59,7 +59,8 @@ export const jobs = sqliteTable("jobs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   instruction: text("instruction").notNull().default(""),
-  kind: text("kind", { enum: ["interval", "daily_report", "self_work"] }).notNull().default("interval"),
+  // "daydream": a villager's free time (#59).
+  kind: text("kind", { enum: ["interval", "daily_report", "self_work", "daydream"] }).notNull().default("interval"),
   conversationId: integer("conversation_id").references(() => conversations.id, {
     onDelete: "set null",
   }),
@@ -84,7 +85,7 @@ export const workSessions = sqliteTable("work_sessions", {
   conversationId: integer("conversation_id").references(() => conversations.id, {
     onDelete: "set null",
   }),
-  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report", "message", "interview", "meeting", "review"] }).notNull(),
+  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report", "message", "interview", "meeting", "review", "vote"] }).notNull(),
   status: text("status", {
     enum: ["running", "completed", "terminated", "skipped", "failed"],
   })
@@ -199,6 +200,34 @@ export const hireRequests = sqliteTable("hire_requests", {
   decidedBy: text("decided_by"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   decidedAt: integer("decided_at", { mode: "timestamp" }),
+});
+
+// Ideas and votes (#98, docs/town-charter.md section 5). Anyone proposes; the
+// active villagers vote; a majority with quorum adopts it as a town goal; the
+// owner can veto at any time.
+export const ideas = sqliteTable("ideas", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  title: text("title").notNull(),
+  body: text("body"),
+  // Who proposed it; empty = the owner.
+  proposedBy: integer("proposed_by").references(() => agents.id, { onDelete: "set null" }),
+  status: text("status", { enum: ["open", "voting", "adopted", "rejected", "vetoed"] }).notNull().default("open"),
+  rounds: integer("rounds").notNull().default(0),
+  lastVoteAt: integer("last_vote_at", { mode: "timestamp" }),
+  goalId: integer("goal_id"),
+  decidedBy: text("decided_by"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  decidedAt: integer("decided_at", { mode: "timestamp" }),
+});
+
+export const votes = sqliteTable("votes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ideaId: integer("idea_id").notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  round: integer("round").notNull(),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  choice: text("choice", { enum: ["yes", "no", "abstain"] }).notNull(),
+  reason: text("reason"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
 // Town meetings (#81): the owner (or the Mayor) asks, and each villager at
@@ -317,6 +346,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   awayUntil: integer("away_until", { mode: "timestamp" }),
   awayStartedAt: integer("away_started_at", { mode: "timestamp" }),
   awaySpendCapUsd: real("away_spend_cap_usd").notNull().default(1),
+  // What one round of votes may spend in all, in USD (#98).
+  voteCostCapUsd: real("vote_cost_cap_usd").notNull().default(0.15),
   // New tools already offered to this install (see settingsStore), so a tool
   // the owner switched off isn't switched back on.
   offeredTools: text("offered_tools", { mode: "json" }),
