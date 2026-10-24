@@ -80,3 +80,28 @@ sudo systemctl restart autarch-web autarch-worker   # the web unit rebuilds on s
 ```
 
 > `allowedDevOrigins` in `next.config.ts` only affects `next dev`; production needs no change.
+
+### Upgrading to the village (PR #112) or any release with database changes
+
+The database upgrades itself on start (new tables and columns; nothing is deleted), but take a
+backup first so you can go back:
+
+```
+sudo systemctl stop autarch-worker autarch-web
+sudo -iu autarch bash -c 'cd ~/autarch && npm run backup'           # a WAL-safe copy in ~/backups
+sudo -iu autarch bash -c 'cd ~/autarch && git pull origin master && npm ci'
+sudo systemctl start autarch-web autarch-worker                     # the web unit rebuilds on start
+```
+
+Then check:
+
+1. `journalctl -u autarch-web -u autarch-worker -n 50` shows no errors.
+2. The dashboard opens on the village; sign in as before.
+3. Your agent is now the **Mayor** (the town hall → Mayor's ledger → Villagers), with its old
+   conversations, jobs and diary.
+4. Settings are in the Mayor's ledger. Nothing that runs on its own is switched on by the upgrade:
+   free time, the daily self-report and self-directed work stay off until you turn them on.
+5. Optional: set a **town daily budget** (Mayor's ledger → Limits) before adding villagers.
+
+To go back: stop both services, check out the previous commit, copy the backup over
+`data/app.db` (or your `AUTARCH_DB_PATH`), `npm ci`, and start them again.
