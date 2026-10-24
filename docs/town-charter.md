@@ -59,6 +59,19 @@ Away mode ends by itself at the end date, or when the owner says they're back. I
 autonomy mode, low and medium requests already run on their own, so away mode matters most in
 manual mode.
 
+**Drafts.** Nothing leaves the machine on a villager's say-so.
+
+- Emails, posts, shop listings and messages to people are only ever saved as **drafts**
+  (`save_draft`) in the owner's outbox.
+- The owner reads each one, may edit it, and approves or discards it.
+- An approved draft is sent by the connector for its kind. Where there is none, it's marked ready
+  and the owner sends it themselves.
+- No tool sends anything.
+
+**Connectors** (outside services) keep their addresses and credentials as secrets: the agents'
+tools can't read them, `query_database` included. The first is the owner's calendar, read only,
+from its private ICS address, and shown on the wall calendar at home.
+
 These rules are enforced in code. The tools an agent can call simply don't include them, and the
 server refuses the matching requests from agents.
 

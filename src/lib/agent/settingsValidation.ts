@@ -59,6 +59,7 @@ const RULES: Record<string, Rule> = {
   awayUntil: { kind: "future", maxDays: 60 },
   awaySpendCapUsd: { kind: "number", min: 0, max: 1000 },
   voteCostCapUsd: { kind: "number", min: 0.01, max: 100 },
+  calendarIcsUrl: { kind: "text", max: 2000, nullable: true },
   wakeTime: { kind: "time" },
   allowNetworkFetch: { kind: "bool" },
   paused: { kind: "bool" },

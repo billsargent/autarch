@@ -1,0 +1,139 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useVillagers } from "../../data/useVillagers";
+import ParchmentDialog from "../ParchmentDialog";
+
+// The outbox tray on the owner's desk (#107): everything the villagers wrote
+// for the outside world. Nothing leaves until the owner approves it.
+
+export interface DraftRow {
+  id: number;
+  kind: "email" | "post" | "listing" | "message" | "other";
+  target: string | null;
+  subject: string | null;
+  content: string;
+  status: "draft" | "approved" | "sent" | "discarded" | "failed";
+  sendResult: string | null;
+  agentId: number | null;
+  createdAt: string;
+}
+
+const ICON: Record<DraftRow["kind"], string> = { email: "✉", post: "📣", listing: "🏷", message: "💬", other: "📄" };
+const STATUS: Record<DraftRow["status"], string> = {
+  draft: "Waiting for you",
+  approved: "Approved: ready for you to send",
+  sent: "Sent",
+  discarded: "Discarded",
+  failed: "Couldn't be sent",
+};
+
+export function useDrafts() {
+  const [list, setList] = useState<DraftRow[] | null>(null);
+  const seq = useRef(0);
+  const reload = useCallback(async () => {
+    const mine = ++seq.current;
+    try {
+      const data = await fetch("/api/drafts", { cache: "no-store" }).then((r) => r.json());
+      if (mine === seq.current) setList(data.drafts ?? []);
+    } catch {
+      /* keep what we have */
+    }
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(reload, 0);
+    return () => clearTimeout(t);
+  }, [reload]);
+  return { list, reload, waiting: list?.filter((d) => d.status === "draft") ?? [] };
+}
+
+export default function Outbox({ onClose }: { onClose: () => void }) {
+  const { list, reload } = useDrafts();
+  const { byId } = useVillagers(30000);
+  const [edits, setEdits] = useState<Record<number, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<number | null>(null);
+
+  async function decide(d: DraftRow, action: "approve" | "discard") {
+    setError(null);
+    const res = await fetch(`/api/drafts/${d.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action, edits: edits[d.id] !== undefined ? { content: edits[d.id] } : undefined }),
+    });
+    if (!res.ok) setError((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`);
+    await reload();
+  }
+
+  return (
+    <ParchmentDialog kicker="Your home" title="The outbox" onClose={onClose} wide>
+      <p className="mb-3 text-xs text-[#6b4a2e]">
+        Emails, posts, listings and messages the villagers wrote for the outside world. Nothing is ever sent without you: read
+        it, change it if you like, then approve or discard it. Until a connector is set up for that kind, approving just marks
+        it ready, and you copy it and send it yourself.
+      </p>
+      {error && <p role="alert" className="mb-2 text-xs text-[#b3261e]">{error}</p>}
+      {!list && <p className="text-sm">Sorting the post…</p>}
+      {list?.length === 0 && <p className="text-sm">The tray is empty.</p>}
+      <ul className="space-y-2">
+        {list?.map((d) => {
+          const who = byId(d.agentId);
+          const text = edits[d.id] ?? d.content;
+          return (
+            <li key={d.id} className="rounded border-2 border-[#3b2716] bg-[#fffaf0] p-2.5 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold">
+                  {ICON[d.kind]} {d.subject || `A ${d.kind}`}
+                </span>
+                <span className="ml-auto font-semibold text-[#8a5a2b]">{STATUS[d.status]}</span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-[#6b4a2e]">
+                From {who?.name ?? "a villager"}
+                {d.target && ` · to ${d.target}`} · {new Date(d.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+              </p>
+              {d.status === "draft" ? (
+                <textarea
+                  name={`draft-${d.id}`}
+                  value={text}
+                  onChange={(e) => setEdits((m) => ({ ...m, [d.id]: e.target.value }))}
+                  rows={Math.min(10, Math.max(3, text.split("\n").length))}
+                  className="mt-1 w-full resize-y rounded border-2 border-[#3b2716] bg-white px-2 py-1 font-mono text-[12px] outline-none"
+                />
+              ) : (
+                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-[#d8c49a] bg-white/60 p-2 font-mono text-[12px]">{d.content}</pre>
+              )}
+              {d.sendResult && <p className="mt-1 text-[11px]">{d.sendResult}</p>}
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {d.status === "draft" && (
+                  <>
+                    <button onClick={() => void decide(d, "approve")} className="village-btn village-btn-go px-2 py-1 text-[11px]">
+                      ✅ Approve
+                    </button>
+                    <button onClick={() => void decide(d, "discard")} className="village-btn village-btn-danger px-2 py-1 text-[11px]">
+                      🗑 Discard
+                    </button>
+                  </>
+                )}
+                {(d.status === "approved" || d.status === "draft") && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText([d.subject, text].filter(Boolean).join("\n\n"));
+                        setCopied(d.id);
+                      } catch {
+                        setError("Couldn't copy; select the text instead.");
+                      }
+                    }}
+                    className="village-btn px-2 py-1 text-[11px]"
+                  >
+                    {copied === d.id ? "Copied" : "📋 Copy"}
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </ParchmentDialog>
+  );
+}

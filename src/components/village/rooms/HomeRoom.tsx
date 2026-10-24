@@ -15,6 +15,7 @@ import TalkDrawer from "../TalkDrawer";
 import VillagerPortrait from "../VillagerPortrait";
 import { MapTable, Pantry } from "./BuildingDialogs";
 import CottageRoom from "./CottageRoom";
+import Outbox, { useDrafts } from "./Outbox";
 import MailboxDialog from "./MailboxDialog";
 import TownHallRoom from "./TownHallRoom";
 import type { RoomProps } from "./types";
@@ -99,15 +100,18 @@ function Desk({ onClose }: { onClose: () => void }) {
   const { pending } = useApprovals();
   const { waiting } = useHires();
   const { unread } = useNotifications();
-  const [open, setOpen] = useState<"approvals" | "hires" | "letters" | null>(null);
+  const { waiting: drafts } = useDrafts();
+  const [open, setOpen] = useState<"approvals" | "hires" | "letters" | "outbox" | null>(null);
   const { villagers } = useVillagers(30000);
   if (open === "approvals") return <TownHallRoom action="approvals.pending" onClose={onClose} />;
   if (open === "hires") return <TownHallRoom action="hires.open" onClose={onClose} />;
   if (open === "letters") return <MailboxDialog onClose={onClose} />;
+  if (open === "outbox") return <Outbox onClose={onClose} />;
   const papers = [
     { id: "approvals" as const, label: "✋ Approvals", count: pending.length, note: "actions waiting for your yes or no" },
     { id: "hires" as const, label: "📜 Hire requests", count: waiting.length, note: "new villagers, with the Mayor's interview" },
     { id: "letters" as const, label: "✉ Letters", count: unread.length, note: "what the villagers wrote to you" },
+    { id: "outbox" as const, label: "📤 Outbox", count: drafts.length, note: "drafts for the outside world, waiting for your okay" },
   ];
   return (
     <ParchmentDialog kicker="Your home" title="Your desk" onClose={onClose}>
@@ -288,7 +292,8 @@ function Calendar({ onClose }: { onClose: () => void }) {
           falls due at night waits until morning.
         </p>
       )}
-      <p className="text-xs font-semibold">Coming up</p>
+      <YourCalendar connected={Boolean(settings?.calendarSet)} />
+      <p className="text-xs font-semibold">The village&apos;s jobs</p>
       {!loaded && <p className="text-sm">Turning the pages…</p>}
       {loaded && upcoming.length === 0 && <p className="text-sm">Nothing on the calendar.</p>}
       <ul className="mt-1 divide-y-2 divide-[#e6d6b0] rounded border-2 border-[#3b2716] bg-[#fffaf0]">
@@ -303,6 +308,89 @@ function Calendar({ onClose }: { onClose: () => void }) {
         ))}
       </ul>
     </ParchmentDialog>
+  );
+}
+
+// Your own calendar (#108): read-only, from its private ICS address.
+interface CalEvent {
+  summary: string;
+  start: string;
+  end: string | null;
+  allDay: boolean;
+  location: string | null;
+}
+
+function YourCalendar({ connected }: { connected: boolean }) {
+  const [state, setState] = useState<{ configured: boolean; events: CalEvent[]; error?: string } | null>(null);
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const reload = useCallback(async () => {
+    try {
+      setState(await fetch("/api/calendar", { cache: "no-store" }).then((r) => r.json()));
+    } catch {
+      /* keep what we have */
+    }
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(reload, 0);
+    return () => clearTimeout(t);
+  }, [reload, connected]);
+
+  async function save(value: string | null) {
+    setError(null);
+    const res = await fetch("/api/settings", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ calendarIcsUrl: value }) });
+    if (!res.ok) setError(((await res.json().catch(() => ({}))).error as string | undefined)?.replace(/^\w+: /, "") ?? `HTTP ${res.status}`);
+    else setUrl("");
+    await reload();
+  }
+
+  const day = (iso: string) => new Date(iso).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  const time = (e: CalEvent) => (e.allDay ? "all day" : new Date(e.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+  const byDay = new Map<string, CalEvent[]>();
+  for (const e of state?.events ?? []) byDay.set(day(e.start), [...(byDay.get(day(e.start)) ?? []), e]);
+
+  return (
+    <div className="mb-3 rounded border-2 border-[#d8c49a] p-2.5 text-xs">
+      <p className="font-semibold">📅 Your calendar</p>
+      {!state && <p>Turning the pages…</p>}
+      {state && !state.configured && (
+        <>
+          <p className="mt-0.5 text-[#6b4a2e]">
+            Paste your calendar&apos;s private ICS address (Google, Apple, Outlook and most others have one in their sharing settings).
+            It&apos;s read only, and kept from the villagers.
+          </p>
+          <div className="mt-1.5 flex gap-1.5">
+            <input name="calendarIcsUrl" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… .ics" className="flex-1 rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 py-1" />
+            <button disabled={!url.trim()} onClick={() => void save(url.trim())} className="village-btn px-2 py-1 text-[11px]">
+              Connect
+            </button>
+          </div>
+        </>
+      )}
+      {state?.configured && (
+        <>
+          {state.error && <p className="mt-0.5 text-[#b3261e]">Couldn&apos;t read it: {state.error}.</p>}
+          {!state.error && state.events.length === 0 && <p className="mt-0.5">Nothing in the next two weeks.</p>}
+          <ul className="mt-1 space-y-1">
+            {[...byDay.entries()].map(([d, events]) => (
+              <li key={d}>
+                <span className="font-semibold">{d}</span>
+                {events.map((e, i) => (
+                  <span key={i} className="block pl-3">
+                    {time(e)} · {e.summary}
+                    {e.location && <span className="text-[#6b4a2e]"> · {e.location}</span>}
+                  </span>
+                ))}
+              </li>
+            ))}
+          </ul>
+          <button onClick={() => void save(null)} className="mt-1.5 text-[11px] underline">
+            Disconnect
+          </button>
+        </>
+      )}
+      {error && <p role="alert" className="mt-1 text-[#b3261e]">{error}</p>}
+    </div>
   );
 }
 

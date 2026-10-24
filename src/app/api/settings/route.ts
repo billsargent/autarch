@@ -20,13 +20,15 @@ import {
 // agent's name and personality are the Mayor's now that there are villagers
 // (#55), so older screens that edit "the agent" edit him.
 async function publicSettings(settings: AgentSettingsRow) {
-  const { apiKey, ...safeSettings } = settings;
+  const { apiKey, calendarIcsUrl, ...safeSettings } = settings;
   const mayor = await ensureMayor();
   return {
     ...safeSettings,
     agentName: mayor.name,
     persona: mayor.persona,
     apiKeySet: Boolean(apiKey),
+    // The calendar's address is a secret too: only whether it's set.
+    calendarSet: Boolean(calendarIcsUrl),
     deepseekModels: (settings.deepseekModels as string[]) || [],
   };
 }
@@ -99,6 +101,7 @@ export async function PUT(req: Request) {
     "awayUntil",
     "awaySpendCapUsd",
     "voteCostCapUsd",
+    "calendarIcsUrl",
   ];
   const patch: Record<string, unknown> = {};
   for (const key of allowedKeys) {
@@ -110,6 +113,9 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Enabling unrestricted mode requires confirm: true." }, { status: 400 });
   }
   const checked = validateSettingsPatch(patch, ALL_TOOL_DEFINITIONS.map((t) => t.function.name));
+  if (checked.ok && typeof checked.patch.calendarIcsUrl === "string" && !/^(https?|webcal):\/\//i.test(checked.patch.calendarIcsUrl)) {
+    return NextResponse.json({ error: "calendarIcsUrl: must be an https:// or webcal:// address." }, { status: 400 });
+  }
   if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
   // Going away starts the away-mode spend count afresh (#102).
   if (checked.patch.awayUntil) checked.patch.awayStartedAt = new Date();

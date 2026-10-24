@@ -604,6 +604,25 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
+  // The outbox (#107): anything meant to leave the machine is a draft.
+  {
+    type: "function" as const,
+    function: {
+      name: "save_draft",
+      description:
+        "Save something meant for the outside world (an email, a post, a shop listing, a message to someone) as a draft in the owner's outbox. Nothing is ever sent by you: the owner reads it, may edit it, and decides. Use this instead of trying to send anything yourself.",
+      parameters: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["email", "post", "listing", "message", "other"] },
+          to: { type: "string", description: "Who or where it's for: an address, a channel, a shop." },
+          subject: { type: "string" },
+          content: { type: "string", description: "The full text, ready to send." },
+        },
+        required: ["kind", "content"],
+      },
+    },
+  },
   // Notes about neighbours (#103): kept in your own diary.
   {
     type: "function" as const,
@@ -696,6 +715,8 @@ export function evaluateToolRisk(
       return { risk: "medium", reason: "The Mayor creating a recurring work schedule for a villager." };
     case "note_about":
       return { risk: "low", reason: "A note in the villager's own diary; no system access." };
+    case "save_draft":
+      return { risk: "low", reason: "Saves a draft in the owner's outbox; nothing is sent." };
     case "propose_idea":
       return { risk: "low", reason: "Pins an idea on the notice board; the village votes and the owner can veto." };
     case "propose_building":
@@ -836,6 +857,8 @@ export async function executeTool(
       return noteAbout(args, ctx);
     case "propose_idea":
       return (await import("./ideas")).proposeIdeaTool(args, ctx);
+    case "save_draft":
+      return (await import("./drafts")).saveDraftTool(args, ctx);
     case "query_database":
       return queryDatabase(args);
     case "download_file":
@@ -1359,6 +1382,10 @@ async function queryDatabase(args: Record<string, unknown>) {
   // Diaries are private (#103): a villager reads only their own, with list tools.
   if (/journal_entries/i.test(raw)) {
     return { output: "Diaries are private: query_database can't read journal_entries. Use your own journal tools.", summary: "query blocked (diaries)" };
+  }
+  // The calendar's private address is a secret like the key (#108).
+  if (/calendar_?ics|ics_?url/i.test(raw)) {
+    return { output: "Queries that mention the calendar address are not allowed.", summary: "query blocked (secret column)" };
   }
   if (/api_?key/i.test(raw)) {
     return { output: "Queries that mention the API key column are not allowed.", summary: "query blocked (secret column)" };

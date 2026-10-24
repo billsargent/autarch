@@ -82,6 +82,7 @@ export interface SettingsRow {
   allowNetworkFetch: boolean;
   agentName: string;
   apiKeySet: boolean;
+  calendarSet: boolean;
   apiBaseUrl: string;
   deepseekModels: string[];
   paused: boolean;

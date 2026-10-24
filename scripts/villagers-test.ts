@@ -666,6 +666,69 @@ async function main() {
   check("keepers spend their spare time at their building", (await econ.keeperDoors())[gus.id], "west-1");
   check("when the village runs short, morale dips", (await (await import("../src/lib/agent/morale")).villageMorale()).every((m) => m.reasons.includes("the village ran short of bread (−10)")), after.shortage > 0);
 
+  // --- the outbox (#107) and the owner's calendar (#108) ---------------------------------
+  const { drafts: draftsT } = await import("../src/db/schema");
+  const draftRoute = await import("../src/app/api/drafts/[id]/route");
+  const drafted = await executeTool("save_draft", { kind: "email", to: "shop@example.com", subject: "Order", content: "Two sacks of flour, please." }, town, ctxCal);
+  check("a villager saves outward work as a draft", drafted.output.startsWith("Saved draft #") && drafted.output.includes("Nothing has been sent"), true);
+  const draftId = Number(/#(\d+)/.exec(drafted.output)?.[1]);
+  const draftRow = async () => (await db.select().from(draftsT).where(eq(draftsT.id, draftId)))[0];
+  check("…it waits for the owner", [(await draftRow()).status, (await draftRow()).agentId], ["draft", cal.id]);
+  const decideD = (id: number, body: unknown) => draftRoute.PATCH(req(`/api/drafts/${id}`, "PATCH", body), { params: Promise.resolve({ id: String(id) }) });
+  await decideD(draftId, { action: "approve", edits: { content: "Three sacks of flour, please." } });
+  check("the owner approves it, with their edits (no connector yet: ready to send by hand)", [(await draftRow()).status, (await draftRow()).content], ["approved", "Three sacks of flour, please."]);
+  check("a decided draft stays decided", (await decideD(draftId, { action: "discard" })).status, 409);
+  const second = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "post", content: "Hello world" }, town, ctxCal)).output)?.[1]);
+  await decideD(second, { action: "discard" });
+  check("…or discards it", (await db.select().from(draftsT).where(eq(draftsT.id, second)))[0].status, "discarded");
+  check("no tool sends or approves anything", ALL_TOOL_DEFINITIONS.map((t) => t.function.name).filter((n) => /send|publish|approve_draft/i.test(n)), []);
+
+  const cal2 = await import("../src/lib/agent/calendar");
+  const now0 = new Date(2026, 9, 26, 8, 0, 0); // a Monday morning
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "BEGIN:VEVENT",
+    "DTSTART:20261026T090000",
+    "DTEND:20261026T093000",
+    "SUMMARY:Stand-up with a long",
+    "  folded title",
+    "RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=4",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "DTSTART;VALUE=DATE:20261030",
+    "SUMMARY:Guitar lesson",
+    "LOCATION:Music shop\\, high street",
+    "END:VEVENT",
+    "BEGIN:VEVENT",
+    "DTSTART:20261027T120000Z",
+    "SUMMARY:Cancelled lunch",
+    "STATUS:CANCELLED",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+  const evs = cal2.parseIcs(ics, now0, new Date(2026, 10, 9));
+  check("an ICS calendar is read: folded lines, weekly repeats, all-day events, cancellations", evs.map((e) => [e.summary, e.start.getDate(), e.allDay]), [
+    ["Stand-up with a long folded title", 26, false],
+    ["Stand-up with a long folded title", 28, false],
+    ["Guitar lesson", 30, true],
+    ["Stand-up with a long folded title", 2, false],
+    ["Stand-up with a long folded title", 4, false],
+  ]);
+  check("…with places", evs.find((e) => e.summary === "Guitar lesson")?.location, "Music shop, high street");
+  const http = await import("node:http");
+  const icsServer = http.createServer((_q, r) => r.end(ics));
+  await new Promise<void>((r) => icsServer.listen(0, "127.0.0.1", () => r()));
+  const icsUrl = `http://127.0.0.1:${(icsServer.address() as { port: number }).port}/my.ics`;
+  check("only web calendar addresses", (await settingsRoute.PUT(req("/api/settings", "PUT", { calendarIcsUrl: "file:///etc/passwd" }))).status, 400);
+  await settingsRoute.PUT(req("/api/settings", "PUT", { calendarIcsUrl: icsUrl }));
+  const shownSettings = (await (await settingsRoute.GET()).json()).settings;
+  check("the address is a secret: the page only learns it's set", [shownSettings.calendarSet, "calendarIcsUrl" in shownSettings], [true, false]);
+  check("…and no villager can read it from the database", (await executeTool("query_database", { sql: "SELECT calendar_ics_url FROM agent_settings" }, town, ctxMayor)).output, "Queries that mention the calendar address are not allowed.");
+  const upcoming = await cal2.upcomingEvents(400, new Date(2026, 9, 25));
+  check("the owner's calendar is fetched and shown", [upcoming.configured, upcoming.error, upcoming.events.length > 0], [true, undefined, true]);
+  icsServer.close();
+  await settingsRoute.PUT(req("/api/settings", "PUT", { calendarIcsUrl: null }));
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

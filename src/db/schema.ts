@@ -243,6 +243,22 @@ export const buildings = sqliteTable("buildings", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
+// The outbox (#107): outward-facing work waits here for the owner.
+export const drafts = sqliteTable("drafts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind", { enum: ["email", "post", "listing", "message", "other"] }).notNull().default("other"),
+  // Who or where it's for (an address, a channel, a shop).
+  target: text("target"),
+  subject: text("subject"),
+  content: text("content").notNull(),
+  status: text("status", { enum: ["draft", "approved", "sent", "discarded", "failed"] }).notNull().default("draft"),
+  sendResult: text("send_result"),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  conversationId: integer("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  decidedAt: integer("decided_at", { mode: "timestamp" }),
+});
+
 // The village's stores (#106): one row, updated once a day.
 export const economy = sqliteTable("economy", {
   id: integer("id").primaryKey(),
@@ -371,6 +387,9 @@ export const agentSettings = sqliteTable("agent_settings", {
   awaySpendCapUsd: real("away_spend_cap_usd").notNull().default(1),
   // What one round of votes may spend in all, in USD (#98).
   voteCostCapUsd: real("vote_cost_cap_usd").notNull().default(0.15),
+  // The owner's calendar (#108): its private ICS address. A secret: never
+  // shown to agents, and query_database can't read it.
+  calendarIcsUrl: text("calendar_ics_url"),
   // New tools already offered to this install (see settingsStore), so a tool
   // the owner switched off isn't switched back on.
   offeredTools: text("offered_tools", { mode: "json" }),

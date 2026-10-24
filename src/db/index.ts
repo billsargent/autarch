@@ -306,6 +306,19 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     ended_at INTEGER
   )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL DEFAULT 'other',
+    target TEXT,
+    subject TEXT,
+    content TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    send_result TEXT,
+    agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    decided_at INTEGER
+  )`);
   sqlite.exec(`CREATE TABLE IF NOT EXISTS economy (
     id INTEGER PRIMARY KEY,
     wheat INTEGER NOT NULL DEFAULT 0,
@@ -345,6 +358,9 @@ if (!globalForDb.__agentLabSqlite) {
     reason TEXT,
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`);
+  if (!existingCols("agent_settings").includes("calendar_ics_url")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN calendar_ics_url TEXT");
+  }
   if (!existingCols("agent_settings").includes("vote_cost_cap_usd")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN vote_cost_cap_usd REAL NOT NULL DEFAULT 0.15");
   }

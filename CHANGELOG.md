@@ -3,6 +3,19 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — The outbox and your calendar
+
+- **Nothing leaves without you (#107).** When villagers write something for the outside world
+  (an email, a post, a shop listing, a message), they save it as a draft (`save_draft`).
+  - It lands in the **outbox** on your desk at home. Read it, change the words if you like, then
+    approve or discard it.
+  - There's no email or shop connection yet, so approving marks it ready and you copy it and send
+    it yourself. Once a connector exists, approving will send it.
+- **Your calendar on the wall (#108).** Open the wall calendar at home and paste your calendar's
+  private ICS address (Google, Apple and Outlook all have one).
+  - Your next two weeks appear next to the village's jobs. Weekly and daily repeats are included.
+  - It's read only, and the address is kept secret from the villagers.
+
 ## 2026-10-24 — The village grows, with a farm and a bakery
 
 - **New land (#105).** The village has spread: there's open land to the north and west, with
