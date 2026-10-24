@@ -7,7 +7,8 @@ import { villageFonts } from "./fonts";
 import { OWNER_SPRITE, VILLAGE, spriteFor, type Place } from "./manifest";
 import type { PlayerSpec } from "./SceneView";
 import StampSprite from "./StampSprite";
-import { CELL, STAMPS, type StampId } from "./scene";
+import { CELL, STAMPS, stampRect, type StampId } from "./scene";
+import { VILLAGE_SCENE } from "./scenes";
 import { useBuildings } from "../data/useBuildings";
 import { BUBBLE_MS, MOOD_BADGE, MOOD_PLACE, bubbleLine, moodLabel, nextHangout, standOffsets, villagerMood } from "./villagerState";
 import { snapshotOf, useVillageData } from "./useVillageData";
@@ -203,7 +204,12 @@ export default function VillageView() {
       <SceneView
         scene={VILLAGE}
         player={player}
-        overlays={<PlotBuildings state={buildings.state} onOpen={(id) => openAction(`building.${id}`)} />}
+        overlays={
+          <>
+            <PlotBuildings state={buildings.state} onOpen={(id) => openAction(`building.${id}`)} />
+            {(phase === "dusk" || phase === "night") && !data.paused && <LitWindows plots={buildings.state} />}
+          </>
+        }
         light={data.paused ? "frozen" : phase}
         labels="signs"
         onPlace={openPlace}
@@ -313,6 +319,24 @@ function PlotBuildings({ state, onOpen }: { state: ReturnType<typeof useBuilding
             </div>
           );
         })}
+    </>
+  );
+}
+
+// Homes with their lights on at dusk and at night (#110): yours, the
+// cottages, and any houses built on the plots.
+function LitWindows({ plots }: { plots: ReturnType<typeof useBuildings>["state"] }) {
+  const homes = VILLAGE_SCENE.places.filter((p) => p.id === "home" || p.id === "cottages").flatMap((p) => p.parts.map(stampRect));
+  const houses = (plots?.buildings ?? [])
+    .filter((b) => b.kind === "house" && b.status === "built")
+    .map((b) => VILLAGE.plots.find((p) => p.id === b.plotId))
+    .filter((p): p is NonNullable<typeof p> => Boolean(p))
+    .map((p) => ({ col: p.col, row: p.row, w: p.w, h: p.h }));
+  return (
+    <>
+      {[...homes, ...houses].map((r, i) => (
+        <div key={i} aria-hidden className="village-window pointer-events-none absolute" style={{ left: r.col * CELL, top: (r.row + r.h * 0.45) * CELL, width: r.w * CELL, height: r.h * 0.55 * CELL }} />
+      ))}
     </>
   );
 }

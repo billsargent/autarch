@@ -364,6 +364,9 @@ if (!globalForDb.__agentLabSqlite) {
   if (!existingCols("agent_settings").includes("vote_cost_cap_usd")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN vote_cost_cap_usd REAL NOT NULL DEFAULT 0.15");
   }
+  if (!existingCols("work_sessions").includes("model")) {
+    sqlite.exec("ALTER TABLE work_sessions ADD COLUMN model TEXT");
+  }
   if (!existingCols("journal_entries").includes("subject_agent_id")) {
     sqlite.exec("ALTER TABLE journal_entries ADD COLUMN subject_agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL");
   }

@@ -16,6 +16,7 @@ import VillagerPortrait from "../VillagerPortrait";
 import { MapTable, Pantry } from "./BuildingDialogs";
 import CottageRoom from "./CottageRoom";
 import Outbox, { useDrafts } from "./Outbox";
+import { useGoals } from "../../data/useGoals";
 import MailboxDialog from "./MailboxDialog";
 import TownHallRoom from "./TownHallRoom";
 import type { RoomProps } from "./types";
@@ -41,6 +42,8 @@ export default function HomeRoom({ action, onClose }: RoomProps) {
       return <MapTable onClose={onClose} />;
     case "home.pantry":
       return <Pantry onClose={onClose} />;
+    case "home.keepsakes":
+      return <Keepsakes onClose={onClose} />;
     default:
       return <Guitar onClose={onClose} />;
   }
@@ -293,6 +296,7 @@ function Calendar({ onClose }: { onClose: () => void }) {
         </p>
       )}
       <YourCalendar connected={Boolean(settings?.calendarSet)} />
+      <VillageHappenings />
       <p className="text-xs font-semibold">The village&apos;s jobs</p>
       {!loaded && <p className="text-sm">Turning the pages…</p>}
       {loaded && upcoming.length === 0 && <p className="text-sm">Nothing on the calendar.</p>}
@@ -391,6 +395,83 @@ function YourCalendar({ connected }: { connected: boolean }) {
       )}
       {error && <p role="alert" className="mt-1 text-[#b3261e]">{error}</p>}
     </div>
+  );
+}
+
+// Ideas the village adopted lately (#104): its events and plans.
+interface IdeaLite {
+  id: number;
+  title: string;
+  status: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  // Decided in the last 30 days (worked out when loaded).
+  recent?: boolean;
+}
+
+function useIdeas() {
+  const [ideas, setIdeas] = useState<IdeaLite[] | null>(null);
+  useEffect(() => {
+    fetch("/api/ideas", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => {
+        const since = Date.now() - 30 * 86400_000;
+        setIdeas((d.ideas ?? []).map((i: IdeaLite) => ({ ...i, recent: Boolean(i.decidedAt && Date.parse(i.decidedAt) >= since) })));
+      })
+      .catch(() => setIdeas([]));
+  }, []);
+  return ideas;
+}
+
+function VillageHappenings() {
+  const ideas = useIdeas();
+  const adopted = (ideas ?? []).filter((i) => i.status === "adopted" && i.recent);
+  if (!adopted.length) return null;
+  return (
+    <div className="mb-3 text-xs">
+      <p className="font-semibold">🎉 The village decided</p>
+      <ul className="mt-1 space-y-0.5">
+        {adopted.slice(0, 6).map((i) => (
+          <li key={i.id}>
+            {new Date(i.decidedAt!).toLocaleDateString([], { month: "short", day: "numeric" })} · {i.title}
+            <span className="text-[#6b4a2e]"> ({i.decidedBy === "owner" ? "you adopted it" : "by vote"})</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// --- the keepsake chest (#110) ---------------------------------------------------------------
+
+function Keepsakes({ onClose }: { onClose: () => void }) {
+  const ideas = useIdeas();
+  const { goals } = useGoals();
+  const { list: drafts } = useDrafts();
+  const done = goals.filter((g) => g.status === "done").slice(0, 10);
+  const adopted = (ideas ?? []).filter((i) => i.status === "adopted").slice(0, 10);
+  const sent = (drafts ?? []).filter((d) => d.status === "sent" || d.status === "approved").slice(0, 10);
+  const section = (title: string, items: string[], empty: string) => (
+    <div className="mb-3">
+      <p className="text-xs font-semibold">{title}</p>
+      {items.length ? (
+        <ul className="mt-1 space-y-0.5 text-xs">
+          {items.map((t, i) => (
+            <li key={i}>· {t}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-[#6b4a2e]">{empty}</p>
+      )}
+    </div>
+  );
+  return (
+    <ParchmentDialog kicker="Your home" title="The keepsake chest" onClose={onClose}>
+      <p className="mb-3 text-xs text-[#6b4a2e]">Things the village has done for you, kept for a rainy day.</p>
+      {section("🏁 Goals finished", done.map((g) => g.title), "None finished yet.")}
+      {section("💡 Ideas adopted", adopted.map((i) => i.title), "No ideas adopted yet.")}
+      {section("📤 Work sent out", sent.map((d) => d.subject || `A ${d.kind}`), "Nothing sent out yet.")}
+    </ParchmentDialog>
   );
 }
 

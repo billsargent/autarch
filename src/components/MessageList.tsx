@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { MessageRow } from "@/lib/agent/clientTypes";
 import Markdown from "./Markdown";
 
@@ -157,8 +157,10 @@ const UserBubble = memo(UserBubbleView, sameBubble);
 UserBubble.displayName = "UserBubble";
 
 function EventBubbleView({ m, t }: BubbleProps) {
+  // A long or multi-line event reads as a block, not a squeezed pill (#39).
+  const long = (m.content ?? "").length > 120 || (m.content ?? "").includes("\n");
   return (
-    <div className={t.event}>
+    <div className={long ? `${t.event} !block !max-h-60 !overflow-auto !rounded-md !text-left !whitespace-pre-wrap` : t.event}>
       {m.content}
       {m.createdAt && <span className={t.eventTime}>{fmtTime(m.createdAt)}</span>}
     </div>
@@ -197,7 +199,56 @@ function ToolBubbleView({ m, t }: BubbleProps) {
       </div>
       {formatArgs(m.toolArgs) && <p className={t.toolArgs}>{formatArgs(m.toolArgs)}</p>}
       <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-snug">{m.content}</pre>
+      {kind === "pending" && <InlineApproval content={m.content ?? ""} />}
       {m.createdAt && <div className={t.time}>{fmtTime(m.createdAt)}</div>}
+    </div>
+  );
+}
+
+// Approve or deny a waiting request right from the chat (#38). The message
+// itself is rewritten with the outcome on the next refresh.
+function InlineApproval({ content }: { content: string }) {
+  const id = Number(/execution #(\d+)/.exec(content)?.[1]);
+  const [note, setNote] = useState("");
+  const [state, setState] = useState<"idle" | "busy" | "approved" | "denied">("idle");
+  const [error, setError] = useState<string | null>(null);
+  if (!id) return null;
+  async function decide(decision: "approved" | "denied") {
+    setState("busy");
+    setError(null);
+    try {
+      const res = await fetch(`/api/approvals/${id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision, note: note || undefined }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || `HTTP ${res.status}`);
+        setState("idle");
+      } else setState(decision);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setState("idle");
+    }
+  }
+  if (state === "approved" || state === "denied") return <p className="mt-1 font-semibold">{state === "approved" ? "✅ Approved: it's running." : "❌ Denied."}</p>;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Optional note"
+        aria-label="Note for the agent"
+        className="min-w-0 flex-1 rounded border border-current/40 bg-transparent px-1.5 py-0.5 text-[11px]"
+      />
+      <button disabled={state === "busy"} onClick={() => void decide("approved")} className="rounded bg-[#5f8a3c] px-2 py-0.5 text-[11px] font-semibold text-white">
+        Approve
+      </button>
+      <button disabled={state === "busy"} onClick={() => void decide("denied")} className="rounded bg-[#b3261e] px-2 py-0.5 text-[11px] font-semibold text-white">
+        Deny
+      </button>
+      {error && <span className="w-full text-[11px]">{error}</span>}
     </div>
   );
 }

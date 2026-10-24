@@ -447,14 +447,18 @@ export default function SceneView({ scene, villagers, player, light = "day", lab
   const held = useRef(new Set<string>());
   const route = useRef<Array<{ x: number; y: number }>>([]);
   // The latest values the loop and the key handler need.
-  const live = useRef({ scale: 0, zoomed: false, villagers, onPlace });
+  // `follow`: the scene is bigger than the screen (zoomed in, or a phone), so
+  // the view keeps you in sight (#82).
+  const live = useRef({ scale: 0, follow: false, villagers, onPlace });
   useEffect(() => {
-    live.current = { scale: fit * zoom, zoomed: zoom > MIN_ZOOM, villagers, onPlace };
+    live.current = { scale: fit * zoom, follow: canPan, villagers, onPlace };
   });
 
+  const inside = (r: { x: number; y: number; w: number; h: number }, x: number, y: number) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
   const standable = useCallback(
-    (x: number, y: number) => !scene.walkable.length || scene.walkable.some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h),
-    [scene.walkable],
+    (x: number, y: number) =>
+      (!scene.walkable.length || scene.walkable.some((r) => inside(r, x, y))) && !scene.blocked.some((r) => inside({ x: r.x + 4, y: r.y - 6, w: r.w - 8, h: r.h + 6 }, x, y)),
+    [scene.walkable, scene.blocked],
   );
 
   useEffect(() => {
@@ -539,7 +543,7 @@ export default function SceneView({ scene, villagers, player, light = "day", lab
         meRef.current = state;
         setMe(state);
         // Zoomed in, the view follows you.
-        if (moved && live.current.zoomed) {
+        if (moved && live.current.follow) {
           const k = live.current.scale;
           setPan({ x: (scene.width / 2 - next.x) * k, y: (scene.height / 2 - next.y) * k });
         }

@@ -18,7 +18,17 @@ export interface UsageBucket extends UsageTotals {
   bucket: string;
 }
 
+export interface UsageShare {
+  name: string | null;
+  cost: number;
+  total: number;
+  sessions: number;
+}
+
 export interface UsageData {
+  // The last 30 days by villager and by model (#80).
+  byAgent?: UsageShare[];
+  byModel?: UsageShare[];
   daily: UsageBucket[];
   weekly: UsageBucket[];
   monthly: UsageBucket[];

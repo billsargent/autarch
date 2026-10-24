@@ -3,6 +3,26 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Finishing touches
+
+- **Your home (#110):**
+  - a **keepsake chest** with the goals finished, ideas adopted and work sent out for you;
+  - at dusk and at night your home, the cottages and new houses glow with lit windows;
+  - the wall calendar lists what the village decided lately.
+- **Meetings at the table (#83):** during a town meeting, the villagers in the town hall sit
+  round the long table, each with their latest answer in a speech bubble.
+- **Walking (#109, #82):** furniture now blocks your character. When the scene is bigger than
+  the screen, as on a phone, the view follows you.
+- **Spending (#80):** the vault shows the last 30 days by villager and by model. Each turn now
+  records its model.
+- **Chat (#36, #37, #38, #39):**
+  - approve or deny a waiting request right in the chat, even with tool messages hidden;
+  - running dots clear when a turn ends;
+  - messages posted into the open conversation from elsewhere show up;
+  - long event notes are readable blocks instead of squeezed pills.
+- **Prompts (#40):** `{name}` and `{workspace}` in your own prompts now become the villager's
+  name and folder.
+
 ## 2026-10-24 — The outbox and your calendar
 
 - **Nothing leaves without you (#107).** When villagers write something for the outside world

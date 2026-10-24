@@ -102,6 +102,8 @@ export const workSessions = sqliteTable("work_sessions", {
   totalTokens: integer("total_tokens").notNull().default(0),
   costUsd: real("cost_usd").notNull().default(0),
   reason: text("reason"),
+  // The model the turn ran on (#80), for spending per model.
+  model: text("model"),
   // Turn lock and Stop (src/lib/agent/turnLock.ts).
   heartbeatAt: integer("heartbeat_at", { mode: "timestamp" }),
   cancelRequested: integer("cancel_requested", { mode: "boolean" }).notNull().default(false),

@@ -340,6 +340,8 @@ export async function runAgentTurn(opts: {
     agentId: agent.id,
     maxDurationMinutes,
   });
+  // Which model it runs on, for spending per model (#80).
+  await db.update(workSessions).set({ model: settings.modelName }).where(eq(workSessions.id, session.id));
 
   // While the turn runs: a heartbeat shows its process is alive, and Stop
   // (cancel_requested, set by any process) aborts whatever is in flight.

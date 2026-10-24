@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import "./village.css";
 import { villageFonts } from "./fonts";
@@ -20,6 +20,34 @@ import { useVillageClock } from "./useVillageClock";
 // its dialogs are theirs, and it's where they relax.
 // You, standing in the doorway (#109).
 const OWNER = { name: "You", color: "#3b2716", sprite: OWNER_SPRITE, start: "door" };
+
+// The last thing each villager said at the meeting going on, and who's
+// speaking now (#83). Only polls while there's a meeting.
+function useMeetingLines(on: boolean) {
+  const [state, setState] = useState<{ lines: Record<string, string>; speaking: number | null }>({ lines: {}, speaking: null });
+  useEffect(() => {
+    if (!on) return;
+    let live = true;
+    const load = async () => {
+      try {
+        const d = await fetch("/api/meetings", { cache: "no-store" }).then((r) => r.json());
+        if (!live || !d.meeting) return;
+        const lines: Record<string, string> = {};
+        for (const t of d.transcript ?? []) if (t.who !== "You" && t.who !== "Meeting") lines[t.who] = t.text.length > 140 ? `${t.text.slice(0, 137)}…` : t.text;
+        setState({ lines, speaking: d.meeting.speakingAgentId });
+      } catch {
+        /* try again next time */
+      }
+    };
+    void load();
+    const id = setInterval(load, 3000);
+    return () => {
+      live = false;
+      clearInterval(id);
+    };
+  }, [on]);
+  return state;
+}
 
 export default function InteriorView({ sceneId, startAction, agentId }: { sceneId: string; startAction?: string; agentId?: number | null }) {
   const scene = interiorManifest(sceneId)!;
@@ -55,14 +83,20 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
 
   const center = scene.waypoints.find((w) => w.id === "center")?.id ?? scene.spawn;
   const offsets = standOffsets(here.map(() => center));
+  // A town meeting (#83): those attending sit round the long table, each with
+  // the last thing they said in a bubble.
+  const meetingOn = sceneId === "townhall" && here.some((h) => h.mood === "meeting");
+  const meeting = useMeetingLines(meetingOn);
+  const seated = here.filter((h) => h.mood === "meeting").map((h) => h.v.id);
   const villagers: VillagerSpec[] = here.map(({ v, mood }, i) => ({
     id: `agent-${v.id}`,
     name: v.name,
     color: v.color,
     sprite: spriteFor(v.character),
-    // Asleep at home, they're in bed (#111).
-    target: isCottage && mood === "asleep" ? "bed" : center,
-    offset: isCottage && mood === "asleep" ? 0 : offsets[i],
+    // Asleep at home, they're in bed (#111); at a meeting, at the table (#83).
+    target: isCottage && mood === "asleep" ? "bed" : mood === "meeting" && seated.indexOf(v.id) < 6 ? `seat-${seated.indexOf(v.id) + 1}` : center,
+    offset: (isCottage && mood === "asleep") || (mood === "meeting" && seated.indexOf(v.id) < 6) ? 0 : offsets[i],
+    said: mood === "meeting" ? (meeting.speaking === v.id ? "💬 …" : meeting.lines[v.name] ?? null) : null,
     badge: MOOD_BADGE[mood],
     vest: v.tier === "worker",
     title: moodLabel(mood, v.name),

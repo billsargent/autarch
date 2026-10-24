@@ -729,6 +729,18 @@ async function main() {
   icsServer.close();
   await settingsRoute.PUT(req("/api/settings", "PUT", { calendarIcsUrl: null }));
 
+  // --- spending per villager and per model (#80) ---------------------------------------------
+  check("each turn records its model", (await db.select().from(workSessions).where(eq(workSessions.agentId, tom.id)))[0]?.model, "tom-model");
+  const usageNow = await (await (await import("../src/app/api/usage/route")).GET()).json();
+  check("the vault shows the last 30 days by villager and by model", [usageNow.byAgent.some((r: { name: string }) => r.name === "Tom"), usageNow.byModel.some((r: { name: string }) => r.name === "tom-model")], [true, true]);
+
+  // --- {name} in the owner's own prompts (#40) ------------------------------------------------
+  await updateSettings({ systemPromptExtra: "Sign off as {name}." });
+  fake.byAgent.Cal = [{ text: "Done." }];
+  await runAgentTurn({ userMessage: "hi", agentId: cal.id });
+  check("{name} in a custom prompt becomes the villager's name", fake.seen.filter((x) => x.system.startsWith("You are Cal")).pop()?.system.includes("Sign off as Cal."), true);
+  await updateSettings({ systemPromptExtra: null });
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

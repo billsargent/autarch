@@ -66,6 +66,14 @@ export const HOME_SCENE = interior({
       ],
     },
     {
+      id: "keepsakes",
+      label: "Keepsake chest",
+      role: "What the village has done for you: adopted ideas, finished goals, sent work",
+      door: "keepsakes",
+      action: "home.keepsakes",
+      parts: [{ stamp: "campChest", col: 4, row: 8 }],
+    },
+    {
       id: "maptable",
       label: "Map table",
       role: "The land around the village: plots, building proposals, building",
@@ -104,6 +112,7 @@ export const HOME_SCENE = interior({
     { id: "guitar", x: 12.5, y: 6 },
     { id: "bed", x: 13.5, y: 6.8 },
     { id: "map", x: 11, y: 9.5 },
+    { id: "keepsakes", x: 4.5, y: 9.6 },
     { id: "pantry", x: 13.6, y: 9.5 },
   ],
   edges: [
@@ -115,6 +124,7 @@ export const HOME_SCENE = interior({
     ["center", "guitar"],
     ["center", "bed"],
     ["center", "map"],
+    ["center", "keepsakes"],
     ["map", "pantry"],
   ],
 });
@@ -124,5 +134,4 @@ export const HOME_SCENE = interior({
 export const HOME_UPGRADE_SLOTS: Array<{ id: string; rect: Rect; note: string }> = [
   { id: "wall-right", rect: { col: 13, row: 1, w: 2, h: 1 }, note: "a picture or a shelf on the bedroom wall" },
   { id: "corner-front-right", rect: { col: 11, row: 8, w: 2, h: 1 }, note: "a floor spot by the bed" },
-  { id: "corner-front-left", rect: { col: 4, row: 8, w: 2, h: 1 }, note: "a floor spot by the desk" },
 ];

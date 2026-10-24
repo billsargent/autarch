@@ -335,7 +335,7 @@ export default function SettingsView() {
         <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
           <h2 className="text-sm font-semibold">System prompts</h2>
           <p className="mt-1 text-xs text-neutral-500">
-            Customize the prompts sent to the model. Leave blank to use built-in defaults. Use <code className="text-neutral-400">{`{name}`}</code> for the agent name.
+            Customize the prompts sent to the model. Leave blank to use built-in defaults. Use <code className="text-neutral-400">{`{name}`}</code> for the agent name and <code className="text-neutral-400">{`{workspace}`}</code> for its folder.
           </p>
           <div className="mt-3 space-y-3">
             <label className="block text-xs text-neutral-400">

@@ -235,7 +235,7 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
 
     case "prompts":
       return (
-        <Section title="Prompts" intro="What the model is told. Leave a box empty to use the built-in default. {name} becomes the agent's name.">
+        <Section title="Prompts" intro="What the model is told. Leave a box empty to use the built-in default. {name} becomes the agent's name, {workspace} its folder.">
           {(
             [
               ["staticCorePrompt", "Core (identity, environment, guardrails, behavior, formatting, cost)", 8],

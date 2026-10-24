@@ -38,6 +38,9 @@ export interface SceneManifest {
   hangouts: string[];
   // Where someone can stand, in scene px (the owner walks only here, #109).
   walkable: Array<{ x: number; y: number; w: number; h: number }>;
+  // Furniture and scenery standing on walkable ground, in scene px: the owner
+  // can't walk through it (#109).
+  blocked: Array<{ x: number; y: number; w: number; h: number }>;
   // Building plots (#105), in scene px, with their tile rectangle.
   plots: Array<{ id: string; door: string; col: number; row: number; w: number; h: number; rect: { x: number; y: number; w: number; h: number } }>;
 }
@@ -70,6 +73,9 @@ export function sceneManifest(layout: SceneLayout): SceneManifest {
     hangouts: layout.hangouts ?? [],
     walkable: (layout.walkable ?? []).map((r) => ({ x: r.col * CELL, y: r.row * CELL, w: r.w * CELL, h: r.h * CELL })),
     plots: (layout.plots ?? []).map((p) => ({ ...p, rect: { x: p.col * CELL, y: p.row * CELL, w: p.w * CELL, h: p.h * CELL } })),
+    // Only the bottom row of a piece counts: you can stand in front of a
+    // tall bookcase but not on the seat of a chair.
+    blocked: [...layout.places.flatMap((p) => p.parts), ...layout.decor].map(stampRect).map((r) => ({ x: r.col * CELL, y: (r.row + r.h - 1) * CELL, w: r.w * CELL, h: CELL })),
   };
 }
 

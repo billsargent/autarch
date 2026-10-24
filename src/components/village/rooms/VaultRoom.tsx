@@ -47,6 +47,24 @@ export default function VaultRoom({ action, onClose }: RoomProps) {
       >
         <p className="mb-3 text-xs text-[#6b4a2e]">What the agents have spent on model calls. Skipped sessions aren&apos;t counted.</p>
         {data ? totals : <p className="text-sm">Counting the coins…</p>}
+        {data && (data.byAgent?.length || data.byModel?.length) ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {([["By villager, last 30 days", data.byAgent], ["By model, last 30 days", data.byModel]] as const).map(([title, rows]) => (
+              <div key={title}>
+                <h3 className="village-pixel mb-1.5 text-xs">{title}</h3>
+                <ul className="divide-y-2 divide-[#e6d6b0] rounded border-2 border-[#3b2716] bg-[#fffaf0] text-xs">
+                  {(rows ?? []).map((r, i) => (
+                    <li key={i} className="flex gap-2 px-2 py-1">
+                      <span className="flex-1 truncate font-semibold">{r.name ?? "(gone)"}</span>
+                      <span>{fmtCost(r.cost)}</span>
+                      <span className="w-20 text-right text-[#6b4a2e]">{fmtTokens(r.total)} tok</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <h3 className="village-pixel mb-1.5 mt-4 text-xs">Each villager today</h3>
         <ul className="space-y-1.5">
           {villagers.map((v) => {

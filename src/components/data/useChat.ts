@@ -132,7 +132,8 @@ export function useChat(opts?: { initialConversationId?: number | null; agentId?
         if (last > s) unreadMap[c.id] = Math.min(last - s, 99);
       }
     }
-    setRunningByConvo((prev) => ({ ...prev, ...runningMap }));
+    // Rebuilt from the server each time, so a finished turn's dot clears (#36).
+    setRunningByConvo(runningMap);
     setUnreadByConvo((prev) => ({ ...prev, ...unreadMap }));
   }, [agentId]);
 
@@ -297,6 +298,13 @@ export function useChat(opts?: { initialConversationId?: number | null; agentId?
     const t = setInterval(() => loadMessages(activeId), 2000);
     return () => clearInterval(t);
   }, [activeId, activeRunning, loadMessages]);
+  // When it isn't running, still look for messages posted into it from
+  // elsewhere (post_message, notify_human, a neighbour's reply) (#37).
+  useEffect(() => {
+    if (!activeId || activeRunning) return;
+    const t = setInterval(() => loadMessages(activeId), 15000);
+    return () => clearInterval(t);
+  }, [activeId, activeRunning, loadMessages]);
 
   const loadOlder = useCallback(() => {
     if (!activeId || loadingOlder || !hasMore) return;
@@ -329,7 +337,11 @@ export function useChat(opts?: { initialConversationId?: number | null; agentId?
   // Tool messages can be hidden from the chat stream for a clean view (tool
   // activity still appears in the live console). Memoized so MessageList
   // (memo) doesn't re-render on unrelated state changes.
-  const visibleMsgs = useMemo(() => (hideChatTools ? msgs.filter((m) => m.role !== "tool") : msgs), [hideChatTools, msgs]);
+  // Hidden tool messages still show a request waiting for approval (#38).
+  const visibleMsgs = useMemo(
+    () => (hideChatTools ? msgs.filter((m) => m.role !== "tool" || (m.content ?? "").startsWith("PENDING HUMAN APPROVAL")) : msgs),
+    [hideChatTools, msgs],
+  );
 
   function handleEvent(convoId: number, evt: StreamEvent) {
     switch (evt.type) {

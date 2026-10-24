@@ -104,5 +104,21 @@ export async function GET() {
   };
   const allTime = totals(null);
 
-  return NextResponse.json({ daily, weekly, monthly, yearly, periodTotals, allTime });
+  // The last 30 days by villager and by model (#80).
+  const since30 = Math.floor((now - 30 * DAY_MS) / 1000);
+  const byAgent = sqlite
+    .prepare(
+      `SELECT a.name AS name, COALESCE(SUM(s.cost_usd), 0) AS cost, COALESCE(SUM(s.total_tokens), 0) AS total, COUNT(*) AS sessions
+       FROM work_sessions s LEFT JOIN agents a ON a.id = s.agent_id
+       WHERE s.started_at >= ? AND s.status <> 'skipped' GROUP BY s.agent_id ORDER BY cost DESC`,
+    )
+    .all(since30);
+  const byModel = sqlite
+    .prepare(
+      `SELECT COALESCE(model, 'not recorded') AS name, COALESCE(SUM(cost_usd), 0) AS cost, COALESCE(SUM(total_tokens), 0) AS total, COUNT(*) AS sessions
+       FROM work_sessions WHERE started_at >= ? AND status <> 'skipped' GROUP BY model ORDER BY cost DESC`,
+    )
+    .all(since30);
+
+  return NextResponse.json({ daily, weekly, monthly, yearly, periodTotals, allTime, byAgent, byModel });
 }

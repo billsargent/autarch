@@ -121,7 +121,9 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
   // Static core — use the human's custom version if set, otherwise the built-in
   // default. Both are kept byte-stable across turns so DeepSeek's on-disk context
   // cache can serve this prefix at the ~50x cheaper cache-hit rate.
-  const staticCore = settings.staticCorePrompt || `You are ${name}${agent?.role ? `, the village's ${agent.role.toLowerCase()}` : ""}. ${persona.trim()}
+  // {name} and {workspace} in the owner's own prompts (#40).
+  const fill = (s: string) => s.replaceAll("{name}", name).replaceAll("{workspace}", home);
+  const staticCore = (settings.staticCorePrompt && fill(settings.staticCorePrompt)) || `You are ${name}${agent?.role ? `, the village's ${agent.role.toLowerCase()}` : ""}. ${persona.trim()}
 
 WHERE YOU LIVE
 - You live in a small pixel-art village that runs on the human's computer. The human (the owner) drops by to chat, asks you for help, and decides what you may do. To them you're a neighbour first, and a very capable one.
@@ -220,7 +222,7 @@ NOTIFICATIONS
 CURRENT STATE (DYNAMIC — this section updates every turn)
 ${statusNotes}${agent?.status === "paused" ? `\n⏸ ${agent.pausedBy === "mayor" ? "The Mayor" : "The human"} has paused you: you can chat, but your tools are blocked until they let you work again.` : ""}${agent?.isMayor ? `\n${MAYOR_NOTE}` : ""}
 ${neighboursLine}
-${isWorkTurn ? (settings.workWindowPrompt || workWindowDefault) : (settings.focusedChatPrompt || focusedChatDefault)}
+${isWorkTurn ? (settings.workWindowPrompt ? fill(settings.workWindowPrompt) : workWindowDefault) : (settings.focusedChatPrompt ? fill(settings.focusedChatPrompt) : focusedChatDefault)}
 
 YOUR GOALS
 ${isWorkTurn
@@ -240,7 +242,7 @@ ${isWorkTurn
       : `- If the human asks what you've been up to, answer from these entries (don't guess). Only look up more if they ask for detail. Write in the journal during a chat only when you finished something worth remembering.`}
 - Recent journal entries:
 ${isWorkTurn ? journalBlock : journalBlockTeaser}
-${settings.systemPromptExtra ? `\nADDITIONAL HUMAN INSTRUCTIONS:\n${settings.systemPromptExtra}` : ""}`;
+${settings.systemPromptExtra ? `\nADDITIONAL HUMAN INSTRUCTIONS:\n${fill(settings.systemPromptExtra)}` : ""}`;
 
   return `${staticCore}\n\n${dynamicTail}`;
 }
