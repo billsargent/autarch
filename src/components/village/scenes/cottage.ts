@@ -45,7 +45,8 @@ export const COTTAGE_SCENE = interior({
   waypoints: [
     { id: "hearth", x: 8.5, y: 6 },
     { id: "diary", x: 3, y: 8.6 },
-    { id: "bed", x: 11.5, y: 6.6 },
+    // On the bed itself: where they sleep at night (#111).
+    { id: "bed", x: 13, y: 5.3, onFurniture: true },
   ],
   edges: [
     ["center", "hearth"],

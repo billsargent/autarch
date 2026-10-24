@@ -60,12 +60,14 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
     name: v.name,
     color: v.color,
     sprite: spriteFor(v.character),
-    target: center,
-    offset: offsets[i],
+    // Asleep at home, they're in bed (#111).
+    target: isCottage && mood === "asleep" ? "bed" : center,
+    offset: isCottage && mood === "asleep" ? 0 : offsets[i],
     badge: MOOD_BADGE[mood],
     vest: v.tier === "worker",
     title: moodLabel(mood, v.name),
     asleep: mood === "asleep",
+    lying: isCottage && mood === "asleep",
   }));
 
   const awayWhere = away ? VILLAGE.places.find((p) => p.id === MOOD_PLACE[away.mood]) : null;

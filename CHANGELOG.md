@@ -3,6 +3,11 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Sleeping in bed
+
+- **At night, villagers sleep in their beds (#111).** Visit someone's cottage after bedtime and
+  you'll find them tucked up in bed with a 💤.
+
 ## 2026-10-24 — Notes about neighbours, and morale
 
 - **Villagers keep notes about each other (#103).** With `note_about` a villager writes a short

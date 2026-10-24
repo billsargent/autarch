@@ -31,6 +31,8 @@ export interface VillagerSpec {
   asleep?: boolean;
   // Workers wear a hi-vis vest (#99).
   vest?: boolean;
+  // Lying down: asleep in bed (#111).
+  lying?: boolean;
   // Small hint under the name tag, e.g. "T talk".
   hint?: ReactNode;
   // Sideways nudge (scene px) so villagers at the same spot don't overlap.
@@ -317,7 +319,7 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
         title={v.title}
         aria-label={v.title ?? v.name}
         className={`relative block ${walking && !spriteReady ? "village-walking" : ""}`}
-        style={{ width: spriteReady ? SPRITE_PX : 64, height: spriteReady ? SPRITE_PX : 64 }}
+        style={{ width: spriteReady ? SPRITE_PX : 64, height: spriteReady ? SPRITE_PX : 64, transform: v.lying && !walking ? "rotate(-90deg)" : undefined }}
       >
         {spriteReady ? (
           <span

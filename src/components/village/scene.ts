@@ -206,7 +206,9 @@ export interface SceneLayout {
   // Where waypoints may sit (roads outside, the floor inside).
   walkable: Rect[];
   // Waypoints in tile units (may be fractional) and the graph between them.
-  waypoints: Array<{ id: string; x: number; y: number }>;
+  // `onFurniture`: meant to be on top of something (a bed, #111), so it may
+  // sit under a stamp.
+  waypoints: Array<{ id: string; x: number; y: number; onFurniture?: boolean }>;
   edges: Array<readonly [string, string]>;
   spawn: string;
   // Interiors: the waypoint by the way out.
@@ -269,7 +271,7 @@ export function validateScene(scene: SceneLayout): string[] {
   for (const g of scene.ground ?? []) if (!inside(stampRect(g))) where(`ground ${g.stamp} lies outside the map`);
   for (const r of scene.walkable) if (!inside(r)) where("a walkable area lies outside the map");
 
-  const wpCells = new Set(scene.waypoints.map((w) => `${Math.floor(w.x)},${Math.floor(w.y)}`));
+  const wpCells = new Set(scene.waypoints.filter((w) => !w.onFurniture).map((w) => `${Math.floor(w.x)},${Math.floor(w.y)}`));
   const occupied = new Map<string, string>();
   for (const { owner, p } of objectPlacements(scene)) {
     const r = stampRect(p);
