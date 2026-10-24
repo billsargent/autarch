@@ -4,11 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import "./village.css";
 import { villageFonts } from "./fonts";
-import { OWNER_SPRITE, VILLAGE, spriteFor, type Place } from "./manifest";
+import { OWNER_SPRITE, VILLAGE, VILLAGE_MANIFESTS, spriteFor, type Place, type SceneManifest } from "./manifest";
 import type { PlayerSpec } from "./SceneView";
 import StampSprite from "./StampSprite";
 import { CELL, STAMPS, stampRect, type StampId } from "./scene";
-import { VILLAGE_SCENE } from "./scenes";
+import { VILLAGE_LEVELS } from "./scenes";
 import { useBuildings } from "../data/useBuildings";
 import { useVillageSound } from "./useVillageSound";
 import WelcomeDialog from "./WelcomeDialog";
@@ -34,8 +34,30 @@ function startingDoor(): string {
   return VILLAGE.places.find((p) => p.id === from)?.door ?? VILLAGE.places.find((p) => p.id === "home")?.door ?? VILLAGE.spawn;
 }
 
+// How far the land reaches (#105), remembered so a visit doesn't start on
+// the smaller village and then jump.
+const LEVEL_KEY = "village.level";
+function rememberedLevel(): number {
+  try {
+    const n = Number(window.localStorage.getItem(LEVEL_KEY));
+    return Number.isInteger(n) && n >= 0 && n < VILLAGE_MANIFESTS.length ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export default function VillageView() {
   const buildings = useBuildings();
+  const [savedLevel] = useState(() => (typeof window === "undefined" ? 0 : rememberedLevel()));
+  const level = Math.min(VILLAGE_MANIFESTS.length - 1, buildings.state?.level ?? savedLevel);
+  const scene = VILLAGE_MANIFESTS[level];
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LEVEL_KEY, String(level));
+    } catch {
+      /* private window: fine */
+    }
+  }, [level]);
   const [player] = useState<PlayerSpec>(() => ({ name: "You", color: "#3b2716", sprite: OWNER_SPRITE, start: startingDoor() }));
   // ?open=<action> opens an outdoor dialog straight away (the notice board, the mailbox).
   useEffect(() => {
@@ -59,14 +81,23 @@ export default function VillageView() {
   const [strolls, setStrolls] = useState<Record<number, string | null>>({});
   const idleIds = villagers.filter((v) => villagerMood(snapshotOf(v, data.paused, night)) === "idle").map((v) => v.id);
   const idleKey = idleIds.join(",");
+  // Places to stroll to: the village's own, and the tavern once it's built.
+  const hangoutKey = [
+    ...scene.hangouts,
+    ...(buildings.state?.buildings ?? [])
+      .filter((b) => b.kind === "tavern" && b.status === "built")
+      .map((b) => scene.plots.find((p) => p.id === b.plotId)?.door)
+      .filter((d): d is string => Boolean(d)),
+  ].join(",");
   useEffect(() => {
+    const hangouts = hangoutKey.split(",");
     const ids = idleKey ? idleKey.split(",").map(Number) : [];
     const timers: ReturnType<typeof setTimeout>[] = [];
     for (const id of ids) {
       const wander = (delay: number) => {
         timers.push(
           setTimeout(() => {
-            setStrolls((cur) => ({ ...cur, [id]: nextHangout(cur[id] ?? null, VILLAGE.hangouts, Math.random()) }));
+            setStrolls((cur) => ({ ...cur, [id]: nextHangout(cur[id] ?? null, hangouts, Math.random()) }));
             wander(20_000 + Math.random() * 30_000);
           }, delay),
         );
@@ -74,7 +105,7 @@ export default function VillageView() {
       wander(3_000 + Math.random() * 6_000);
     }
     return () => timers.forEach(clearTimeout);
-  }, [idleKey]);
+  }, [idleKey, hangoutKey]);
 
   // Who you're talking to, whose cottage to visit, and outdoor dialogs.
   const [talkingTo, setTalkingTo] = useState<number | null>(null);
@@ -135,9 +166,9 @@ export default function VillageView() {
   // Where each villager is headed, and what the village shows of them.
   const plans = villagers.map((v) => {
     const mood = villagerMood(snapshotOf(v, data.paused, night));
-    const home = VILLAGE.places.find((p) => p.id === MOOD_PLACE[mood]) ?? VILLAGE.places[0];
+    const home = scene.places.find((p) => p.id === MOOD_PLACE[mood]) ?? scene.places[0];
     // A keeper with nothing else on is at their farm or bakery (#106).
-    const keeps = mood === "idle" ? VILLAGE.plots.find((p) => p.id === buildings.state?.keepers[v.id]) : undefined;
+    const keeps = mood === "idle" ? scene.plots.find((p) => p.id === buildings.state?.keepers[v.id]) : undefined;
     const stroll = mood === "idle" && !keeps ? strolls[v.id] : null;
     const target = keeps?.door ?? stroll ?? home.door;
     return { v, mood, target, strolling: mood === "idle" && !keeps && target !== home.door };
@@ -215,12 +246,13 @@ export default function VillageView() {
       />
 
       <SceneView
-        scene={VILLAGE}
+        key={scene.id}
+        scene={scene}
         player={player}
         overlays={
           <>
-            <PlotBuildings state={buildings.state} onOpen={(id) => openAction(`building.${id}`)} />
-            {(phase === "dusk" || phase === "night") && !data.paused && <LitWindows plots={buildings.state} />}
+            <PlotBuildings scene={scene} state={buildings.state} onOpen={(id) => openAction(`building.${id}`)} />
+            {(phase === "dusk" || phase === "night") && !data.paused && <LitWindows level={level} scene={scene} plots={buildings.state} />}
           </>
         }
         light={data.paused ? "frozen" : phase}
@@ -288,29 +320,30 @@ export default function VillageView() {
 
 // What stands on the village's plots (#105): finished buildings (click one to
 // open it), and scaffolding where one is going up.
-const KIND_STAMP: Record<string, StampId> = { house: "svHouseBlue", farm: "wheatField", bakery: "fishShop", workshop: "stoneHouse" };
-const KIND_LABEL: Record<string, string> = { house: "House", farm: "Farm", bakery: "Bakery", workshop: "Workshop" };
-
-function PlotBuildings({ state, onOpen }: { state: ReturnType<typeof useBuildings>["state"]; onOpen: (id: number) => void }) {
+// The stamps and labels come with the buildings (src/lib/agent/buildings.ts).
+function PlotBuildings({ scene, state, onOpen }: { scene: SceneManifest; state: ReturnType<typeof useBuildings>["state"]; onOpen: (id: number) => void }) {
   if (!state) return null;
   return (
     <>
       {state.buildings
         .filter((b) => b.status === "built" || b.status === "building")
         .map((b) => {
-          const plot = VILLAGE.plots.find((p) => p.id === b.plotId);
-          if (!plot) return null;
+          const plot = scene.plots.find((p) => p.id === b.plotId);
+          if (!plot || b.kind === "land") return null;
           const built = b.status === "built";
-          const st = STAMPS[KIND_STAMP[b.kind]];
+          const stamp = state.kinds[b.kind]?.stamp as StampId | undefined;
+          if (!stamp || !(stamp in STAMPS)) return null;
+          const label = state.kinds[b.kind].label;
+          const st = STAMPS[stamp];
           const x = plot.rect.x + ((plot.w - st.w) / 2) * CELL;
           const y = plot.rect.y + (plot.h - st.h) * CELL;
           return (
             <div key={b.id}>
               {built ? (
-                <StampSprite stamp={KIND_STAMP[b.kind]} x={x} y={y} />
+                <StampSprite stamp={stamp} x={x} y={y} />
               ) : (
                 <>
-                  <StampSprite stamp={KIND_STAMP[b.kind]} x={x} y={y} opacity={0.35} />
+                  <StampSprite stamp={stamp} x={x} y={y} opacity={0.35} />
                   <StampSprite stamp="plankStack" x={plot.rect.x} y={plot.rect.y + (plot.h - 1) * CELL} />
                   <StampSprite stamp="lumber" x={plot.rect.x + CELL} y={plot.rect.y + (plot.h - 1) * CELL} />
                   <StampSprite stamp="handcart" x={plot.rect.x + 2 * CELL} y={plot.rect.y + (plot.h - 2) * CELL} />
@@ -323,11 +356,11 @@ function PlotBuildings({ state, onOpen }: { state: ReturnType<typeof useBuilding
                     onOpen(b.id);
                   }}
                   onPointerDown={(e) => e.stopPropagation()}
-                  aria-label={`${KIND_LABEL[b.kind]}${built ? "" : " (being built)"}`}
+                  aria-label={`${label}${built ? "" : " (being built)"}`}
                   className="absolute inset-0 rounded-md outline-none hover:bg-white/10 focus-visible:outline-4 focus-visible:outline-[#e3b04b]"
                 />
                 <span className="village-sign pointer-events-none absolute left-1/2 top-1 -translate-x-1/2 -translate-y-full whitespace-nowrap px-3 py-1 text-[22px]">
-                  {built ? KIND_LABEL[b.kind] : `🚧 ${KIND_LABEL[b.kind]}`}
+                  {built ? label : `🚧 ${label}`}
                 </span>
               </div>
             </div>
@@ -339,11 +372,11 @@ function PlotBuildings({ state, onOpen }: { state: ReturnType<typeof useBuilding
 
 // Homes with their lights on at dusk and at night (#110): yours, the
 // cottages, and any houses built on the plots.
-function LitWindows({ plots }: { plots: ReturnType<typeof useBuildings>["state"] }) {
-  const homes = VILLAGE_SCENE.places.filter((p) => p.id === "home" || p.id === "cottages").flatMap((p) => p.parts.map(stampRect));
+function LitWindows({ level, scene, plots }: { level: number; scene: SceneManifest; plots: ReturnType<typeof useBuildings>["state"] }) {
+  const homes = VILLAGE_LEVELS[level].places.filter((p) => p.id === "home" || p.id === "cottages").flatMap((p) => p.parts.map(stampRect));
   const houses = (plots?.buildings ?? [])
     .filter((b) => b.kind === "house" && b.status === "built")
-    .map((b) => VILLAGE.plots.find((p) => p.id === b.plotId))
+    .map((b) => scene.plots.find((p) => p.id === b.plotId))
     .filter((p): p is NonNullable<typeof p> => Boolean(p))
     .map((p) => ({ col: p.col, row: p.row, w: p.w, h: p.h }));
   return (

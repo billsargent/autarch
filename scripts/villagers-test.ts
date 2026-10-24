@@ -677,6 +677,26 @@ async function main() {
   check("keepers spend their spare time at their building", (await econ.keeperDoors())[gus.id], "west-1");
   check("when the village runs short, morale dips", (await (await import("../src/lib/agent/morale")).villageMorale()).every((m) => m.reasons.includes("the village ran short of bread (−10)")), after.shortage > 0);
 
+  // --- new land, in rings (#105), and the tavern, shop and garden ---------------------------
+  check("the first ring has four plots", bld.plotsForLevel(0), ["north-1", "north-2", "west-1", "west-2"]);
+  check("no new land while a plot is free", (await power("propose_building", { kind: "land", reason: "x" })).includes("build on north-2 first"), true);
+  const tavern = (await (await buildingsRoute.POST(req("/api/buildings", "POST", { kind: "tavern", plotId: "north-2" }))).json()).building;
+  check("the owner builds a tavern", tavern.status, "building");
+  const landAsk = await power("propose_building", { kind: "land", reason: "Every plot is spoken for." });
+  check("with every plot taken, the Mayor proposes clearing the next ring", landAsk.startsWith("Proposed clearing new land (ring-1"), true);
+  check("…once at a time", (await power("propose_building", { kind: "land", reason: "x" })).includes("already being cleared"), true);
+  const landId = Number(/#(\d+)/.exec(landAsk)?.[1]);
+  await patchBuilding(landId, { action: "approve" });
+  check("approved, clearing takes a day", (await bld.listBuildings(new Date(Date.now() + 13 * 3600_000))).find((b) => b.id === landId)?.status, "building");
+  const dayLater = new Date(Date.now() + 25 * 3600_000);
+  await bld.listBuildings(dayLater);
+  const landState = await (await buildingsRoute.GET()).json();
+  check("…then the village reaches further, with four more plots", [landState.level, landState.plots.length, landState.plots.includes("north-3")], [1, 8, true]);
+  check("the second ring has its own plots", (await power("propose_building", { kind: "garden", plot: "west-3", reason: "Flowers." })).startsWith("Proposed a garden on the west-3 plot"), true);
+  const morale = await (await import("../src/lib/agent/morale")).villageMorale();
+  check("a tavern cheers everyone up", morale.every((m) => m.reasons.includes("the village has a tavern (+5)")), true);
+  check("every level of land has its map", (await import("../src/components/village/scenes")).VILLAGE_LEVELS.length, bld.MAX_VILLAGE_LEVEL + 1);
+
   // --- the outbox (#107) and the owner's calendar (#108) ---------------------------------
   const { drafts: draftsT } = await import("../src/db/schema");
   const draftRoute = await import("../src/app/api/drafts/[id]/route");

@@ -49,13 +49,25 @@ function truncate(text: string, max = MAX_OUTPUT_CHARS): string {
 // Tool schema (OpenAI / DeepSeek function-calling format)
 // ---------------------------------------------------------------------------
 
+// The shell commands run in: bash on Linux and macOS. On Windows, Git Bash
+// when it's installed (so the usual commands work), otherwise PowerShell.
+const SHELL: { path: string; name: string } = (() => {
+  if (process.platform !== "win32") return { path: "/bin/bash", name: "bash" };
+  const roots = [process.env.ProgramFiles, process.env["ProgramFiles(x86)"], process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs")];
+  for (const root of roots) {
+    const bash = root && path.join(root, "Git", "bin", "bash.exe");
+    if (bash && fssync.existsSync(bash)) return { path: bash, name: "bash (Git Bash on Windows)" };
+  }
+  return { path: "powershell.exe", name: "Windows PowerShell" };
+})();
+
 const CORE_TOOL_DEFINITIONS = [
   {
     type: "function" as const,
     function: {
       name: "run_shell_command",
       description:
-        "Run a shell command on the host system as the agent's Linux user (which has sudo rights). Use for exploring the system, installing tools, checking status, or automating tasks. Risky commands may be blocked or queued for human approval instead of executing immediately.",
+        `Run a shell command on the host system (in ${SHELL.name}) as the agent's user. Use for exploring the system, installing tools, checking status, or automating tasks. Risky commands may be blocked or queued for human approval instead of executing immediately.`,
       parameters: {
         type: "object",
         properties: {
@@ -639,7 +651,7 @@ async function runShellCommand(command: string, cwd: string, timeoutSec: number)
       cwd,
       timeout: Math.max(1, timeoutSec) * 1000,
       maxBuffer: 10 * 1024 * 1024,
-      shell: "/bin/bash",
+      shell: SHELL.path,
     });
     const output = truncate([stdout, stderr].filter(Boolean).join("\n---stderr---\n") || "(no output)");
     return { output, summary: `$ ${command}` };

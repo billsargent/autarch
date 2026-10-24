@@ -242,7 +242,8 @@ export const votes = sqliteTable("votes", {
 // Buildings on the village's plots (#105) and who keeps them (#106).
 export const buildings = sqliteTable("buildings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  kind: text("kind", { enum: ["house", "farm", "bakery", "workshop"] }).notNull(),
+  // "land" clears the next ring of the village; its plot_id is "ring-<n>".
+  kind: text("kind", { enum: ["house", "farm", "bakery", "workshop", "tavern", "shop", "garden", "land"] }).notNull(),
   plotId: text("plot_id").notNull(),
   status: text("status", { enum: ["proposed", "building", "built", "declined"] }).notNull().default("proposed"),
   // Who proposed it; empty = the owner.

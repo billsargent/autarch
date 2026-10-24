@@ -6,11 +6,12 @@ import { FALLBACK_MS, useLive } from "./useLive";
 // The village's plots and buildings (#105), its stores (#106), and how many
 // it has room for.
 
-export type BuildingKind = "house" | "farm" | "bakery" | "workshop";
+export type BuildingKind = "house" | "farm" | "bakery" | "workshop" | "tavern" | "shop" | "garden";
 
 export interface BuildingRow {
   id: number;
-  kind: BuildingKind;
+  // "land" clears the next ring of the village (plotId "ring-<n>").
+  kind: BuildingKind | "land";
   plotId: string;
   status: "proposed" | "building" | "built" | "declined";
   proposedBy: number | null;
@@ -20,11 +21,16 @@ export interface BuildingRow {
 
 export interface BuildingsState {
   plots: string[];
-  kinds: Record<BuildingKind, { label: string; beds: number; stamp: string }>;
+  kinds: Record<BuildingKind, { label: string; beds: number; stamp: string; morale: number }>;
   buildings: BuildingRow[];
   economy: { wheat: number; bread: number; shortage: number; lastTickDay: string | null };
   keepers: Record<string, string>;
   room: number;
+  // How far the land reaches (0 = the first ring), and why the next ring
+  // can't be cleared yet (null = it can).
+  level: number;
+  maxLevel: number;
+  landBlocked: string | null;
 }
 
 export function useBuildings(pollMs = 20000) {
@@ -68,6 +74,7 @@ export function useBuildings(pollMs = 20000) {
     state,
     reload,
     build: (kind: BuildingKind, plotId: string) => send("/api/buildings", "POST", { kind, plotId }),
+    clearLand: () => send("/api/buildings", "POST", { kind: "land" }),
     decide: (id: number, action: "approve" | "decline") => send(`/api/buildings/${id}`, "PATCH", { action }),
     setKeeper: (id: number, agentId: number | null) => send(`/api/buildings/${id}`, "PATCH", { action: "keeper", agentId }),
   };

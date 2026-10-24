@@ -572,15 +572,13 @@ export async function runAgentTurn(opts: {
       apiMessages.push({
         role: "assistant",
         content: rawMsg.content ?? "",
-        ...(rawMsg.tool_calls?.length
-          ? {
-              tool_calls: rawMsg.tool_calls,
-              // DeepSeek requires the assistant's chain-of-thought to be sent back
-              // on tool-call turns (for requests carrying `tools`), or it returns a
-              // 400 on the next step/turn.
-              ...(rawMsg.reasoning_content && settings.providerKind === "deepseek" ? { reasoning_content: rawMsg.reasoning_content } : {}),
-            }
+        // DeepSeek requires the assistant's chain-of-thought to be sent back on
+        // tool-call turns, and the field on every assistant message in thinking
+        // mode, or the next request returns a 400 (see messageHistory).
+        ...(settings.providerKind === "deepseek"
+          ? { reasoning_content: rawMsg.tool_calls?.length ? (rawMsg.reasoning_content ?? "") : "" }
           : {}),
+        ...(rawMsg.tool_calls?.length ? { tool_calls: rawMsg.tool_calls } : {}),
       } as ChatMessageParam);
 
       lastStepHadTools = Boolean(rawMsg.tool_calls?.length);

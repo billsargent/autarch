@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useBuildings, type BuildingKind } from "../../data/useBuildings";
+import { useBuildings, type BuildingKind, type BuildingRow } from "../../data/useBuildings";
 import { useVillagers } from "../../data/useVillagers";
 import ParchmentDialog from "../ParchmentDialog";
 
@@ -14,9 +14,21 @@ const WHAT: Record<BuildingKind, string> = {
   farm: "Grows wheat: 6 a day with a keeper, 2 without.",
   bakery: "Bakes the wheat into bread: up to 6 loaves a day with a keeper, 2 without.",
   workshop: "Somewhere for the village to make things.",
+  tavern: "Somewhere to unwind after work: everyone's morale +5. Idle villagers drop in.",
+  shop: "A little shop on the road: everyone's morale +3.",
+  garden: "Flower beds and gravel paths: everyone's morale +3.",
 };
-const ICON: Record<BuildingKind, string> = { house: "🏠", farm: "🌾", bakery: "🍞", workshop: "🔧" };
-const PLOT_LABEL: Record<string, string> = { "north-1": "North road, left", "north-2": "North road, right", "west-1": "West road, upper", "west-2": "West road, lower" };
+const ICON: Record<BuildingKind, string> = { house: "🏠", farm: "🌾", bakery: "🍞", workshop: "🔧", tavern: "🍺", shop: "🛍️", garden: "🌷" };
+// "north-3" → "North road, left (second ring)": two plots per road per ring.
+const RING = ["first", "second", "third", "fourth"];
+function plotLabel(plot: string) {
+  const m = /^(north|west)-(\d+)$/.exec(plot);
+  if (!m) return plot;
+  const n = Number(m[2]) - 1;
+  const side = m[1] === "north" ? (n % 2 ? "right" : "left") : n % 2 ? "lower" : "upper";
+  const ring = Math.floor(n / 2);
+  return `${m[1] === "north" ? "North" : "West"} road, ${side}${ring ? ` (${RING[ring] ?? `ring ${ring + 1}`} ring)` : ""}`;
+}
 const until = (iso: string | null) => (iso ? new Date(iso).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "soon");
 
 function Stores({ economy }: { economy: { wheat: number; bread: number; shortage: number } }) {
@@ -40,6 +52,7 @@ export function BuildingDialog({ id, onClose }: { id: number; onClose: () => voi
       </ParchmentDialog>
     );
   }
+  if (b.kind === "land") return null;
   const kind = state.kinds[b.kind];
   const keeps = b.kind === "farm" || b.kind === "bakery";
   return (
@@ -75,7 +88,7 @@ export function BuildingDialog({ id, onClose }: { id: number; onClose: () => voi
 }
 
 export function MapTable({ onClose }: { onClose: () => void }) {
-  const { state, build, decide } = useBuildings();
+  const { state, build, decide, clearLand } = useBuildings();
   const [kind, setKind] = useState<BuildingKind>("house");
   const [error, setError] = useState<string | null>(null);
   if (!state) {
@@ -85,7 +98,8 @@ export function MapTable({ onClose }: { onClose: () => void }) {
       </ParchmentDialog>
     );
   }
-  const on = (plot: string) => state.buildings.find((b) => b.plotId === plot);
+  const on = (plot: string) => state.buildings.find((b): b is BuildingRow & { kind: BuildingKind } => b.plotId === plot && b.kind !== "land");
+  const land = state.buildings.find((b) => b.kind === "land" && b.status !== "built");
   const done = (res: { ok: true } | { ok: false; error: string }) => setError(res.ok ? null : res.error);
   return (
     <ParchmentDialog kicker="Your home" title="The map table" onClose={onClose} wide>
@@ -93,12 +107,42 @@ export function MapTable({ onClose }: { onClose: () => void }) {
         The land north and west of town, with a plot on each side of the roads. The Mayor proposes buildings and you decide,
         or build something yourself. A building takes half a day. Each house makes room for two more villagers (room now: {state.room}).
       </p>
+      <div className="mb-3 rounded border-2 border-[#d8c49a] p-2 text-xs">
+        <p className="font-semibold">
+          🗺️ Land: ring {state.level + 1} of {state.maxLevel + 1}
+        </p>
+        {land?.status === "proposed" && (
+          <div className="mt-1">
+            <p>📜 The Mayor would like to clear the next ring of land: four more plots, a day&apos;s work.</p>
+            <div className="mt-1 flex gap-1.5">
+              <button onClick={async () => done(await decide(land.id, "approve"))} className="village-btn village-btn-go px-2 py-1 text-[11px]">
+                ✅ Clear it
+              </button>
+              <button onClick={async () => done(await decide(land.id, "decline"))} className="village-btn village-btn-danger px-2 py-1 text-[11px]">
+                ❌ Not now
+              </button>
+            </div>
+          </div>
+        )}
+        {land?.status === "building" && <p className="mt-1">🪓 Clearing the next ring: ready {until(land.readyAt)}.</p>}
+        {!land &&
+          (state.landBlocked ? (
+            <p className="mt-1 text-[#6b4a2e]">{state.landBlocked}</p>
+          ) : (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span className="text-[#6b4a2e]">Every plot is spoken for.</span>
+              <button onClick={async () => done(await clearLand())} className="village-btn px-2 py-1 text-[11px]">
+                Clear the next ring (four more plots)
+              </button>
+            </div>
+          ))}
+      </div>
       <ul className="grid gap-2 sm:grid-cols-2">
         {state.plots.map((plot) => {
           const b = on(plot);
           return (
             <li key={plot} className="rounded border-2 border-[#3b2716] bg-[#fffaf0] p-2.5 text-xs">
-              <p className="font-semibold">{PLOT_LABEL[plot] ?? plot}</p>
+              <p className="font-semibold">{plotLabel(plot)}</p>
               {!b && (
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   <span className="text-[#6b4a2e]">Empty.</span>

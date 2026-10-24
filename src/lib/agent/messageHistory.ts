@@ -30,7 +30,9 @@ type ChatMessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 //   - unanswered tool_call_ids get a synthesized placeholder response;
 //   - orphaned tool messages (no matching pending tool_calls) are dropped.
 // `passReasoning`: send reasoning back on tool-call turns (DeepSeek needs it;
-// other providers don't take it, #62).
+// other providers don't take it, #62). In thinking mode DeepSeek also rejects
+// any assistant message without the field, so plain ones carry an empty one
+// (their old reasoning isn't needed, and would cost input tokens).
 export function historyToApiMessages(rows: HistoryRow[], passReasoning = true): ChatMessageParam[] {
   const out: ChatMessageParam[] = [];
   let pendingIds = new Set<string>();
@@ -42,7 +44,7 @@ export function historyToApiMessages(rows: HistoryRow[], passReasoning = true): 
     else push();
   };
   const emitAssistant = (content: string) => {
-    const push = () => out.push({ role: "assistant", content } as ChatMessageParam);
+    const push = () => out.push({ role: "assistant", content, ...(passReasoning ? { reasoning_content: "" } : {}) } as ChatMessageParam);
     if (pendingIds.size > 0) deferred.push(push);
     else push();
   };
@@ -69,6 +71,8 @@ export function historyToApiMessages(rows: HistoryRow[], passReasoning = true): 
       if (!id || !pendingIds.has(id)) continue;
       pendingIds.delete(id);
       out.push({ role: "tool", tool_call_id: id, content: row.content ?? "" } as ChatMessageParam);
+      // Every call answered: what was held back goes out now, in order.
+      if (pendingIds.size === 0) closePending();
     } else if (row.role === "assistant") {
       const toolCalls = (row.toolCalls as OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] | null) || undefined;
       if (toolCalls && toolCalls.length) {
@@ -81,7 +85,7 @@ export function historyToApiMessages(rows: HistoryRow[], passReasoning = true): 
           // on tool-call turns (requests carrying `tools`), or the next request
           // returns a 400. For plain (non-tool) assistant turns it is ignored by
           // the API, so we deliberately omit it there to keep input tokens down.
-          ...(row.reasoning && passReasoning ? { reasoning_content: row.reasoning } : {}),
+          ...(passReasoning ? { reasoning_content: row.reasoning ?? "" } : {}),
         } as ChatMessageParam);
         pendingIds = new Set(toolCalls.map((c) => c.id));
       } else {

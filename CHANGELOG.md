@@ -3,6 +3,20 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-25 — New land in rings, a tavern, a shop and a garden
+
+- **The village can grow outwards.** Once every plot is taken, the Mayor can propose clearing
+  the next ring of land (or you can, at the map table). It takes a day; then the roads reach
+  further and four more plots open, two on each road. There are four rings in all. Every ring
+  follows a fixed layout drawn ahead of time; the villagers choose only what to build and where.
+- **Three new buildings:** a tavern (everyone's morale +5, and idle villagers drop in), a shop
+  and a garden (+3 each). The garden is new pixel art drawn for the village.
+- **Fixed: "reasoning_content must be passed back" errors with DeepSeek.** A message a villager
+  posted to you in the middle of a tool call broke every later turn in that conversation. Those
+  messages are now sent back correctly, and in their right place.
+- **Fixed: commands failed on Windows** because the command tool always used `/bin/bash`. It now
+  uses Git Bash when it's installed, or PowerShell, and tells the villager which.
+
 ## 2026-10-25 — Meetings lead to work, and the worker starts with the app
 
 - **What a meeting agrees becomes work.** When you end a meeting, the Mayor's write-up names who

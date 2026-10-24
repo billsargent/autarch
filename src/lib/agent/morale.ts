@@ -1,5 +1,6 @@
 import { sqlite } from "@/db";
 import { listVillagers, spentToday } from "./agents";
+import { BUILDING_KINDS, isBuildingKind } from "./buildings";
 
 // How each villager is doing (#104), worked out from the record: no model
 // calls. Good work and kind notes lift it; dropped work, an empty budget and
@@ -12,6 +13,9 @@ export interface MoraleStats {
   notesReceived: number; // neighbours' notes about them, last 7 days
   budgetSpent: boolean; // today's budget used up
   hungry?: boolean; // the village ran short of bread (#106)
+  // Finished places that cheer everyone up (a tavern, a shop, a garden), with
+  // what each adds; one of a kind counts.
+  amenities?: Array<{ label: string; morale: number }>;
 }
 
 export function moraleScore(s: MoraleStats): { score: number; reasons: string[] } {
@@ -46,12 +50,18 @@ export function moraleScore(s: MoraleStats): { score: number; reasons: string[] 
     score -= 10;
     reasons.push("the village ran short of bread (−10)");
   }
+  for (const a of s.amenities ?? []) {
+    score += a.morale;
+    reasons.push(`the village has a ${a.label.toLowerCase()} (+${a.morale})`);
+  }
   return { score: Math.max(0, Math.min(100, score)), reasons };
 }
 
 export async function villageMorale(now = Date.now()) {
   const week = Math.floor(now / 1000) - 7 * 86400;
   const villagers = await listVillagers();
+  const builtKinds = (sqlite.prepare("SELECT DISTINCT kind FROM buildings WHERE status = 'built'").all() as Array<{ kind: string }>).map((r) => r.kind);
+  const amenities = builtKinds.filter(isBuildingKind).map((k) => BUILDING_KINDS[k]).filter((k) => k.morale > 0);
   const hungry = (sqlite.prepare("SELECT shortage FROM economy WHERE id = 1").get() as { shortage: number } | undefined)?.shortage ? true : false;
   return villagers.map((v) => {
     const count = (sql: string, ...args: unknown[]) => (sqlite.prepare(sql).get(...args) as { n: number }).n;
@@ -63,6 +73,6 @@ export async function villageMorale(now = Date.now()) {
       .get(v.id) as { t: number | null };
     const daysSinceOwner = last.t ? Math.floor((now / 1000 - last.t) / 86400) : null;
     const budgetSpent = v.dailyBudgetUsd != null && spentToday(v.id, new Date(now)) >= v.dailyBudgetUsd;
-    return { agentId: v.id, name: v.name, ...moraleScore({ approved, dropped, daysSinceOwner, notesReceived, budgetSpent, hungry }) };
+    return { agentId: v.id, name: v.name, ...moraleScore({ approved, dropped, daysSinceOwner, notesReceived, budgetSpent, hungry, amenities }) };
   });
 }

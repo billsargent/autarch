@@ -6,10 +6,10 @@ import { LIBRARY_SCENE } from "./library";
 import { OBSERVATORY_SCENE } from "./observatory";
 import { TOWNHALL_SCENE } from "./townhall";
 import { VAULT_SCENE } from "./vault";
-import { VILLAGE_SCENE } from "./village";
+import { VILLAGE_LEVELS, VILLAGE_SCENE } from "./village";
 import { WORKSHOP_SCENE } from "./workshop";
 
-export { VILLAGE_SCENE } from "./village";
+export { MAX_VILLAGE_LEVEL, VILLAGE_LEVELS, VILLAGE_SCENE, ringPlotIds } from "./village";
 
 // Every building interior, by scene id (the `interior` of a village place).
 export const INTERIORS: Record<string, SceneLayout> = {
@@ -23,4 +23,4 @@ export const INTERIORS: Record<string, SceneLayout> = {
   home: HOME_SCENE,
 };
 
-export const ALL_SCENES: SceneLayout[] = [VILLAGE_SCENE, ...Object.values(INTERIORS)];
+export const ALL_SCENES: SceneLayout[] = [...VILLAGE_LEVELS, ...Object.values(INTERIORS)];
