@@ -37,11 +37,11 @@ Zero configuration — **no environment variables, no external database server.*
 ```bash
 npm install
 
-# 1. Run the web app. It creates data/app.db and all tables automatically on first run:
+# Run the web app and the background worker together. The app creates
+# data/app.db and all tables automatically on first run:
 npm run dev
 
-# 2. In a second terminal, run the background scheduler:
-npm run worker
+# (Or separately: `npm run dev:web` for the web app, `npm run worker` for the worker.)
 ```
 
 Open http://localhost:3000. Everything is configured from the **Mayor's ledger** in the town hall
@@ -244,7 +244,8 @@ Village art: "Serene Village" by [LimeZu](https://limezu.itch.io/serenevillage) 
 
 | Script | Purpose |
 | --- | --- |
-| `npm run dev` | Next.js dev server |
+| `npm run dev` | The dev server and the background worker together |
+| `npm run dev:web` | Only the Next.js dev server |
 | `npm run worker` | Background scheduler (jobs / daily report) |
 | `npm run build` / `start` | Production build / serve |
 | `npm run lint` / `typecheck` | ESLint / `tsc --noEmit` |
