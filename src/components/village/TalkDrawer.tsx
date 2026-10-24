@@ -27,11 +27,13 @@ export default function TalkDrawer({ villager, onClose }: TalkDrawerProps) {
       .then((d) => setConversations((d.conversations ?? []).map((c: { id: number; title: string }) => ({ id: c.id, title: c.title }))))
       .catch(() => {});
   }, [villager.id, conversationId]);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const visible = messages.filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim());
 
+  // Scroll the message list itself (scrollIntoView would also move the village).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = listRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [visible.length, status]);
 
   async function submit() {
@@ -89,7 +91,7 @@ export default function TalkDrawer({ villager, onClose }: TalkDrawerProps) {
         </button>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm">
+      <div ref={listRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3 text-sm">
         {visible.length === 0 && !sending && (
           <p className="mt-8 text-center text-[#6b4a2e]">Say hello to {agentName}.</p>
         )}
@@ -109,7 +111,6 @@ export default function TalkDrawer({ villager, onClose }: TalkDrawerProps) {
         )}
         {status && <p className="text-xs italic text-[#6b4a2e]">{agentName} is {status}</p>}
         {error && <p className="rounded border-2 border-[#d9643a] bg-[#fbe3d8] px-3 py-2 text-xs">{error}</p>}
-        <div ref={bottomRef} />
       </div>
 
       <footer className="flex gap-2 border-t-4 border-[#3b2716] bg-[#ead9b4] p-3">
