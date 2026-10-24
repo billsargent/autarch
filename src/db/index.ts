@@ -294,6 +294,21 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     decided_at INTEGER
   )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS meetings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic TEXT,
+    called_by TEXT NOT NULL DEFAULT 'owner',
+    conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+    participants TEXT NOT NULL,
+    threads TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    speaking_agent_id INTEGER,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    ended_at INTEGER
+  )`);
+  if (!existingCols("agent_settings").includes("meeting_cost_cap_usd")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN meeting_cost_cap_usd REAL NOT NULL DEFAULT 0.25");
+  }
   if (!existingCols("agent_settings").includes("hiring_mode")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN hiring_mode TEXT NOT NULL DEFAULT 'ask'");
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN max_population INTEGER NOT NULL DEFAULT 8");

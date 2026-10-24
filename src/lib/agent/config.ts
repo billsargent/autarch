@@ -181,6 +181,7 @@ export const DEFAULT_ENABLED_TOOLS = [
   "flag",
   "pause_agent",
   "resume_agent",
+  "call_meeting",
   // Hiring (#99): the Mayor and directors.
   "propose_hire",
 ];

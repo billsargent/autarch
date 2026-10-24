@@ -1,7 +1,7 @@
 // What a villager is doing, derived from the agent's real state, and where in
 // the village that puts them. Pure: no React, no DOM.
 
-export type Mood = "working" | "waiting" | "idle" | "asleep";
+export type Mood = "working" | "waiting" | "idle" | "asleep" | "meeting";
 
 export interface AgentSnapshot {
   paused: boolean;
@@ -9,6 +9,8 @@ export interface AgentSnapshot {
   pendingApprovals: number;
   // Night by the village clock (#100).
   night?: boolean;
+  // At the town meeting going on now (#81).
+  meeting?: boolean;
 }
 
 // Precedence: a paused village sleeps no matter what; a pending approval
@@ -19,6 +21,7 @@ export function villagerMood(s: AgentSnapshot): Mood {
   if (s.paused) return "asleep";
   if (s.night && !s.running && !s.pendingApprovals) return "asleep";
   if (s.pendingApprovals > 0) return "waiting";
+  if (s.meeting) return "meeting";
   if (s.running) return "working";
   return "idle";
 }
@@ -27,6 +30,7 @@ export function villagerMood(s: AgentSnapshot): Mood {
 export const MOOD_PLACE: Record<Mood, string> = {
   working: "workshop",
   waiting: "townhall",
+  meeting: "townhall",
   idle: "cottages",
   asleep: "cottages",
 };
@@ -49,6 +53,8 @@ export function moodLabel(mood: Mood, name: string, strolling = false): string {
       return `${name} is waiting at the town hall for your okay`;
     case "asleep":
       return `${name} is asleep at home`;
+    case "meeting":
+      return `${name} is at the town meeting`;
     default:
       return `${name} is relaxing at home`;
   }
@@ -69,6 +75,7 @@ export const MOOD_BADGE: Record<Mood, string> = {
   waiting: "❗",
   idle: "☕",
   asleep: "💤",
+  meeting: "🏛",
 };
 
 // --- speech bubbles ---------------------------------------------------------------

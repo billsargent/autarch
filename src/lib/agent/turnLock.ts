@@ -21,7 +21,7 @@ export class TurnBusyError extends Error {
   }
 }
 
-type Trigger = "chat" | "approval" | "scheduled" | "report" | "message" | "interview";
+type Trigger = "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting";
 
 interface RunningRow {
   id: number;

@@ -184,7 +184,7 @@ async function loadHistory(conversationId: number) {
   return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.id));
 }
 
-export type SessionTrigger = "chat" | "approval" | "scheduled" | "report" | "message" | "interview";
+export type SessionTrigger = "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting";
 
 // Progress events emitted (optionally) during a turn so the UI can stream a
 // live view of the agent's activity instead of only getting a final payload.
@@ -391,8 +391,9 @@ export async function runAgentTurn(opts: {
     // the single explicit control. Scheduled, approval, and self-directed turns
     // always keep tools.
     const isDirectChat = Boolean(opts.userMessage) && !opts.jobId && !opts.trigger;
-    // A hiring interview (#99) is talk only: one model call, no tools.
-    const talkOnly = trigger === "interview";
+    // A hiring interview (#99) and a town meeting (#81) are talk only: one
+    // model call, no tools.
+    const talkOnly = trigger === "interview" || trigger === "meeting";
     const { toolsAvailable, toolsForbidden } = resolveToolAccess({
       isDirectChat: isDirectChat || talkOnly,
       chatMode: talkOnly ? "conversation" : conversation.chatMode,

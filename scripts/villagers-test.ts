@@ -402,6 +402,81 @@ async function main() {
   check("hiring mode is ask or auto", badMode.status, 400);
   await updateSettings({ hiringMode: "ask", maxPopulation: 8 });
 
+  // --- town meetings (#81) ----------------------------------------------------------------
+  const meetingsRoute = await import("../src/app/api/meetings/route");
+  const meetingRoute = await import("../src/app/api/meetings/[id]/route");
+  const { meetings: meetingsT } = await import("../src/db/schema");
+  const daytime = () => updateSettings({ bedtime: hm(new Date(Date.now() + 2 * 3600_000)), wakeTime: hm(new Date(Date.now() + 3 * 3600_000)) });
+  await daytime();
+  const view = async (id: number) => (await meetingRoute.GET(req(`/api/meetings/${id}`, "GET"), { params: Promise.resolve({ id: String(id) }) })).json();
+  const patchMeeting = (id: number, body: unknown) => meetingRoute.PATCH(req(`/api/meetings/${id}`, "PATCH", body), { params: Promise.resolve({ id: String(id) }) });
+  const roundDone = async (id: number) => {
+    for (let i = 0; i < 100; i++) {
+      const v = await view(id);
+      if (!v.busy) return v;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return view(id);
+  };
+  fake.script.length = 0;
+  for (const n of ["Mayor Ada", "Tom", "Bea", "Cal", "Dot", "Gus"]) fake.byAgent[n] = [{ text: `${n} thinks the bridge matters.` }, { text: `${n} again.` }];
+  const called = await (await meetingsRoute.POST(req("/api/meetings", "POST", { topic: "The bridge" }))).json();
+  const mid = called.meeting.id;
+  const attendees = called.meeting.participants as number[];
+  check("calling a meeting gathers every active villager, the Mayor first", [attendees[0], attendees.includes(ann.id), attendees.includes(gus.id)], [mayor.id, false, true]);
+  check("…and they head for the town hall", villagers.villagerStates([gus.id, ann.id]).get(gus.id)?.inMeeting, true);
+  check("calling again joins the same meeting", (await (await meetingsRoute.POST(req("/api/meetings", "POST", {}))).json()).meeting.id, mid);
+
+  await patchMeeting(mid, { action: "ask", message: "Should we fix the bridge?" });
+  const busyAsk = await patchMeeting(mid, { action: "ask", message: "Hello?" });
+  check("one question at a time", busyAsk.status, 409);
+  const after1 = await roundDone(mid);
+  const lines1 = after1.transcript.map((t: { who: string; text: string }) => `${t.who}: ${t.text}`);
+  check("everyone answers in turn (at most six), the Mayor first", lines1, [
+    "You: Should we fix the bridge?",
+    "Mayor Ada: Mayor Ada thinks the bridge matters.",
+    "Tom: Tom thinks the bridge matters.",
+    "Bea: Bea thinks the bridge matters.",
+    "Cal: Cal thinks the bridge matters.",
+    "Dot: Dot thinks the bridge matters.",
+    "Gus: Gus thinks the bridge matters.",
+  ]);
+  const calMeetingStep = fake.seen.filter((x) => x.system.startsWith("You are Cal") && x.system.includes("town meeting")).pop();
+  check("a meeting turn is talk only", calMeetingStep?.tools, []);
+  const calThread = (await db.select().from(meetingsT).where(eq(meetingsT.id, mid)))[0].threads as Record<string, { conversationId: number }>;
+  const calNotes1 = (await msgsOf(calThread[cal.id].conversationId)).filter((x) => x.role === "event");
+  check("…hearing what was said before them", [calNotes1[0]?.content?.includes("The owner: Should we fix the bridge?"), calNotes1[0]?.content?.includes("Bea: Bea thinks")], [true, true]);
+  check("the meeting's cost is counted", after1.cost > 0, true);
+
+  await patchMeeting(mid, { action: "ask", message: "Who will do it?" });
+  await roundDone(mid);
+  const calNotes2 = (await msgsOf(calThread[cal.id].conversationId)).filter((x) => x.role === "event");
+  check("next time they only hear what's new", [calNotes2[1]?.content?.includes("Who will do it?"), calNotes2[1]?.content?.includes("Should we fix the bridge?")], [true, false]);
+
+  await updateSettings({ meetingCostCapUsd: 0.0000001 });
+  await patchMeeting(mid, { action: "ask", message: "Anything else?" });
+  const capped = await roundDone(mid);
+  check("when the meeting's budget is spent, the round stops", capped.transcript[capped.transcript.length - 1].text.startsWith("The meeting has spent its budget"), true);
+  await updateSettings({ meetingCostCapUsd: 0.25 });
+
+  await patchMeeting(mid, { action: "close" });
+  check("an ended meeting takes no more questions", (await patchMeeting(mid, { action: "ask", message: "Hello?" })).status, 409);
+  check("…and everyone goes back to work", villagers.villagerStates([gus.id]).get(gus.id)?.inMeeting, false);
+  await updateSettings({ bedtime: hm(new Date(Date.now() - 3600_000)), wakeTime: hm(new Date(Date.now() + 3600_000)) });
+  check("no meetings at night", (await meetingsRoute.POST(req("/api/meetings", "POST", {}))).status, 409);
+  await daytime();
+
+  check("only the Mayor can call a meeting", (await executeTool("call_meeting", { topic: "x" }, town, ctxCal)).output, "Refused: only the Mayor can do that.");
+  for (const n of ["Tom", "Bea", "Cal", "Dot", "Gus"]) fake.byAgent[n] = [{ text: `${n}: lanterns, yes.` }];
+  const mayorCall = await power("call_meeting", { topic: "Should we hang lanterns on the bridge?" });
+  check("the Mayor can call one", mayorCall.startsWith("Called town meeting #"), true);
+  const opened = await roundDone(Number(/#(\d+)/.exec(mayorCall)?.[1]));
+  check("…he opens it with the topic, and the others answer (not him)", [opened.transcript[0].who, opened.transcript[0].text, opened.transcript.some((t: { who: string }, i: number) => i > 0 && t.who === "Mayor Ada")], ["Mayor Ada", "Should we hang lanterns on the bridge?", false]);
+  check("…and the owner is told", (await db.select().from(notifications).where(eq(notifications.title, "Mayor Ada called a town meeting"))).length, 1);
+  check("there's only ever one meeting", (await power("call_meeting", { topic: "Again" })).includes("already a meeting"), true);
+  await patchMeeting(opened.meeting.id, { action: "close" });
+  await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

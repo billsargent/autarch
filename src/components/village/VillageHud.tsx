@@ -20,6 +20,9 @@ interface VillageHudProps {
   onShowApprovals: () => void;
   onTogglePause: () => void;
   onShowMail: () => void;
+  // Town meetings (#81): one going on now, and the way to the long table.
+  meetingOn: boolean;
+  onMeeting: () => void;
 }
 
 function Chip({ label, value, dot }: { label: string; value: string; dot: string }) {
@@ -62,8 +65,8 @@ export default function VillageHud(p: VillageHudProps) {
         >
           {p.paused ? "▶ Resume everyone" : "❄ Pause everyone"}
         </button>
-        <button disabled className="village-btn px-3 py-1.5 text-xs" title="Coming with meetings (#81)">
-          Call meeting
+        <button onClick={p.onMeeting} className={`village-btn px-3 py-1.5 text-xs ${p.meetingOn ? "village-btn-go" : ""}`} title="The long table in the town hall">
+          {p.meetingOn ? "🏛 Meeting on" : "Call meeting"}
         </button>
         <Link href="/chat" className="village-btn village-btn-primary px-3 py-1.5 text-xs" title="The classic pages">
           Command Center

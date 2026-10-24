@@ -136,16 +136,26 @@ the global pause, and the per-conversation chat mode.
 
 ## 7. Meetings
 
-A meeting is called by the **Mayor** or the **owner**, in the daytime.
+A meeting is called by the **owner** (the long table in the town hall, or "Call meeting" in the
+village bar) or by the **Mayor** (`call_meeting`), in the daytime only, and never while everyone
+is paused. There is only ever one meeting at a time.
 
-- All awake villagers walk to the town hall and take seats.
-- The Mayor moderates and picks who speaks next. Everyone else speaks only when picked, which
-  keeps the cost bounded.
-- A meeting ends on the Mayor's call, the owner's call, or when it hits its turn or cost cap.
-- The transcript is saved as a conversation. Ideas raised there can be pinned and put to a vote.
-
-The owner can take the head of the table and speak to everyone, or open a private side thread
-with one villager.
+- **Who attends:** every active villager (not the paused ones). They walk to the town hall while
+  the meeting lasts.
+- **How it runs:** the owner asks something, or the Mayor opens with the topic when he called it.
+  Each attendee answers in turn: the Mayor first, then the others in the order they joined, at
+  most six per question. Someone who asked doesn't answer their own question.
+- **What each villager hears:** each answer is a talk-only turn of the villager's own, on their
+  own budget, in their own meeting thread. There they hear only what's been said since they last
+  spoke.
+- **One question at a time:** the next waits until everyone has answered.
+- **Cost cap:** a meeting has a cost cap (`meetingCostCapUsd`, default $0.25). When it's spent,
+  the round stops.
+- **Ending:** a meeting ends when the owner ends it, or by itself after four hours.
+- **Transcript:** it is kept as a conversation of the Mayor's. Ideas raised there can be pinned
+  and put to a vote (#98).
+- **The Mayor** can't call a meeting while he's answering a neighbour, and the owner is told when
+  he calls one.
 
 ## 8. Day and night
 

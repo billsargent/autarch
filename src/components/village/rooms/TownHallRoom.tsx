@@ -6,6 +6,7 @@ import { useHires } from "../../data/useHires";
 import { formatToolInput, useApprovals, type Decision } from "../../data/useApprovals";
 import ParchmentDialog from "../ParchmentDialog";
 import MayorsLedger from "./MayorsLedger";
+import MeetingTable from "./MeetingTable";
 import VillagerPortrait from "../VillagerPortrait";
 import { useVillagers } from "../../data/useVillagers";
 import type { AgentRow } from "@/lib/agent/clientTypes";
@@ -19,6 +20,7 @@ import type { RoomProps } from "./types";
 // the clerk's desk too.
 
 export default function TownHallRoom({ action, onClose }: RoomProps) {
+  if (action === "meeting.open") return <MeetingTable onClose={onClose} />;
   return action === "settings.open" ? <MayorsLedger onClose={onClose} /> : <Approvals action={action} onClose={onClose} />;
 }
 

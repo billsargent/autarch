@@ -190,6 +190,8 @@ export default function VillageView() {
         onShowApprovals={() => setDeferred([])}
         onTogglePause={togglePause}
         onShowMail={() => openAction("mail.open")}
+        meetingOn={villagers.some((v) => v.inMeeting)}
+        onMeeting={() => router.push("/village/townhall?open=meeting.open")}
       />
 
       <SceneView

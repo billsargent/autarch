@@ -54,6 +54,7 @@ const RULES: Record<string, Rule> = {
   bedtime: { kind: "time" },
   hiringMode: { kind: "enum", values: ["ask", "auto"] },
   maxPopulation: { kind: "int", min: 1, max: 50 },
+  meetingCostCapUsd: { kind: "number", min: 0.01, max: 100 },
   wakeTime: { kind: "time" },
   allowNetworkFetch: { kind: "bool" },
   paused: { kind: "bool" },

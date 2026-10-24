@@ -84,7 +84,7 @@ export const workSessions = sqliteTable("work_sessions", {
   conversationId: integer("conversation_id").references(() => conversations.id, {
     onDelete: "set null",
   }),
-  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report", "message", "interview"] }).notNull(),
+  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report", "message", "interview", "meeting"] }).notNull(),
   status: text("status", {
     enum: ["running", "completed", "terminated", "skipped", "failed"],
   })
@@ -199,6 +199,25 @@ export const hireRequests = sqliteTable("hire_requests", {
   decidedAt: integer("decided_at", { mode: "timestamp" }),
 });
 
+// Town meetings (#81): the owner (or the Mayor) asks, and each villager at
+// the meeting answers in turn. The transcript is a conversation of the
+// Mayor's; each villager also has a thread of their own for the meeting,
+// where they hear what was said and answer (`threads`: agent id -> its
+// conversation and the last transcript message it has heard).
+export const meetings = sqliteTable("meetings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  topic: text("topic"),
+  calledBy: text("called_by").notNull().default("owner"),
+  conversationId: integer("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+  participants: text("participants", { mode: "json" }).notNull(),
+  threads: text("threads", { mode: "json" }),
+  status: text("status", { enum: ["open", "closed"] }).notNull().default("open"),
+  // Who is answering right now, while a round runs.
+  speakingAgentId: integer("speaking_agent_id"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  endedAt: integer("ended_at", { mode: "timestamp" }),
+});
+
 export const goals = sqliteTable("goals", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
@@ -288,6 +307,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   // hires within the caps. And how many villagers the village can hold.
   hiringMode: text("hiring_mode", { enum: ["ask", "auto"] }).notNull().default("ask"),
   maxPopulation: integer("max_population").notNull().default(8),
+  // What one town meeting may spend in all, in USD (#81).
+  meetingCostCapUsd: real("meeting_cost_cap_usd").notNull().default(0.25),
   // New tools already offered to this install (see settingsStore), so a tool
   // the owner switched off isn't switched back on.
   offeredTools: text("offered_tools", { mode: "json" }),

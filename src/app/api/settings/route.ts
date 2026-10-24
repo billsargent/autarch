@@ -95,6 +95,7 @@ export async function PUT(req: Request) {
     "wakeTime",
     "hiringMode",
     "maxPopulation",
+    "meetingCostCapUsd",
   ];
   const patch: Record<string, unknown> = {};
   for (const key of allowedKeys) {

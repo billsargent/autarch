@@ -66,6 +66,7 @@ export interface SettingsRow {
   wakeTime: string;
   hiringMode: "ask" | "auto";
   maxPopulation: number;
+  meetingCostCapUsd: number;
   extraProtectedPaths: string[];
   systemPromptExtra: string | null;
   staticCorePrompt: string | null;
@@ -125,7 +126,7 @@ export interface WorkSessionRow {
   id: number;
   jobId: number | null;
   conversationId: number | null;
-  trigger: "chat" | "approval" | "scheduled" | "report" | "message" | "interview";
+  trigger: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting";
   status: "running" | "completed" | "terminated" | "skipped" | "failed";
   startedAt: string;
   endedAt: string | null;
@@ -199,6 +200,7 @@ export interface AgentRow {
   tier: "mayor" | "director" | "worker";
   area: string | null;
   managerId: number | null;
+  inMeeting?: boolean;
   dailyBudgetUsd: number | null;
   maxActionsPerHour: number | null;
   createdAt: string;

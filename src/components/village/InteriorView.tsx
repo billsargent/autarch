@@ -70,7 +70,9 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
 
   const awayWhere = away ? VILLAGE.places.find((p) => p.id === MOOD_PLACE[away.mood]) : null;
   const note = here.length
-    ? here.map(({ v, mood }) => moodLabel(mood, v.name)).join(" · ")
+    ? here.length > 3
+      ? `${here.length} villagers are here: ${here.map(({ v }) => v.name).join(", ")}.`
+      : here.map(({ v, mood }) => moodLabel(mood, v.name)).join(" · ")
     : away
       ? `${away.v.name} isn't home — ${awayWhere ? `they're at the ${awayWhere.label.toLowerCase()}` : "they're out"}.`
       : sceneId === "home"

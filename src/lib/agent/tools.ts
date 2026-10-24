@@ -523,6 +523,18 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "call_meeting",
+      description: "Mayor only. Call a town meeting about something the whole village should talk over. Everyone awake gathers in the town hall and answers in turn. Daytime only, and rarely: meetings cost every villager a turn.",
+      parameters: {
+        type: "object",
+        properties: { topic: { type: "string", description: "What you want to talk about, as a question or a sentence." } },
+        required: ["topic"],
+      },
+    },
+  },
   // Hiring (#99): the Mayor and directors only.
   {
     type: "function" as const,
@@ -619,6 +631,8 @@ export function evaluateToolRisk(
       return { risk: "low", reason: "The Mayor pausing one villager; stopping work is always safe, and the owner is told." };
     case "schedule_job_for":
       return { risk: "medium", reason: "The Mayor creating a recurring work schedule for a villager." };
+    case "call_meeting":
+      return { risk: "medium", reason: "The Mayor calling a town meeting: a turn for every villager, within the meeting's cost cap." };
     case "propose_hire":
       return { risk: "low", reason: "Drafts a hire request; the Mayor interviews it and the caps and the owner decide." };
     case "resume_agent":
@@ -741,6 +755,7 @@ export async function executeTool(
     case "flag":
     case "pause_agent":
     case "resume_agent":
+    case "call_meeting":
       return (await import("./mayor")).runMayorTool(tool, args, ctx);
     case "propose_hire":
       return (await import("./hiring")).proposeHire(args, ctx);

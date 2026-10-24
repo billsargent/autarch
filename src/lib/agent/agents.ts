@@ -228,6 +228,8 @@ export interface VillagerState {
   // A neighbour they're talking with right now (#57): answering their
   // question, or waiting on their answer.
   talkingWith: number | null;
+  // At the town meeting going on now (#81).
+  inMeeting: boolean;
 }
 
 // What each villager is up to right now: for the village to draw them.
@@ -248,6 +250,8 @@ export function villagerStates(ids: number[], now = new Date()): Map<number, Vil
     partner.set(t.answering, t.asking);
     partner.set(t.asking, t.answering);
   }
+  const meeting = sqlite.prepare("SELECT participants FROM meetings WHERE status = 'open' ORDER BY id LIMIT 1").get() as { participants: string } | undefined;
+  const attending = new Set<number>(meeting ? JSON.parse(meeting.participants) : []);
   for (const id of ids) {
     // A running turn whose heartbeat went quiet belonged to a process that
     // stopped; it doesn't count (the turn lock lets go of it too).
@@ -280,6 +284,7 @@ export function villagerStates(ids: number[], now = new Date()): Map<number, Vil
       lastSaid: said?.content.trim() ?? null,
       lastSaidAt: said ? said.created_at * 1000 : null,
       talkingWith: partner.get(id) ?? null,
+      inMeeting: attending.has(id),
     });
   }
   return out;

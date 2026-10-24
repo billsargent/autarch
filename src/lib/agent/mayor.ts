@@ -62,6 +62,8 @@ export async function runMayorTool(tool: string, args: Record<string, unknown>, 
       return pauseAgent(mayor, args, ctx);
     case "resume_agent":
       return resumeAgent(mayor, args, ctx);
+    case "call_meeting":
+      return callMeetingTool(mayor, args, ctx);
     default:
       return refused(`unknown power "${tool}".`);
   }
@@ -187,4 +189,22 @@ async function resumeAgent(mayor: AgentRow, args: Record<string, unknown>, ctx?:
   await db.update(agents).set({ status: "active", pausedBy: null, updatedAt: new Date() }).where(eq(agents.id, target.id));
   await tellOwner(`${mayor.name} let ${target.name} work again`, args.reason ? String(args.reason) : null, mayor);
   return { output: `${target.name} can work again.`, summary: `resume ${target.name}` };
+}
+
+// Gather the village in the town hall (#81): daytime only, with the meeting's
+// cost cap. He opens it with the topic, and everyone answers in turn.
+async function callMeetingTool(mayor: AgentRow, args: Record<string, unknown>, ctx?: ToolContext): Promise<Result> {
+  const busy = notWhileAnswering(ctx);
+  if (busy) return busy;
+  const topic = String(args.topic ?? "").trim();
+  if (!topic) return refused("say what the meeting is about (`topic`).");
+  const { mayorCallsMeeting, currentMeeting, MeetingError } = await import("./meetings");
+  if (await currentMeeting()) return refused("there's already a meeting going. It's in the town hall.");
+  try {
+    const m = await mayorCallsMeeting(mayor, topic);
+    return { output: `Called town meeting #${m.id} about "${topic}". Everyone's answering in turn; the owner has been told.`, summary: `meeting #${m.id}` };
+  } catch (err) {
+    if (err instanceof MeetingError) return refused(err.message);
+    throw err;
+  }
 }

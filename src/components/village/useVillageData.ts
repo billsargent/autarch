@@ -84,5 +84,5 @@ export function useVillageData() {
 
 // What a villager is doing, from their own state and the village's.
 export function snapshotOf(v: AgentRow, villagePaused: boolean, night = false) {
-  return { paused: villagePaused || v.status === "paused", running: v.working, pendingApprovals: v.waiting, night };
+  return { paused: villagePaused || v.status === "paused", running: v.working, pendingApprovals: v.waiting, night, meeting: Boolean(v.inMeeting) };
 }

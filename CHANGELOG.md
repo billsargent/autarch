@@ -3,6 +3,22 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Town meetings
+
+- **Call a town meeting (#81).**
+  - Click "Call meeting" in the village bar, or the long table in the town hall.
+  - Every active villager walks to the town hall (🏛).
+  - Ask them something, and each answers in turn in their own voice: the Mayor first, then the
+    others (up to six). Each hears what was said before them.
+- **The Mayor can call one too** (`call_meeting`), about something the whole village should talk
+  over. He opens with the topic, and you're told.
+- **Limits:**
+  - daytime only, one meeting at a time, one question at a time;
+  - answers are talk only, with no tools;
+  - each meeting has a budget (default $0.25, Mayor's ledger), and the round stops when it's
+    spent.
+- **The transcript** is kept as a conversation of the Mayor's. End the meeting from the table.
+
 ## 2026-10-24 — Walk the village yourself
 
 - **You're in the village now (#109):** a character tagged "You".

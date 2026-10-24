@@ -17,7 +17,7 @@ const MAYOR_NOTE = `AS MAYOR
 
 
 export interface PromptScope {
-  trigger?: "chat" | "approval" | "scheduled" | "report" | "message" | "interview";
+  trigger?: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting";
   jobId?: number | null;
   conversationId?: number | null;
   maxDurationMinutes?: number;
@@ -175,6 +175,9 @@ NOTIFICATIONS
       : "",
     trigger === "message"
       ? `✉ A neighbour has asked you something (the latest "[… asks]" note). Answer them directly and briefly; your reply goes back to them. You can't send questions onward in this turn.`
+      : "",
+    trigger === "meeting"
+      ? `🏛 You're at a town meeting in the town hall, with the owner and your neighbours. The latest "[Town meeting]" note is what's been said since you last spoke. Answer the latest question in a few sentences, in your own voice, from your own work and point of view. Add something new rather than repeating what others said.`
       : "",
     trigger === "interview"
       ? `📋 You're interviewing someone who'd like to join the village (the latest "[Hire request]" note). Think about whether the village needs them, whether their personality and tools fit the job, and whether their budget is sensible. Say what you think in a few sentences, then end with exactly one line: "VERDICT: RECOMMEND" or "VERDICT: REJECT".`
