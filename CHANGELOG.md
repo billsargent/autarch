@@ -3,6 +3,13 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Clearer names for the dangerous switches
+
+- **"Allow all overrides" (#42)** is the new name of the switch that turns on every supervisor
+  override at once (each action still needs your approval). It's no longer confused with the
+  **Unrestricted** autonomy mode, which really does turn approvals off.
+- The agent is now told about each override that's on, not only when all of them are.
+
 ## 2026-10-24 — Live updates
 
 - **Pages update the moment something changes (#74).** One live stream replaces the polling:

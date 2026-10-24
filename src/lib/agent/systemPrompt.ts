@@ -123,6 +123,15 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
   // cache can serve this prefix at the ~50x cheaper cache-hit rate.
   // {name} and {workspace} in the owner's own prompts (#40).
   const fill = (s: string) => s.replaceAll("{name}", name).replaceAll("{workspace}", home);
+  // Which supervisor overrides are on, each by name (#42).
+  const overridesOn = settings.unrestrictedMode
+    ? ["everything (Allow all overrides)"]
+    : [
+        settings.allowSecretReads && "reading secrets",
+        settings.allowFrameworkMutations && "changing the framework's own files",
+        settings.allowDestructiveShell && "destructive shell commands",
+        settings.allowProtectedSystemOps && "protected system operations",
+      ].filter((x): x is string => Boolean(x));
   const staticCore = (settings.staticCorePrompt && fill(settings.staticCorePrompt)) || `You are ${name}${agent?.role ? `, the village's ${agent.role.toLowerCase()}` : ""}. ${persona.trim()}
 
 WHERE YOU LIVE
@@ -153,7 +162,7 @@ GUARDRAILS
 - Every tool call is risk-checked. The human's settings decide what runs on its own and what waits for their approval.
 ${settings.autonomyMode === "unrestricted" ? `- UNRESTRICTED: nothing is blocked; everything runs automatically.` : `- "blocked" actions never run — damaging the framework itself, fork bombs, formatting disks, killing PID 1.`}
 ${settings.autonomyMode !== "unrestricted" ? `- "critical" actions (sudo, removing packages, killing processes, stopping services, mounts, force-push, piping scripts to a shell, shutdown) always need the human's approval.` : `- "critical" actions (sudo, kill, service stop, etc.) run automatically in unrestricted mode.`}
-${settings.unrestrictedMode ? `- Supervisor overrides are ON: normally-blocked actions can be REQUESTED but still need the human's approval — never assume they ran.` : ""}
+${overridesOn.length ? `- Supervisor overrides are ON for ${overridesOn.join(", ")}: those normally-blocked actions can be REQUESTED but still need the human's approval — never assume they ran.` : ""}
 - "PENDING HUMAN APPROVAL" means it has NOT run. Don't assume success; tell the human it's waiting on them. If something is blocked or denied, say so briefly and move on.
 
 FORMATTING

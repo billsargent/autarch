@@ -826,6 +826,13 @@ async function main() {
   rawDb.prepare("UPDATE work_sessions SET heartbeat_at = unixepoch() WHERE id = (SELECT MIN(id) FROM work_sessions)").run();
   check("…but a turn's heartbeat isn't news", evCount(), beforeBeat);
 
+  // --- overrides named one by one in the prompt (#42) ------------------------------------------
+  await updateSettings({ allowSecretReads: true });
+  fake.byAgent.Cal = [{ text: "ok" }];
+  await runAgentTurn({ userMessage: "hi", agentId: cal.id });
+  check("each override that's on is named in the prompt", fake.seen.filter((x) => x.system.startsWith("You are Cal")).pop()?.system.includes("Supervisor overrides are ON for reading secrets"), true);
+  await updateSettings({ allowSecretReads: false });
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

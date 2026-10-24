@@ -160,8 +160,8 @@ export default function SettingsView() {
 
           <div className="mt-3 space-y-2">
             <ToggleRow
-              label="Unrestricted mode"
-              desc="Enables every override below at once. Extreme caution."
+              label="Allow all overrides"
+              desc="Switches on every override below at once (each action still needs your approval). Not the same as the Unrestricted autonomy mode. Extreme caution."
               checked={settings.unrestrictedMode}
               onToggle={(v) => {
                 if (

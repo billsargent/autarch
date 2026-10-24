@@ -204,8 +204,8 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
           )}
           <Toggle
             danger
-            label="Unrestricted overrides"
-            desc="Switches on every override below at once. Extreme caution."
+            label="Allow all overrides"
+            desc="Switches on every override below at once; each action still needs your approval. Not the same as the Unrestricted autonomy mode. Extreme caution."
             checked={settings.unrestrictedMode}
             onToggle={(v) =>
               v

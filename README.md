@@ -165,8 +165,9 @@ misconfiguration can remove them (`src/lib/agent/config.ts`):
 
 By default a few categories are hard-blocked: **reading secrets**, **modifying the framework's
 own files**, **destructive shell commands**, and **protected system operations**. In
-**Settings → Supervisor overrides** the human operator can enable any of these (or flip the
-master **Unrestricted mode**).
+**Settings → Supervisor overrides** the human operator can enable any of these (or all of them
+at once with **Allow all overrides**, which is not the same as the Unrestricted autonomy mode
+below).
 
 Enabling an override downgrades those actions from *blocked* to *critical* — the agent may
 now **request** them, but each one still requires an explicit human approval before it runs.
