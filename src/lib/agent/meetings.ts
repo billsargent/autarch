@@ -1,5 +1,5 @@
 import { db, sqlite } from "@/db";
-import { agents, conversations, meetings, messages, notifications } from "@/db/schema";
+import { agents, conversations, goals, meetings, messages, notifications } from "@/db/schema";
 import { and, asc, desc, eq, gt, ne } from "drizzle-orm";
 import { budgetProblem, ensureMayor, type AgentRow } from "./agents";
 import { isNight } from "./daynight";
@@ -178,7 +178,7 @@ export async function mayorCallsMeeting(mayor: AgentRow, topic: string) {
 // When the owner ends a meeting, the Mayor writes it up: a short summary for
 // the records, and any concrete ideas pinned on the notice board (#98). One
 // talk-only turn of his, in the meeting's own transcript.
-export async function summarizeMeeting(id: number): Promise<{ summary: string; ideas: string[] } | null> {
+export async function summarizeMeeting(id: number): Promise<{ summary: string; ideas: string[]; actions: string[] } | null> {
   const [m] = await db.select().from(meetings).where(eq(meetings.id, id));
   if (!m?.conversationId) return null;
   const said = await db.select().from(messages).where(eq(messages.conversationId, m.conversationId));
@@ -192,7 +192,7 @@ export async function summarizeMeeting(id: number): Promise<{ summary: string; i
       {
         conversationId: m.conversationId,
         eventNote:
-          '[Meeting ended] Write this meeting up for the town hall records: one short paragraph on what was said and agreed. Then, for each concrete idea worth putting to the whole village (at most three), add a line starting "IDEA: " with the idea in a few words.',
+          `[Meeting ended] Write this meeting up for the town hall records: one short paragraph on what was said and agreed. Then, for each task someone agreed to take on, add a line "ACTION: <villager's name>: <the task>" (at most five). And for each new idea worth putting to the whole village (at most three), a line "IDEA: <the idea in a few words>".`,
         trigger: "meeting",
       },
       2000,
@@ -204,7 +204,8 @@ export async function summarizeMeeting(id: number): Promise<{ summary: string; i
   }
   if (!text) return null;
   const ideas = [...text.matchAll(/^\s*[-*]?\s*\**IDEA:?\**:?\s*(.+)$/gim)].map((x) => x[1].replace(/\*+$/, "").trim()).filter(Boolean).slice(0, 3);
-  const summary = text.replace(/^\s*[-*]?\s*\**IDEA:?\**:?.*$/gim, "").trim();
+  const actions = [...text.matchAll(/^\s*[-*]?\s*\**ACTION:?\**:?\s*([^:\n]+?)\s*:\s*(.+)$/gim)].map((x) => ({ who: x[1].replace(/\*/g, "").trim(), task: x[2].replace(/\*+$/, "").trim() })).slice(0, 5);
+  const summary = text.replace(/^\s*[-*]?\s*\**(IDEA|ACTION):?\**:?.*$/gim, "").trim();
   await db.update(meetings).set({ summary }).where(eq(meetings.id, id));
   const { proposeIdea } = await import("./ideas");
   const pinned: string[] = [];
@@ -216,7 +217,16 @@ export async function summarizeMeeting(id: number): Promise<{ summary: string; i
       /* the board is full, or the Mayor has pinned enough today */
     }
   }
-  return { summary, ideas: pinned };
+  // What was agreed becomes goals: on the villager's board if we know them,
+  // otherwise on the town's. They pick them up in their next work window.
+  const living = await db.select().from(agents).where(ne(agents.status, "dismissed"));
+  const assigned: string[] = [];
+  for (const a of actions) {
+    const who = living.find((v) => v.name.toLowerCase() === a.who.toLowerCase());
+    await db.insert(goals).values({ title: a.task.slice(0, 120), body: `Agreed at town meeting #${id}${m.topic ? ` (${m.topic})` : ""}.`, status: "backlog", priority: 2, agentId: who?.id ?? null });
+    assigned.push(`${who?.name ?? "the town"}: ${a.task}`);
+  }
+  return { summary, ideas: pinned, actions: assigned };
 }
 
 // The last few meetings, for the long table when no meeting is on.

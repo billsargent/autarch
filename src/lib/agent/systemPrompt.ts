@@ -196,7 +196,7 @@ MESSAGING THE HUMAN
       ? `🧳 The owner is away and has trusted you to look at small requests while they're gone (the latest "[Approval request]" note). Approve it only if it's clearly safe, sensible and useful for the work it's part of; if you have any doubt, leave it for the owner. Explain in a sentence or two, then end with exactly one line: "DECISION: APPROVE" or "DECISION: LEAVE".`
       : "",
     trigger === "meeting"
-      ? `🏛 You're at a town meeting in the town hall, with the owner and your neighbours. The latest "[Town meeting]" note is what's been said since you last spoke. Answer the latest question in a few sentences, in your own voice, from your own work and point of view. Add something new rather than repeating what others said.`
+      ? `🏛 You're at a town meeting in the town hall, with the owner and your neighbours. The latest "[Town meeting]" note is what's been said since you last spoke. Answer the latest question in a few sentences, in your own voice, from your own work and point of view. Add something new rather than repeating what others said. A meeting is for deciding, so there are no tools here: what's agreed becomes goals afterwards, and you work on yours in your next work window. Say what you'd do; don't apologise for not doing it now.`
       : "",
     trigger === "interview"
       ? `📋 You're interviewing someone who'd like to join the village (the latest "[Hire request]" note). Think about whether the village needs them, whether their personality and tools fit the job, and whether their budget is sensible. Say what you think in a few sentences, then end with exactly one line: "VERDICT: RECOMMEND" or "VERDICT: REJECT".`

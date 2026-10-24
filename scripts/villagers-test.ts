@@ -881,11 +881,14 @@ async function main() {
   await patchMeeting(echoMeet.meeting.id, { action: "ask", message: "Agreed?" });
   const echoed = await roundDone(echoMeet.meeting.id);
   check("a villager's echoed name is taken off their meeting answer", echoed.transcript.slice(1).every((t: { text: string }) => t.text === "I agree."), true);
-  fake.byAgent["Mayor Ada"] = [{ text: "We all agreed, briefly.\nIDEA: Paint the bridge red" }];
+  fake.byAgent["Mayor Ada"] = [{ text: "We all agreed, briefly.\nACTION: Cal: Fix the bridge rail\nACTION: Nobody: Count the lanterns\nIDEA: Paint the bridge red" }];
   await patchMeeting(echoMeet.meeting.id, { action: "close" });
   await settleTurns(echoMeet.meeting.id);
   const written = (await db.select().from(meetingsT).where(eq(meetingsT.id, echoMeet.meeting.id)))[0];
   check("when a meeting ends the Mayor writes it up for the records", written.summary, "We all agreed, briefly.");
+  check("…turns what was agreed into goals, on the villager's own board", (await db.select().from(goals).where(eq(goals.title, "Fix the bridge rail")))[0]?.agentId, cal.id);
+  check("…or the town's, if nobody by that name lives here", (await db.select().from(goals).where(eq(goals.title, "Count the lanterns")))[0]?.agentId, null);
+  check("…and keeps those lines out of the summary", written.summary?.includes("ACTION"), false);
   check("…and pins the ideas it raised", (await ideasLib.listIdeas()).some((i) => i.title === "Paint the bridge red" && i.proposedBy === mayor.id), true);
   check("past meetings show at the long table", (await (await meetingsRoute.GET()).json()).past.some((p: { summary: string | null }) => p.summary === "We all agreed, briefly."), true);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });

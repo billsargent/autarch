@@ -3,6 +3,18 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-25 — Meetings lead to work, and the worker starts with the app
+
+- **What a meeting agrees becomes work.** When you end a meeting, the Mayor's write-up names who
+  agreed to do what, and each of those becomes a goal on that villager's board (or the town's).
+  They pick it up in their next work window.
+- **Villagers understand meetings are for deciding.** No tools are used in a meeting, and they
+  now say what they'll do instead of apologising that their hands are tied.
+- **`npm run dev` starts the background worker too,** as the deployed services do. Without the
+  worker, jobs, free time, the daily vote and the farm never run. `npm run dev:web` starts the
+  web app alone.
+- **Scrolling a long meeting works:** the question box and the End button stay put (#115).
+
 ## 2026-10-24 — Sound, a welcome, and meeting write-ups
 
 - **Sound (off until you switch it on).** The 🔇 button in the village bar turns on quiet music,
