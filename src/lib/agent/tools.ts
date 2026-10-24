@@ -185,13 +185,14 @@ export const ALL_TOOL_DEFINITIONS = [
     type: "function" as const,
     function: {
       name: "fetch_url",
-      description: "Fetch a URL over HTTP(S) and return the response body (truncated). Useful for research.",
+      description: "Fetch a URL over HTTP(S) and return the response body (truncated). Web pages come back as their readable text, without the HTML. Useful for research.",
       parameters: {
         type: "object",
         properties: {
           url: { type: "string" },
           method: { type: "string", enum: ["GET", "POST"], description: "Default GET." },
           body: { type: "string", description: "Optional request body for POST." },
+          raw: { type: "boolean", description: "Return the raw HTML of a web page instead of its text." },
         },
         required: ["url"],
       },
@@ -805,7 +806,7 @@ export async function executeTool(
         String(args.service || ""),
       );
     case "fetch_url":
-      return fetchUrl(String(args.url || ""), (args.method as "GET" | "POST") || "GET", args.body as string | undefined);
+      return fetchUrl(String(args.url || ""), (args.method as "GET" | "POST") || "GET", args.body as string | undefined, Boolean(args.raw));
     case "update_journal":
       return updateJournal(args, ctx);
     case "schedule_job":
@@ -1100,7 +1101,30 @@ async function safeFetch(url: string, init: RequestInit): Promise<Response> {
   throw new RefusedRequest("Too many redirects.");
 }
 
-async function fetchUrl(url: string, method: "GET" | "POST", body?: string) {
+// A web page's readable text: no scripts, styles or tags, entities decoded,
+// blank runs squeezed. A page's markup is mostly noise to a model and costs
+// tokens for nothing.
+export function htmlToText(html: string): string {
+  const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", mdash: "—", ndash: "–", hellip: "…", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“" };
+  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim();
+  const text = html
+    .replace(/<(script|style|noscript|svg|template|head)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(br|hr)\b[^>]*>/gi, "\n")
+    .replace(/<\/(p|div|li|tr|h[1-6]|section|article|header|footer|blockquote|pre|table|ul|ol|dt|dd)>/gi, "\n")
+    .replace(/<li\b[^>]*>/gi, "\n- ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&([a-z]+);/gi, (m, n) => named[n.toLowerCase()] ?? m)
+    .replace(/[ \t\f\r]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return title ? `# ${title}\n\n${text}` : text;
+}
+
+async function fetchUrl(url: string, method: "GET" | "POST", body?: string, raw = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -1116,7 +1140,9 @@ async function fetchUrl(url: string, method: "GET" | "POST", body?: string) {
       if (err instanceof RefusedRequest) return { output: `Refused: ${err.message}`, summary: `${method} ${url} refused` };
       throw err;
     }
-    const text = await res.text();
+    const fetched = await res.text();
+    const isHtml = /html/i.test(res.headers.get("content-type") ?? "") || /^\s*<(!doctype html|html)/i.test(fetched);
+    const text = isHtml && !raw ? `(the page's text; ask with raw: true for the HTML)\n\n${htmlToText(fetched)}` : fetched;
     const bytes = Buffer.byteLength(text, "utf-8");
     const clipped =
       bytes > MAX_FETCH_BYTES ? Buffer.from(text).subarray(0, MAX_FETCH_BYTES).toString("utf-8") + "\n...[truncated]" : text;
@@ -1263,7 +1289,7 @@ async function manageGoal(args: Record<string, unknown>, ctx?: ToolContext) {
       .returning();
     if (updated.length) {
       return {
-        output: `Updated goal #${updated[0].id}: ${title} (${status}, priority ${priority})`,
+        output: `Updated goal #${updated[0].id}: ${updated[0].title} (${updated[0].status}, priority ${updated[0].priority})`,
         summary: `goal update #${goalId}`,
       };
     }

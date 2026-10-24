@@ -47,9 +47,9 @@ export default function VaultRoom({ action, onClose }: RoomProps) {
       >
         <p className="mb-3 text-xs text-[#6b4a2e]">What the agents have spent on model calls. Skipped sessions aren&apos;t counted.</p>
         {data ? totals : <p className="text-sm">Counting the coins…</p>}
-        {data && (data.byAgent?.length || data.byModel?.length) ? (
+        {data && (data.byAgent?.length || data.byModel?.length || data.byActivity?.length) ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {([["By villager, last 30 days", data.byAgent], ["By model, last 30 days", data.byModel]] as const).map(([title, rows]) => (
+            {([["Today, by what it was for", data.byActivity], ["By villager, last 30 days", data.byAgent], ["By model, last 30 days", data.byModel]] as const).map(([title, rows]) => (
               <div key={title}>
                 <h3 className="village-pixel mb-1.5 text-xs">{title}</h3>
                 <ul className="divide-y-2 divide-[#e6d6b0] rounded border-2 border-[#3b2716] bg-[#fffaf0] text-xs">

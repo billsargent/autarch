@@ -118,6 +118,9 @@ async function runRound(id: number, askerId: number | null) {
         const { runWhenFree } = await import("./runner");
         const result = await runWhenFree({ conversationId: thread.conversationId, eventNote: `[Town meeting]\n${lines.join("\n")}`, trigger: "meeting" }, 2000, 5 * 60_000);
         answer = [...result.newMessages].reverse().find((r) => r.role === "assistant" && r.content?.trim())?.content?.trim() ?? "";
+        // Models sometimes echo the transcript's "Name:" in front of their answer.
+        // "Gus: …", "**Gus:** …" or "**Gus**: …".
+        answer = answer.replace(new RegExp(`^\\**\\s*${agent.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\**\\s*:\\s*\\**\\s*`, "i"), "");
       } catch (err) {
         answer = "";
         await say(`[Meeting] ${agent.name} couldn't answer: ${err instanceof Error ? err.message : String(err)}`, m.conversationId!);

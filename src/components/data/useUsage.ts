@@ -30,6 +30,8 @@ export interface UsageData {
   // The last 30 days by villager and by model (#80).
   byAgent?: UsageShare[];
   byModel?: UsageShare[];
+  // Today, by what it was spent on.
+  byActivity?: UsageShare[];
   daily: UsageBucket[];
   weekly: UsageBucket[];
   monthly: UsageBucket[];

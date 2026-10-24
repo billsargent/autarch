@@ -3,6 +3,22 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — After a live test run, and spending guard rails
+
+- **Tested with the real model.** One meeting, one vote, one hire interview, one away-mode review
+  and one free-time window, for about a cent. Everything worked, and three small things are now
+  fixed:
+  - a villager who repeats their own name at the start of a meeting answer has it removed;
+  - updating a goal without a title reports its real title;
+  - `fetch_url` returns a web page's readable text instead of raw HTML, which saves a lot of
+    tokens. `raw: true` still gets the HTML.
+- **A daily budget from the start.** A fresh village starts with a $2-a-day town budget
+  (Mayor's ledger → Limits). Existing installs keep theirs.
+- **Budget letters.** You get a letter when the village reaches 80% of the day's budget, and
+  another when it's all spent.
+- **What the money went on.** The vault shows today's spending by activity: chat, jobs, free
+  time, meetings, votes, interviews, away-mode reviews and more.
+
 ## 2026-10-24 — How villagers remember
 
 - **Goals have notes (#68).** A villager keeps where the work stands in its goal's notes,

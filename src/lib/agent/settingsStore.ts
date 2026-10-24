@@ -35,6 +35,8 @@ function migrateSkillsDirOnce(workspaceDir: string) {
 // Tools added after an install was set up are offered to its tool policy once
 // (switched on), and remembered, so if the owner later switches one off it
 // stays off.
+export const DEFAULT_TOWN_BUDGET_USD = 2;
+
 const NEW_TOOLS_TO_OFFER = ["message_owner", "ask_villager", ...MAYOR_TOOLS, ...HIRING_TOOLS, "note_about", "propose_idea", "save_draft"];
 
 async function ensureMessagingEnabled(row: AgentSettingsRow): Promise<AgentSettingsRow> {
@@ -78,6 +80,9 @@ export async function getSettings(): Promise<AgentSettingsRow> {
     .values({
       workspaceDir: DEFAULT_WORKSPACE_DIR,
       enabledTools: DEFAULT_ENABLED_TOOLS,
+      // A fresh village starts with a daily budget, so nothing it does on its
+      // own can run up a bill before the owner has looked (changeable in Limits).
+      townDailyBudgetUsd: DEFAULT_TOWN_BUDGET_USD,
     })
     .returning();
   cachedId = inserted[0].id;

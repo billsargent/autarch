@@ -855,6 +855,37 @@ async function main() {
   const loud = await executeTool("message_owner", { message: "The roof leaks!", severity: "warning", title: "Leak" }, town, { ...ctxCal, conversationId: memChat });
   check("…a warning also rings the bell", [loud.output.includes("and sent as letter #"), (await db.select().from(notifications).where(eq(notifications.title, "Leak"))).length], [true, 1]);
 
+  // --- fixes from the live shakedown ------------------------------------------------------------
+  const { htmlToText } = await import("../src/lib/agent/tools");
+  check(
+    "a web page comes back as its readable text",
+    htmlToText(`<!doctype html><html><head><title>Herbs</title><style>p{}</style><script>x()</script></head><body><h1>Thyme</h1><p>Loves sun &amp; dry soil.</p><ul><li>Prune in spring</li></ul></body></html>`),
+    "# Herbs\n\nThyme\nLoves sun & dry soil.\n\n- Prune in spring",
+  );
+  const renamed = await executeTool("manage_goal", { goalId: roofId, addNote: "Done." }, town, ctxCal);
+  check("updating a goal without a title reports its real title", renamed.output.startsWith(`Updated goal #${roofId}: Fix the roof`), true);
+  await daytime();
+  for (const n of ["Mayor Ada", "Tom", "Bea", "Cal", "Dot", "Gus"]) fake.byAgent[n] = [{ text: `**${n}:** I agree.` }];
+  const echoMeet = await (await meetingsRoute.POST(req("/api/meetings", "POST", { topic: "Echo" }))).json();
+  await patchMeeting(echoMeet.meeting.id, { action: "ask", message: "Agreed?" });
+  const echoed = await roundDone(echoMeet.meeting.id);
+  check("a villager's echoed name is taken off their meeting answer", echoed.transcript.slice(1).every((t: { text: string }) => t.text === "I agree."), true);
+  await patchMeeting(echoMeet.meeting.id, { action: "close" });
+  await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
+
+  // --- spending guard rails -----------------------------------------------------------------
+  const { DEFAULT_TOWN_BUDGET_USD } = await import("../src/lib/agent/settingsStore");
+  check("a fresh village starts with a daily budget", DEFAULT_TOWN_BUDGET_USD, 2);
+  const spentNow = villagers.townSpentToday();
+  await updateSettings({ townDailyBudgetUsd: spentNow / 0.85 });
+  check("at 80% of the day's budget the owner gets a letter", await villagers.budgetAlerts(), ["The village has spent 80% of today's budget"]);
+  check("…only once", await villagers.budgetAlerts(), []);
+  await updateSettings({ townDailyBudgetUsd: spentNow });
+  check("…and another when it's all spent", await villagers.budgetAlerts(), ["The village has spent today's budget"]);
+  await updateSettings({ townDailyBudgetUsd: null });
+  const activity = (await (await (await import("../src/app/api/usage/route")).GET()).json()).byActivity as Array<{ name: string }>;
+  check("the vault shows today by what it was for", ["chat", "meetings", "votes", "interviews"].every((n) => activity.some((a) => a.name === n)), true);
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

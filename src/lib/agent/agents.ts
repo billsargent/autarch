@@ -412,3 +412,30 @@ export async function setDaydream(agent: AgentRow, on: boolean) {
     });
   }
 }
+
+// --- budget letters ------------------------------------------------------------------
+
+// A letter to the owner when the village reaches 80% of its daily budget, and
+// another when it's all spent (once each a day). Called after each session.
+export async function budgetAlerts(now = new Date()): Promise<string[]> {
+  const settings = await getSettings();
+  const cap = settings.townDailyBudgetUsd;
+  if (cap == null || cap <= 0) return [];
+  const spent = townSpentToday(now);
+  const sent: string[] = [];
+  for (const [share, title] of [
+    [1, "The village has spent today's budget"],
+    [0.8, "The village has spent 80% of today's budget"],
+  ] as const) {
+    if (spent < cap * share) continue;
+    const already = sqlite.prepare("SELECT 1 FROM notifications WHERE kind = 'budget' AND title = ? AND created_at >= ?").get(title, startOfToday(now));
+    if (!already) {
+      sqlite
+        .prepare("INSERT INTO notifications (kind, title, body, severity, source) VALUES ('budget', ?, ?, ?, 'The vault')")
+        .run(title, `$${spent.toFixed(2)} of $${cap.toFixed(2)} so far today.${share === 1 ? " Everything stops until midnight, unless you raise the budget (Mayor's ledger → Limits)." : ""}`, share === 1 ? "critical" : "warning");
+      sent.push(title);
+    }
+    break; // only the highest threshold reached
+  }
+  return sent;
+}

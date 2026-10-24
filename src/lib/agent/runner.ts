@@ -12,7 +12,7 @@ import { isChatMode, resolveToolAccess } from "./chatMode";
 import { HEARTBEAT_MS, TurnBusyError, claimTurn, heartbeat, isCancelRequested } from "./turnLock";
 import { resolveRun, type RunSettings } from "./providers";
 import { autoJournal, importPlanFile } from "./memory";
-import { BudgetError, actionsInLastHour, budgetProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
+import { BudgetError, actionsInLastHour, budgetAlerts, budgetProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
 
 export { BudgetError } from "./agents";
 
@@ -306,6 +306,8 @@ async function finishSession(
   if (status === "completed" || status === "terminated") {
     await autoJournal(session.id).catch(() => null);
   }
+  // A letter when the village nears or reaches its daily budget.
+  if (session.costUsd > 0) await budgetAlerts().catch(() => []);
 }
 
 export interface AgentTurnResult {
