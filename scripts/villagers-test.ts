@@ -530,6 +530,28 @@ async function main() {
   check("once back, the Mayor stops", await away.considerWhileAway(await pend(cal.id, "low")), "skipped");
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
 
+  // --- notes about neighbours (#103) and morale (#104) -------------------------------------
+  const noteOut = (args: Record<string, unknown>) => executeTool("note_about", args, town, ctxCal).then((r) => r.output);
+  check("a villager can note something about a neighbour", await noteOut({ villager: "dot", note: "Dot knew exactly where the nets were." }), "Noted in your diary, about Dot.");
+  const [noteRow] = await db.select().from(journalEntries).where(eq(journalEntries.title, "About Dot"));
+  check("…kept in their own diary, marked as about Dot", [noteRow?.agentId, noteRow?.subjectAgentId, noteRow?.category], [cal.id, dot.id, "neighbour"]);
+  check("not about themselves", (await noteOut({ villager: "Cal", note: "x" })).includes("that's you"), true);
+  check("not about strangers", (await noteOut({ villager: "Zed", note: "x" })).includes('nobody called "Zed"'), true);
+  for (let i = 0; i < 7; i++) await noteOut({ villager: "Gus", note: `note ${i}` });
+  check("a few a day at most", (await noteOut({ villager: "Gus", note: "one more" })).includes("8 notes about neighbours today"), true);
+  check("diaries can't be read through the database", (await executeTool("query_database", { sql: "SELECT body FROM journal_entries" }, town, ctxCal)).output.startsWith("Diaries are private"), true);
+  check("the Mayor's review sums up what neighbours say", (await power("review_agent", { name: "Dot" })).includes(`Neighbours' notes this week: 1. Latest: Cal: "Dot knew exactly`), true);
+
+  const { moraleScore, villageMorale } = await import("../src/lib/agent/morale");
+  check("morale adds up from the record, with reasons", moraleScore({ approved: 3, dropped: 1, daysSinceOwner: 5, notesReceived: 2, budgetSpent: false }), {
+    score: 52,
+    reasons: ["3 things done this week (+6)", "1 dropped or refused (−3)", "5 days since you talked (−15)", "2 notes from neighbours (+4)"],
+  });
+  check("…and stays between 0 and 100", [moraleScore({ approved: 0, dropped: 20, daysSinceOwner: 30, notesReceived: 0, budgetSpent: true }).score, moraleScore({ approved: 50, dropped: 0, daysSinceOwner: 0, notesReceived: 9, budgetSpent: false }).score], [0, 90]);
+  const board = await villageMorale();
+  check("every villager is on the morale board", board.length, (await villagers.listVillagers()).length);
+  check("…and Gus's notes from Cal count for him", board.find((b) => b.name === "Gus")?.reasons.some((r) => r.startsWith("7 notes from neighbours")), true);
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

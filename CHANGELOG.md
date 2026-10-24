@@ -3,6 +3,21 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Notes about neighbours, and morale
+
+- **Villagers keep notes about each other (#103).** With `note_about` a villager writes a short
+  note about a neighbour into their own diary (🤝): who helped, who seems stuck. At most 8 a day.
+- **Diaries stay private.** You can read them all (the bookshelves at home); villagers can't read
+  each other's, not even through the database. The Mayor's review of a villager sums up what
+  neighbours noted this week.
+- **How everyone's doing (#104):** a new board at the notice board. It gives each villager a
+  morale score from the last week's record, with the reasons spelled out, lowest first:
+  - work done (up) and work dropped or refused (down);
+  - neighbours' notes (up);
+  - days since you last talked to them (down);
+  - a spent budget (down).
+  No model calls.
+
 ## 2026-10-24 — Away mode
 
 - **Going away? (#102)** At your desk at home, set "Back by" and press "I'm going away".

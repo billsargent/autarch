@@ -139,6 +139,7 @@ async function reviewAgent(args: Record<string, unknown>): Promise<Result> {
     ...(calls.length ? calls.map((c) => `- ${c.tool} [${c.status}, ${c.risk}]${c.summary ? ` ${c.summary}` : ""}`) : ["- none"]),
     `Open goals: ${theirGoals.length ? theirGoals.map((g) => `#${g.id} ${g.title} (${g.status})`).join("; ") : "none"}.`,
     `Active jobs: ${theirJobs.length ? theirJobs.map((j) => `#${j.id} ${j.name}`).join("; ") : "none"}.`,
+    notesSummary(target.id),
   ];
   return { output: lines.join("\n"), summary: `review ${target.name}` };
 }
@@ -207,4 +208,19 @@ async function callMeetingTool(mayor: AgentRow, args: Record<string, unknown>, c
     if (err instanceof MeetingError) return refused(err.message);
     throw err;
   }
+}
+
+// What neighbours have noted about a villager this week (#103): a count and
+// the latest few, cut short. The diaries themselves stay private.
+function notesSummary(agentId: number): string {
+  const since = Math.floor(Date.now() / 1000) - 7 * 86400;
+  const rows = sqlite
+    .prepare(
+      `SELECT a.name AS author, j.body FROM journal_entries j LEFT JOIN agents a ON a.id = j.agent_id
+       WHERE j.subject_agent_id = ? AND j.created_at >= ? ORDER BY j.id DESC`,
+    )
+    .all(agentId, since) as Array<{ author: string | null; body: string | null }>;
+  if (!rows.length) return "Neighbours' notes this week: none.";
+  const latest = rows.slice(0, 3).map((r) => `${r.author ?? "someone"}: "${(r.body ?? "").slice(0, 120)}"`);
+  return `Neighbours' notes this week: ${rows.length}. Latest: ${latest.join("; ")}.`;
 }

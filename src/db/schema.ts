@@ -164,7 +164,7 @@ export const journalEntries = sqliteTable("journal_entries", {
   title: text("title").notNull(),
   body: text("body"),
   category: text("category", {
-    enum: ["exploration", "task", "reflection", "idea", "system"],
+    enum: ["exploration", "task", "reflection", "idea", "system", "neighbour"],
   })
     .notNull()
     .default("task"),
@@ -173,6 +173,8 @@ export const journalEntries = sqliteTable("journal_entries", {
     .default("open"),
   // The villager this belongs to (#56).
   agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  // A note about a neighbour (#103): who it's about.
+  subjectAgentId: integer("subject_agent_id").references(() => agents.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });

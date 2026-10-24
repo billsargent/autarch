@@ -7,10 +7,10 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentSettingsRow } from "./settingsStore";
 import Database from "better-sqlite3";
-import { db } from "@/db";
+import { db, sqlite } from "@/db";
 import { DB_PATH } from "@/db/path";
-import { journalEntries, jobs, goals, notifications, conversations, messages } from "@/db/schema";
-import { eq, asc, desc, and, or, isNull, sql as dsql } from "drizzle-orm";
+import { agents, journalEntries, jobs, goals, notifications, conversations, messages } from "@/db/schema";
+import { eq, asc, desc, and, or, isNull, ne, sql as dsql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   classifyShellCommand,
@@ -558,6 +558,23 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
+  // Notes about neighbours (#103): kept in your own diary.
+  {
+    type: "function" as const,
+    function: {
+      name: "note_about",
+      description:
+        "Write a short note in your own diary about a neighbour: how they helped, what they're good at, if they seem stuck or overloaded. Your diary is private (the owner can read it; the Mayor sees a summary). A few a day at most; be fair and specific.",
+      parameters: {
+        type: "object",
+        properties: {
+          villager: { type: "string", description: "Who it's about." },
+          note: { type: "string", description: "The note, in a sentence or two." },
+        },
+        required: ["villager", "note"],
+      },
+    },
+  },
 ];
 
 export function getEnabledToolDefinitions(enabledTools: string[]) {
@@ -631,6 +648,8 @@ export function evaluateToolRisk(
       return { risk: "low", reason: "The Mayor pausing one villager; stopping work is always safe, and the owner is told." };
     case "schedule_job_for":
       return { risk: "medium", reason: "The Mayor creating a recurring work schedule for a villager." };
+    case "note_about":
+      return { risk: "low", reason: "A note in the villager's own diary; no system access." };
     case "call_meeting":
       return { risk: "medium", reason: "The Mayor calling a town meeting: a turn for every villager, within the meeting's cost cap." };
     case "propose_hire":
@@ -759,6 +778,8 @@ export async function executeTool(
       return (await import("./mayor")).runMayorTool(tool, args, ctx);
     case "propose_hire":
       return (await import("./hiring")).proposeHire(args, ctx);
+    case "note_about":
+      return noteAbout(args, ctx);
     case "query_database":
       return queryDatabase(args);
     case "download_file":
@@ -1279,6 +1300,10 @@ async function queryDatabase(args: Record<string, unknown>) {
   }
   // Naming the key column in any form (alias, function, subquery) is refused,
   // so the key can't be read out under another name (#10).
+  // Diaries are private (#103): a villager reads only their own, with list tools.
+  if (/journal_entries/i.test(raw)) {
+    return { output: "Diaries are private: query_database can't read journal_entries. Use your own journal tools.", summary: "query blocked (diaries)" };
+  }
   if (/api_?key/i.test(raw)) {
     return { output: "Queries that mention the API key column are not allowed.", summary: "query blocked (secret column)" };
   }
@@ -1405,4 +1430,33 @@ async function takeScreenshot(args: Record<string, unknown>, workspaceDir: strin
       summary: "screenshot failed",
     };
   }
+}
+
+// --- notes about neighbours (#103) ---------------------------------------------------------
+
+export const NOTES_PER_DAY = 8;
+
+async function noteAbout(args: Record<string, unknown>, ctx?: ToolContext) {
+  if (!ctx?.agentId) return { output: "Refused: only a villager keeps a diary.", summary: "note refused" };
+  const who = String(args.villager ?? "").trim();
+  const note = String(args.note ?? "").trim();
+  if (!who || !note) return { output: "Refused: say who (`villager`) and what (`note`).", summary: "note refused" };
+  const living = await db.select().from(agents).where(ne(agents.status, "dismissed"));
+  const subject = living.find((a) => a.name.toLowerCase() === who.toLowerCase());
+  if (!subject) return { output: `Refused: nobody called "${who}" lives in the village.`, summary: "note refused" };
+  if (subject.id === ctx.agentId) return { output: "Refused: that's you. Use update_journal for notes about yourself.", summary: "note refused" };
+  const since = Math.floor(Date.now() / 1000) - 86400;
+  const { n } = sqlite
+    .prepare("SELECT COUNT(*) AS n FROM journal_entries WHERE agent_id = ? AND category = 'neighbour' AND created_at >= ?")
+    .get(ctx.agentId, since) as { n: number };
+  if (n >= NOTES_PER_DAY) return { output: `Refused: you've written ${NOTES_PER_DAY} notes about neighbours today. Save the rest for tomorrow.`, summary: "note refused" };
+  await db.insert(journalEntries).values({
+    title: `About ${subject.name}`,
+    body: note.slice(0, 1000),
+    category: "neighbour",
+    status: "done",
+    agentId: ctx.agentId,
+    subjectAgentId: subject.id,
+  });
+  return { output: `Noted in your diary, about ${subject.name}.`, summary: `note about ${subject.name}` };
 }

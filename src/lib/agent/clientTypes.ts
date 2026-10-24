@@ -33,7 +33,8 @@ export interface JournalEntryRow {
   id: number;
   title: string;
   body: string | null;
-  category: "exploration" | "task" | "reflection" | "idea" | "system";
+  category: "exploration" | "task" | "reflection" | "idea" | "system" | "neighbour";
+  subjectAgentId?: number | null;
   status: "open" | "in_progress" | "done" | "abandoned";
   createdAt: string;
   updatedAt: string;

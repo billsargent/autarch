@@ -306,6 +306,9 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     ended_at INTEGER
   )`);
+  if (!existingCols("journal_entries").includes("subject_agent_id")) {
+    sqlite.exec("ALTER TABLE journal_entries ADD COLUMN subject_agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL");
+  }
   if (!existingCols("agent_settings").includes("away_until")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN away_until INTEGER");
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN away_started_at INTEGER");

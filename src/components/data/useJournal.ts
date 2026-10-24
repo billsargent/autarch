@@ -12,6 +12,7 @@ export const JOURNAL_ICON: Record<string, string> = {
   reflection: "💭",
   idea: "💡",
   system: "🗒️",
+  neighbour: "🤝",
 };
 
 // `agentId`: one villager's diary; without it, every entry (the Journal page).

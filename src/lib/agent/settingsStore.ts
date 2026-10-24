@@ -35,7 +35,7 @@ function migrateSkillsDirOnce(workspaceDir: string) {
 // Tools added after an install was set up are offered to its tool policy once
 // (switched on), and remembered, so if the owner later switches one off it
 // stays off.
-const NEW_TOOLS_TO_OFFER = ["post_message", "ask_villager", ...MAYOR_TOOLS, ...HIRING_TOOLS];
+const NEW_TOOLS_TO_OFFER = ["post_message", "ask_villager", ...MAYOR_TOOLS, ...HIRING_TOOLS, "note_about"];
 
 async function ensureMessagingEnabled(row: AgentSettingsRow): Promise<AgentSettingsRow> {
   if (messagingEnabled) return row;
