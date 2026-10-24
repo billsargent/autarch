@@ -107,7 +107,7 @@ export default function IdeasBoard({ onBack, onClose }: { onBack: () => void; on
       </form>
       {error && <p role="alert" className="mb-2 text-xs text-[#b3261e]">{error}</p>}
       {!list && <p className="text-sm">Reading the board…</p>}
-      {list?.length === 0 && <p className="text-sm">No ideas yet. Give villagers free time (Villagers page) and they&apos;ll start pinning some.</p>}
+      {list?.length === 0 && <p className="text-sm">No ideas yet. Villagers pin them from their work and from meetings.</p>}
       <ul className="space-y-2">
         {list?.map((idea) => {
           const who = idea.proposedBy ? byId(idea.proposedBy) : null;

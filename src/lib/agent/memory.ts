@@ -38,7 +38,7 @@ export async function autoJournal(sessionId: number): Promise<number | null> {
     .get(s.conversationId, s.startedAt) as { content: string } | undefined;
 
   const title =
-    s.jobKind === "daydream" ? "Free time" : s.trigger === "report" ? "Daily report" : work ? `Work: ${s.jobName ?? "scheduled job"}` : `Chat: ${s.conversationTitle ?? "a conversation"}`;
+    s.jobKind === "daydream" ? "Village life" : s.trigger === "report" ? "Daily report" : work ? `Work: ${s.jobName ?? "scheduled job"}` : `Chat: ${s.conversationTitle ?? "a conversation"}`;
   const body = [
     tools.length ? `Used ${tools.map((t) => (t.n > 1 ? `${t.tool} ×${t.n}` : t.tool)).join(", ")}.` : "No tools used.",
     said ? `Ended with: "${said.content.replace(/\s+/g, " ").slice(0, 280)}${said.content.length > 280 ? "…" : ""}"` : "",

@@ -19,7 +19,7 @@ type View =
   | { kind: "history"; id: number };
 
 const field = "mt-1 w-full rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 py-1.5 text-sm font-normal outline-none";
-const KIND_BADGE: Record<JobRow["kind"], string | null> = { interval: null, daily_report: "daily report", self_work: "self-work", daydream: "free time" };
+const KIND_BADGE: Record<JobRow["kind"], string | null> = { interval: null, daily_report: "daily report", self_work: "self-work", daydream: "village life" };
 
 function when(iso: string | null): string {
   if (!iso) return "";

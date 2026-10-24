@@ -69,6 +69,11 @@ export interface SettingsRow {
   enabledTools: string[];
   townDailyBudgetUsd: number | null;
   bedtime: string;
+  lifeBalance: "idle" | "hours" | "balanced";
+  workStart: string;
+  workEnd: string;
+  workShare: number;
+  lifeBudgetUsd: number;
   wakeTime: string;
   hiringMode: "ask" | "auto";
   maxPopulation: number;
@@ -227,6 +232,31 @@ export interface AgentRow {
   lastSaid: string | null;
   lastSaidAt: number | null;
   talkingWith: number | null;
+  // Their village trade, as chosen (empty = guessed from the role) (#131).
+  trade?: string | null;
+  life?: VillagerLife | null;
+  lifeBalance?: "idle" | "hours" | "balanced" | null;
+  workShare?: number | null;
+}
+
+// A villager's life as the village shows it (#132, life.ts lifeSummary).
+export interface VillagerLife {
+  trade: string;
+  tradeLabel: string;
+  icon: string;
+  title: string;
+  level: number;
+  xp: number;
+  energy: number;
+  fullness: number;
+  company: number;
+  coins: number;
+  place: string;
+  activity: string;
+  withId: number | null;
+  mood: string[];
+  friends: Array<{ id: number; name: string; status: string; affinity: number }>;
+  recent: string[];
 }
 
 // A hire request (#99): a drafted villager, the Mayor's interview, and what

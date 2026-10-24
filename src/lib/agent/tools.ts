@@ -11,6 +11,7 @@ import { db, sqlite } from "@/db";
 import { DB_PATH } from "@/db/path";
 import { agents, journalEntries, jobs, goals, notifications, conversations, messages } from "@/db/schema";
 import { VILLAGE_TOOLS } from "./villageTools";
+import { LIFE_TOOLS, LIFE_TOOL_NAMES } from "./lifeTools";
 import { IS_WINDOWS, SHELL, SHELL_NAME, notOnThisSystem, toolWorksHere } from "./host";
 import { eq, asc, desc, and, or, isNull, ne, sql as dsql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -402,6 +403,11 @@ const CORE_TOOL_DEFINITIONS = [
 // The core tools, then the village's (villageTools.ts).
 export const ALL_TOOL_DEFINITIONS = [...CORE_TOOL_DEFINITIONS, ...Object.values(VILLAGE_TOOLS).map((t) => t.definition)];
 
+// A life turn's tools (#133): village life and the diary, nothing else.
+export function lifeToolDefinitions() {
+  return [...Object.values(LIFE_TOOLS).map((t) => t.definition), ...CORE_TOOL_DEFINITIONS.filter((t) => LIFE_TOOL_NAMES.includes(t.function.name))];
+}
+
 // Linux-only tools (apt, systemctl, scrot) are left out on other systems.
 export function getEnabledToolDefinitions(enabledTools: string[]) {
   return ALL_TOOL_DEFINITIONS.filter((t) => enabledTools.includes(t.function.name) && toolWorksHere(t.function.name));
@@ -419,7 +425,7 @@ export function evaluateToolRisk(
   const extraProtected = (settings.extraProtectedPaths as string[]) || [];
   const overrides = buildOverrides(settings);
   // The village's own tools carry their risk with them (villageTools.ts).
-  const village = VILLAGE_TOOLS[tool];
+  const village = VILLAGE_TOOLS[tool] ?? LIFE_TOOLS[tool];
   if (village) return village.risk;
   switch (tool) {
     case "run_shell_command":
@@ -533,7 +539,7 @@ export async function executeTool(
   ensureWorkspace(path.join(settings.workspaceDir, "screenshots"));
   ensureWorkspace(path.join(settings.workspaceDir, "notes"));
 
-  const village = VILLAGE_TOOLS[tool];
+  const village = VILLAGE_TOOLS[tool] ?? LIFE_TOOLS[tool];
   if (village) return village.run(args, ctx);
   switch (tool) {
     case "run_shell_command":

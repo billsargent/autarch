@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { AgentRow, SettingsRow } from "@/lib/agent/clientTypes";
 import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 import { CHARACTER_GROUPS, CHARACTER_KEYS, CHARACTER_LABELS, VILLAGER_COLORS } from "@/lib/agent/villagerLooks";
+import { TRADES, TRADE_KEYS, guessTrade } from "@/lib/agent/trades";
 import { tierAllows, type Tier } from "@/lib/agent/mayorTools";
 import { useVillagers, type VillagerInput } from "../../data/useVillagers";
 import { useProviders } from "./ProvidersPage";
@@ -126,7 +127,7 @@ export default function VillagersPage({ settings, tools }: { settings: SettingsR
                     title="A few minutes every four hours, on their own budget, to explore and pin an idea for the village"
                     className={`village-btn px-2 py-1 text-[11px] ${v.daydream ? "village-btn-go" : ""}`}
                   >
-                    💭 Free time {v.daydream ? "on" : "off"}
+                    🌻 Village life {v.daydream ? "on" : "off"}
                   </button>
                   {!v.isMayor && (
                     <button onClick={() => setLeaving(v)} className="village-btn village-btn-danger px-2 py-1 text-[11px]">
@@ -180,6 +181,10 @@ function VillagerEditor({
   const managers = villagers.filter((v) => v.id !== villager?.id && (v.isMayor || v.tier === "director"));
   const [name, setName] = useState(villager?.name ?? "");
   const [role, setRole] = useState(villager?.role ?? "Villager");
+  // Their village trade (#131): empty = guessed from the role.
+  const [trade, setTrade] = useState<string>(villager?.trade ?? "");
+  const [split, setSplit] = useState<string>(villager?.lifeBalance ?? "");
+  const [share, setShare] = useState(villager?.workShare != null ? String(villager.workShare) : "");
   // Starts with the default personality written out, ready to edit.
   const [persona, setPersona] = useState(villager?.persona ?? DEFAULT_PERSONA);
   const [character, setCharacter] = useState(villager?.character ?? CHARACTER_KEYS.find((c) => c !== "master") ?? "villager");
@@ -216,6 +221,9 @@ function VillagerEditor({
       ...(villager?.isMayor ? {} : { tier, area: area.trim() || null, managerId: tier === "worker" ? managerId : null }),
       dailyBudgetUsd: budget.trim() === "" ? null : Number(budget),
       maxActionsPerHour: perHour.trim() === "" ? null : Number(perHour),
+      trade: trade || null,
+      lifeBalance: (split || null) as "idle" | "hours" | "balanced" | null,
+      workShare: split === "balanced" && share.trim() !== "" ? Number(share) : null,
     });
     if (!res.ok) {
       const m = /^(\w+): (.*)$/.exec(res.error);
@@ -245,6 +253,38 @@ function VillagerEditor({
           <input name="role" value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. Librarian, Fisherman, Night watch" className={input} />
           {fieldError("role")}
         </label>
+      </div>
+      <div className="grid gap-3 rounded border-2 border-[#d8c49a] p-3 sm:grid-cols-3">
+        <label className="block text-xs font-semibold">
+          Trade in the village
+          <select name="trade" value={trade} onChange={(e) => setTrade(e.target.value)} className={input}>
+            <option value="">Guess from the role ({TRADES[guessTrade(role, villager?.isMayor)].label})</option>
+            {TRADE_KEYS.map((t) => (
+              <option key={t} value={t}>
+                {TRADES[t].icon} {TRADES[t].label}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block font-normal text-[11px] text-[#6b4a2e]">What they do with their days, besides helping you.</span>
+          {fieldError("trade")}
+        </label>
+        <label className="block text-xs font-semibold">
+          Work &amp; life
+          <select name="lifeBalance" value={split} onChange={(e) => setSplit(e.target.value)} className={input}>
+            <option value="">The town&apos;s setting</option>
+            <option value="idle">Village life when idle</option>
+            <option value="hours">Work hours, then village life</option>
+            <option value="balanced">Balanced</option>
+          </select>
+          {fieldError("lifeBalance")}
+        </label>
+        {split === "balanced" && (
+          <label className="block text-xs font-semibold">
+            Computer work (%)
+            <input name="workShare" type="number" min={0} max={100} value={share} onChange={(e) => setShare(e.target.value)} placeholder="The town's" className={input} />
+            {fieldError("workShare")}
+          </label>
+        )}
       </div>
       {!villager?.isMayor && (
         <div className="grid gap-3 rounded border-2 border-[#d8c49a] p-3 sm:grid-cols-3">

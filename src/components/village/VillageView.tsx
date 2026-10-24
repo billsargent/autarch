@@ -13,6 +13,8 @@ import { useBuildings } from "../data/useBuildings";
 import { useVillageSound } from "./useVillageSound";
 import WelcomeDialog from "./WelcomeDialog";
 import Animals, { type AnimalSpec } from "./Animals";
+import { TRADES, type TradeKey } from "@/lib/agent/trades";
+import type { VillagerLife } from "@/lib/agent/clientTypes";
 import { BUBBLE_MS, MOOD_BADGE, MOOD_PLACE, bubbleLine, moodLabel, nextHangout, standOffsets, villagerMood } from "./villagerState";
 import { snapshotOf, useVillageData } from "./useVillageData";
 import SceneView, { type VillagerSpec } from "./SceneView";
@@ -176,11 +178,12 @@ export default function VillageView() {
   const plans = villagers.map((v) => {
     const mood = villagerMood(snapshotOf(v, data.paused, night));
     const home = scene.places.find((p) => p.id === MOOD_PLACE[mood]) ?? scene.places[0];
-    // A keeper with nothing else on is at their farm or bakery (#106).
-    const keeps = mood === "idle" ? scene.plots.find((p) => p.id === buildings.state?.keepers[v.id]) : undefined;
-    const stroll = mood === "idle" && !keeps ? strolls[v.id] : null;
-    const target = keeps?.door ?? stroll ?? home.door;
-    return { v, mood, target, strolling: mood === "idle" && !keeps && target !== home.door };
+    // With nothing else on, a villager is wherever their village life has
+    // them (#132): at work, the tavern, the plaza, a friend's, or home.
+    const living = mood === "idle" && v.life ? lifeSpot(v.life, scene, buildings.state) : null;
+    const stroll = mood === "idle" && !v.life ? strolls[v.id] : null;
+    const target = living ?? stroll ?? home.door;
+    return { v, mood, target, strolling: mood === "idle" && !v.life && target !== home.door };
   });
   // A villager asking a neighbour something walks over to them (#57).
   for (const p of plans) {
@@ -208,7 +211,9 @@ export default function VillageView() {
           ? bubbleLine(v.lastSaid)
           : mood !== "asleep" && clock - Date.parse(v.createdAt) < NEWCOMER_MS
             ? `👋 Hello! I'm ${v.name}, new in town.`
-            : null,
+            : mood === "idle" && v.life && v.life.place !== "home"
+              ? `${PLACE_ICON[v.life.place] ?? v.life.icon} ${v.life.activity}`
+              : null,
     asleep: mood === "asleep",
     hint:
       v.id === talkKeyTarget ? (
@@ -330,6 +335,29 @@ export default function VillageView() {
 
 // What stands on the village's plots (#105): finished buildings (click one to
 // open it), and scaffolding where one is going up.
+// Where a villager's life has them (#132), as a waypoint of the scene.
+const PLACE_ICON: Record<string, string> = { tavern: "🍺", plaza: "🚶", visit: "🫖" };
+function lifeSpot(life: VillagerLife, scene: SceneManifest, state: ReturnType<typeof useBuildings>["state"]): string | null {
+  const has = (w: string) => scene.waypoints.some((p) => p.id === w);
+  const doorOf = (kind: string | null) => {
+    const b = kind ? state?.buildings.find((x) => x.kind === kind && x.status === "built") : undefined;
+    return b ? scene.plots.find((p) => p.id === b.plotId)?.door : undefined;
+  };
+  const trade = TRADES[life.trade as TradeKey];
+  switch (life.place) {
+    case "work":
+      return doorOf(trade?.building ?? null) ?? (trade && has(trade.spot) ? trade.spot : null);
+    case "tavern":
+      return doorOf("tavern") ?? (has("tr") ? "tr" : null);
+    case "plaza":
+      return has("c") ? "c" : null;
+    case "visit":
+      return has("cot") ? "cot" : null;
+    default:
+      return null;
+  }
+}
+
 // Who lives where (#138): chickens and a cow on every farm, a cat by the
 // bakery (or the cottages), a dog by your door, and a horse by the west road.
 function villageAnimals(scene: SceneManifest, state: ReturnType<typeof useBuildings>["state"]): AnimalSpec[] {

@@ -373,6 +373,50 @@ if (!globalForDb.__agentLabSqlite) {
     shortage INTEGER NOT NULL DEFAULT 0,
     last_tick_day TEXT
   )`);
+  // Village life (#129): each villager's trade and their day, the friendships
+  // between them, and the chronicle of what happened.
+  if (!existingCols("agents").includes("trade")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN trade TEXT");
+  }
+  for (const col of ["fish", "flowers", "crafts", "ale", "treasury", "reputation"]) {
+    if (!existingCols("economy").includes(col)) sqlite.exec(`ALTER TABLE economy ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!existingCols("economy").includes("last_life_tick")) {
+    sqlite.exec("ALTER TABLE economy ADD COLUMN last_life_tick INTEGER");
+  }
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS villager_life (
+    agent_id INTEGER PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
+    xp INTEGER NOT NULL DEFAULT 0,
+    energy INTEGER NOT NULL DEFAULT 80,
+    fullness INTEGER NOT NULL DEFAULT 80,
+    company INTEGER NOT NULL DEFAULT 60,
+    coins INTEGER NOT NULL DEFAULT 20,
+    place TEXT NOT NULL DEFAULT 'home',
+    activity TEXT NOT NULL DEFAULT 'resting',
+    with_id INTEGER,
+    romance_open INTEGER NOT NULL DEFAULT 1,
+    decor TEXT NOT NULL DEFAULT '[]',
+    last_life_day TEXT,
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS relationships (
+    a_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    b_id INTEGER NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    affinity INTEGER NOT NULL DEFAULT 0,
+    romance INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'acquaintance',
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    PRIMARY KEY (a_id, b_id)
+  )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS life_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    agent_id INTEGER REFERENCES agents(id) ON DELETE CASCADE,
+    other_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    text TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  sqlite.exec("CREATE INDEX IF NOT EXISTS idx_life_events_agent ON life_events(agent_id, id)");
   sqlite.exec(`CREATE TABLE IF NOT EXISTS buildings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL,
@@ -454,6 +498,22 @@ if (!globalForDb.__agentLabSqlite) {
   }
   if (!existingCols("agent_settings").includes("offered_tools")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN offered_tools TEXT");
+  }
+  // How the day splits between computer work and village life (#130).
+  for (const [col, def] of [
+    ["life_balance", "TEXT NOT NULL DEFAULT 'idle'"],
+    ["work_start", "TEXT NOT NULL DEFAULT '09:00'"],
+    ["work_end", "TEXT NOT NULL DEFAULT '15:00'"],
+    ["work_share", "INTEGER NOT NULL DEFAULT 60"],
+    ["life_budget_usd", "REAL NOT NULL DEFAULT 0.02"],
+  ] as const) {
+    if (!existingCols("agent_settings").includes(col)) sqlite.exec(`ALTER TABLE agent_settings ADD COLUMN ${col} ${def}`);
+  }
+  for (const [col, def] of [
+    ["life_balance", "TEXT"],
+    ["work_share", "INTEGER"],
+  ] as const) {
+    if (!existingCols("agents").includes(col)) sqlite.exec(`ALTER TABLE agents ADD COLUMN ${col} ${def}`);
   }
   if (!existingCols("agent_settings").includes("bedtime")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN bedtime TEXT NOT NULL DEFAULT '22:00'");

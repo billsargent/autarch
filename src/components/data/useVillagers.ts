@@ -8,7 +8,7 @@ import type { AgentRow } from "@/lib/agent/clientTypes";
 // and the Mayor's ledger.
 
 export type VillagerInput = Partial<
-  Pick<AgentRow, "name" | "role" | "persona" | "character" | "color" | "model" | "enabledTools" | "dailyBudgetUsd" | "maxActionsPerHour" | "status" | "tier" | "area" | "managerId" | "daydream" | "providerId">
+  Pick<AgentRow, "name" | "role" | "persona" | "character" | "color" | "model" | "enabledTools" | "dailyBudgetUsd" | "maxActionsPerHour" | "status" | "tier" | "area" | "managerId" | "daydream" | "providerId" | "trade" | "lifeBalance" | "workShare">
 >;
 
 export type VillagerResult = { ok: true; agent?: AgentRow } | { ok: false; error: string };
