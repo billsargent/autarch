@@ -354,6 +354,20 @@ export function classifyShellCommand(command: string, overrides?: SuperviseOverr
     return { risk: "blocked", reason: "Commands that connect to the dashboard on this machine are blocked." };
   }
 
+  // `powershell -Command "…"` and `cmd /c …` are judged by the command inside
+  // them, so a wrapped Get-ChildItem is as low as a bare one and a wrapped
+  // Stop-Process as critical. A command that can't be read can't be judged.
+  if (/^\s*(powershell|pwsh)(\.exe)?\b[^|;&]*\s-(e|ec|enc|encodedcommand)\s/i.test(cmd)) {
+    return { risk: "critical", reason: "An encoded PowerShell command hides what it runs; it needs human approval." };
+  }
+  const wrapped =
+    /^\s*(?:powershell|pwsh)(?:\.exe)?(?:\s+-(?!c\b|command\b)\w+(?:\s+(?!-)[\w.]+)?)*\s+-(?:c|command)\s+([\s\S]+)$/i.exec(cmd) ??
+    /^\s*cmd(?:\.exe)?\s+\/[ck]\s+([\s\S]+)$/i.exec(cmd);
+  if (wrapped) {
+    const inner = wrapped[1].trim().replace(/^(["'])([\s\S]*)\1$/, "$2");
+    if (inner && inner !== cmd) return classifyShellCommand(inner, overrides);
+  }
+
   for (const rule of BLOCKED_RULES) {
     if (rule.test.test(cmd)) {
       return liftBlock({ risk: rule.risk, reason: rule.reason }, anyOverride(overrides, ["allowDestructiveShell"]));

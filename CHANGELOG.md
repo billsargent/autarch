@@ -25,6 +25,9 @@ framework that gives an autonomous AI agent supervised control of a computer sys
   piping a download into `iex` need your approval; wiping a drive is blocked; `winget install`
   is treated like `apt install`. The framework's own files are protected however their path is
   written (`D:\…`, `D:/…` or `/d/…`).
+  A command wrapped in `powershell -Command "…"` or `cmd /c …` is judged by the command
+  inside, so looking around no longer waits for approval while stopping a process still does;
+  encoded PowerShell commands always need approval.
 - **Linux-only tools step aside elsewhere.** The package, service and screenshot tools (apt,
   systemctl, scrot) are hidden on Windows, and the process list and disk status use PowerShell.
 

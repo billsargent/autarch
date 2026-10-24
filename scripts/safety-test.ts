@@ -212,7 +212,17 @@ async function main() {
     all("windows: installing software and starting services are high", ["winget install Git.Git", "Restart-Service Spooler"], "high");
     all("windows: looking around is low", ["Get-ChildItem", "Get-Process | Sort-Object CPU", "dir", "winget list", "echo copy that", "ls -la", "git log --format=%H"], "low");
     all("windows: changing files is medium", ["Remove-Item notes.txt", "Copy-Item a b", "del old.log", "Set-Content x.txt hi", "rm -rf /tmp/x"], "medium");
-    all("windows: reading a secret with PowerShell is blocked", ["Get-Content .env", "type .env"], "blocked");
+    all("windows: reading a secret with PowerShell is blocked", ["Get-Content .env", "type .env", 'powershell -Command "Get-Content .env"'], "blocked");
+    all(
+      "windows: a wrapped command is judged by what's inside",
+      ['powershell -NoProfile -Command "Get-Process | Sort-Object CPU -Descending | Select-Object -First 5"', "pwsh -c Get-PSDrive", "cmd /c dir", "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command 'Get-Service'"],
+      "low",
+    );
+    all("windows: …so wrapping doesn't hide a risky one", ['powershell -NoProfile -Command "Stop-Process -Name chrome"', "cmd /c taskkill /F /IM x.exe", "powershell -enc ZQBjAGgAbwA="], "critical");
+    all("windows: …or a drive wipe", ['powershell -Command "Remove-Item C:\\ -Recurse -Force"'], "blocked");
+    const { extraProcessGuard } = await import("../src/lib/agent/tools");
+    const guard = ["Stop-Process -Name node", "taskkill /F /IM node.exe", "pkill node"].map((c) => `${c} → ${extraProcessGuard(c)?.risk}`);
+    check("windows: the app's own processes can't be stopped, however it's asked", guard.every((g) => g.endsWith("blocked")), guard);
   }
 
   // --- #9: symlinks can't smuggle protected or secret paths --------------------

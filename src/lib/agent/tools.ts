@@ -495,7 +495,7 @@ export function evaluateToolRisk(
 // Extra check specifically for process-signal style shell commands run through
 // run_shell_command (kill/pkill/killall) so we can protect our own PID.
 export function extraProcessGuard(command: string, overrides?: SuperviseOverrides): RiskResult | null {
-  if (/\b(kill|pkill|killall)\b/i.test(command)) {
+  if (/\b(kill|pkill|killall|Stop-Process|spps|taskkill)\b/i.test(command)) {
     return classifyProcessTarget(command, overrides);
   }
   return null;
