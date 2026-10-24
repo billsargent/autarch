@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { SettingsRow } from "@/lib/agent/clientTypes";
 import {
   AUTONOMY_INFO,
@@ -13,6 +13,7 @@ import {
 import { jobSchedule, useJobs } from "../../data/useJobs";
 import VillagersPage from "./VillagersPage";
 import ProvidersPage from "./ProvidersPage";
+import EmailPage from "./EmailPage";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
 import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 
@@ -28,6 +29,7 @@ const PAGES = [
   { id: "overrides", label: "Overrides" },
   { id: "identity", label: "Identity & model" },
   { id: "providers", label: "Providers" },
+  { id: "email", label: "Email" },
   { id: "prompts", label: "Prompts" },
   { id: "autonomy", label: "Autonomy" },
   { id: "limits", label: "Limits" },
@@ -234,42 +236,14 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
 
     case "providers":
       return <ProvidersPage />;
+    case "email":
+      return <EmailPage />;
 
     case "identity":
       return <IdentityPage s={s} settings={settings} />;
 
     case "prompts":
-      return (
-        <Section title="Prompts" intro="What the model is told. Leave a box empty to use the built-in default. {name} becomes the agent's name, {workspace} its folder.">
-          {(
-            [
-              ["staticCorePrompt", "Core (identity, environment, guardrails, behavior, formatting, cost)", 8],
-              ["workWindowPrompt", "Work window (scheduled jobs)", 5],
-              ["focusedChatPrompt", "Focused chat", 4],
-              ["truncationMessage", "When the step limit is reached", 3],
-            ] as const
-          ).map(([field, label, rows]) => (
-            <label key={field} className="block text-xs font-semibold">
-              {label}
-              <textarea
-                name={field}
-                key={`${field}:${settings[field] ?? ""}`}
-                defaultValue={settings[field] ?? ""}
-                onBlur={(e) => {
-                  if ((e.target.value || null) !== settings[field]) save({ [field]: e.target.value || null });
-                }}
-                rows={rows}
-                placeholder="(the built-in default)"
-                className={`${input} resize-y font-mono text-[11px]`}
-              />
-              <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">
-                {settings[field] ? `${settings[field]!.length.toLocaleString()} characters` : "Using the default"}
-              </span>
-              <FieldError msg={err(field)} />
-            </label>
-          ))}
-        </Section>
-      );
+      return <PromptsPage settings={settings} save={save} err={err} />;
 
     case "autonomy":
       return (
@@ -637,6 +611,78 @@ function PathsPage({ s, settings }: { s: Settings; settings: SettingsRow }) {
 }
 
 // --- small pieces -------------------------------------------------------------------
+
+type PromptField = "staticCorePrompt" | "workWindowPrompt" | "focusedChatPrompt" | "truncationMessage";
+const PROMPT_FIELDS: Array<[PromptField, string, number]> = [
+  ["staticCorePrompt", "Core (identity, environment, guardrails, behavior, formatting, cost)", 14],
+  ["workWindowPrompt", "Work window (scheduled jobs)", 6],
+  ["focusedChatPrompt", "Focused chat", 4],
+  ["truncationMessage", "When the step limit is reached", 4],
+];
+
+// Each box shows the built-in prompt (greyed) until the owner writes their own;
+// "Start from the built-in" copies it in to edit.
+function PromptsPage({ settings, save, err }: { settings: SettingsRow; save: (p: SettingsPatch) => void; err: (f: keyof SettingsRow) => string | undefined }) {
+  const [defaults, setDefaults] = useState<Record<PromptField, string> | null>(null);
+  const [seeded, setSeeded] = useState<Partial<Record<PromptField, string>>>({});
+  useEffect(() => {
+    let live = true;
+    fetch("/api/settings/prompt-defaults", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => live && setDefaults(d))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [settings.autonomyMode, settings.maxSessionMinutes, settings.maxAgentSteps]);
+  return (
+    <Section
+      title="Prompts"
+      intro="What the villagers are told. An empty box uses the built-in prompt, shown greyed out. In your own, {name} becomes the villager's name, {role} their job (the village's mayor), {persona} their personality and {workspace} their folder."
+    >
+      {PROMPT_FIELDS.map(([field, label, rows]) => {
+        const own = settings[field];
+        const seed = seeded[field];
+        return (
+          <label key={field} className="block text-xs font-semibold">
+            {label}
+            <textarea
+              name={field}
+              key={`${field}:${own ?? ""}:${seed ?? ""}`}
+              defaultValue={own ?? seed ?? ""}
+              onBlur={(e) => {
+                const v = e.target.value.trim() ? e.target.value : null;
+                if (v !== own && !(seed && v === seed)) save({ [field]: v });
+              }}
+              rows={rows}
+              placeholder={defaults?.[field] ?? "Loading the built-in prompt…"}
+              className={`${input} resize-y font-mono text-[11px] placeholder:text-[#9a8466]`}
+            />
+            <span className="mt-0.5 flex flex-wrap items-center gap-2 font-normal text-[11px] text-[#6b4a2e]">
+              {own ? `Your own: ${own.length.toLocaleString()} characters` : seed ? "Edit, then click away to save it as your own." : "Using the built-in prompt (shown above)."}
+              {!own && !seed && defaults && (
+                <button type="button" onClick={() => setSeeded((s) => ({ ...s, [field]: defaults[field] }))} className="underline">
+                  Start from the built-in
+                </button>
+              )}
+              {own && (
+                <button type="button" onClick={() => save({ [field]: null })} className="underline">
+                  Go back to the built-in
+                </button>
+              )}
+            </span>
+            {field === "staticCorePrompt" && !own && (
+              <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">
+                The built-in core follows your settings (autonomy, overrides, this computer); a copy you save stays as you wrote it.
+              </span>
+            )}
+            <FieldError msg={err(field)} />
+          </label>
+        );
+      })}
+    </Section>
+  );
+}
 
 function Section({ title, intro, children }: { title: string; intro?: string; children: ReactNode }) {
   return (

@@ -347,6 +347,25 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     decided_at INTEGER
   )`);
+  // The owner's mail accounts (#124): one row. Passwords are secrets, never
+  // returned by any API or readable by any tool.
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS mail_settings (
+    id INTEGER PRIMARY KEY,
+    smtp_host TEXT,
+    smtp_port INTEGER NOT NULL DEFAULT 587,
+    smtp_security TEXT NOT NULL DEFAULT 'starttls',
+    smtp_user TEXT,
+    smtp_password TEXT,
+    from_address TEXT,
+    imap_host TEXT,
+    imap_port INTEGER NOT NULL DEFAULT 993,
+    imap_security TEXT NOT NULL DEFAULT 'tls',
+    imap_user TEXT,
+    imap_password TEXT,
+    imap_mailbox TEXT NOT NULL DEFAULT 'INBOX',
+    readers TEXT NOT NULL DEFAULT '[]',
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
   sqlite.exec(`CREATE TABLE IF NOT EXISTS economy (
     id INTEGER PRIMARY KEY,
     wheat INTEGER NOT NULL DEFAULT 0,

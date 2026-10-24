@@ -41,6 +41,8 @@ call risk-checked, and anything risky waiting for your approval.
   for more villagers; a tavern, a shop and a garden lift everyone's morale. When every plot is
   taken, the village can clear the next ring of land (four rings in all, each laid out ahead of
   time).
+- **Email.** Connect your own mail account (SMTP and IMAP) in the Mayor's ledger. Villagers
+  write email drafts; an email draft you approve is sent. Villagers you pick can read your inbox.
 - **Away mode.** When you're away, the Mayor reviews routine requests within limits you set;
   anything risky still waits for you.
 - **Spending guard rails.** A daily budget for the whole village and for each villager, with a
@@ -142,6 +144,7 @@ tools each villager has is set in the Mayor's ledger, within the town's tool pol
 | `manage_goal` / `list_goals` | Their goals board and notes | low |
 | `message_owner` | A letter to you (in your mailbox) | low |
 | `ask_villager` | Ask a neighbour something | low |
+| `read_email` | Read your inbox, read-only (only villagers you pick, Mayor's ledger → Email) | low |
 | `propose_idea` / `save_draft` / `note_about` | Pin an idea for a vote / draft outward work for you to send / a note about a neighbour | low |
 | `query_database` | Read-only SELECT against the app's own SQLite database | medium |
 | `take_screenshot` | Captures the display (Linux, needs `scrot` or ImageMagick) | low |

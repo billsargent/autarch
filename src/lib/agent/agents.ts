@@ -2,6 +2,7 @@ import { db, sqlite } from "@/db";
 import { agents, jobs } from "@/db/schema";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
+import { mailReaders } from "./mailAccess";
 import { CHARACTER_KEYS, isCharacterKey, VILLAGER_COLORS } from "./villagerLooks";
 import { ABANDONED_AFTER_MS } from "./turnLock";
 import { tierAllows } from "./mayorTools";
@@ -65,7 +66,9 @@ export function effectiveTools(agent: AgentRow, settings: AgentSettingsRow): str
   const tier = agent.isMayor ? "mayor" : agent.tier === "mayor" ? "director" : agent.tier;
   const town = ((settings.enabledTools as string[]) || []).filter((t) => tierAllows(tier, t));
   const own = agent.enabledTools as string[] | null;
-  return own ? town.filter((t) => own.includes(t)) : town;
+  const tools = (own ? town.filter((t) => own.includes(t)) : town).filter((t) => t !== "read_email");
+  // The owner's inbox goes only to the villagers they picked (#124).
+  return mailReaders().includes(agent.id) ? [...tools, "read_email"] : tools;
 }
 
 export function agentModel(agent: AgentRow, settings: AgentSettingsRow): string {

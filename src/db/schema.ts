@@ -293,6 +293,27 @@ export const drafts = sqliteTable("drafts", {
   decidedAt: integer("decided_at", { mode: "timestamp" }),
 });
 
+// The owner's mail accounts (#124): one row (id 1). Passwords are write-only.
+export const mailSettings = sqliteTable("mail_settings", {
+  id: integer("id").primaryKey(),
+  smtpHost: text("smtp_host"),
+  smtpPort: integer("smtp_port").notNull().default(587),
+  // "tls" (implicit, usually 465), "starttls" (usually 587) or "none".
+  smtpSecurity: text("smtp_security", { enum: ["tls", "starttls", "none"] }).notNull().default("starttls"),
+  smtpUser: text("smtp_user"),
+  smtpPassword: text("smtp_password"),
+  fromAddress: text("from_address"),
+  imapHost: text("imap_host"),
+  imapPort: integer("imap_port").notNull().default(993),
+  imapSecurity: text("imap_security", { enum: ["tls", "starttls", "none"] }).notNull().default("tls"),
+  imapUser: text("imap_user"),
+  imapPassword: text("imap_password"),
+  imapMailbox: text("imap_mailbox").notNull().default("INBOX"),
+  // The villagers the owner lets read the inbox (read_email), by id.
+  readers: text("readers", { mode: "json" }).notNull().default(sql`'[]'`),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+});
+
 // The village's stores (#106): one row, updated once a day.
 export const economy = sqliteTable("economy", {
   id: integer("id").primaryKey(),

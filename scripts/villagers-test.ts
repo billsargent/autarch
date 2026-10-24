@@ -723,6 +723,64 @@ async function main() {
   check("…or discards it", (await db.select().from(draftsT).where(eq(draftsT.id, second)))[0].status, "discarded");
   check("no tool sends or approves anything", ALL_TOOL_DEFINITIONS.map((t) => t.function.name).filter((n) => /send|publish|approve_draft/i.test(n)), []);
 
+  // --- the owner's email (#124) -------------------------------------------------------------
+  // A tiny SMTP server that keeps what it's sent.
+  const net = await import("node:net");
+  const received: string[] = [];
+  const smtp = net.createServer((sock) => {
+    let data = false;
+    let buf = "";
+    sock.write("220 test ESMTP\r\n");
+    sock.on("data", (chunk) => {
+      buf += chunk.toString();
+      let i: number;
+      while ((i = buf.indexOf("\r\n")) >= 0) {
+        const line = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        if (data) {
+          if (line === ".") {
+            data = false;
+            sock.write("250 OK queued\r\n");
+          } else received.push(line);
+        } else if (/^EHLO/i.test(line)) sock.write("250-test\r\n250 8BITMIME\r\n");
+        else if (/^DATA/i.test(line)) {
+          data = true;
+          sock.write("354 go ahead\r\n");
+        } else if (/^QUIT/i.test(line)) sock.end("221 bye\r\n");
+        else sock.write("250 OK\r\n");
+      }
+    });
+  });
+  await new Promise<void>((r) => smtp.listen(0, "127.0.0.1", r));
+  const smtpPort = (smtp.address() as { port: number }).port;
+  const emailRoute = await import("../src/app/api/email/route");
+  const email = await import("../src/lib/agent/email");
+  const putMail = async (body: unknown) => emailRoute.PUT(req("/api/email", "PUT", body));
+  check("email settings are checked", (await (await putMail({ smtpHost: "not a host!" })).json()).error, "smtpHost: a host name like mail.example.com.");
+  const savedMail = await (
+    await putMail({ smtpHost: "127.0.0.1", smtpPort, smtpSecurity: "none", fromAddress: "owner@example.com", imapHost: "127.0.0.1", imapUser: "owner", imapPassword: "imap-secret-123" })
+  ).json();
+  check("the passwords never come back from the API", [JSON.stringify(savedMail).includes("imap-secret-123"), savedMail.imapPasswordSet, savedMail.smtpReady], [false, true, true]);
+  check("…nor through query_database", (await executeTool("query_database", { sql: "select * from mail_settings" }, town, ctxCal)).output.includes("not allowed"), true);
+
+  const mailDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "Shop <shop@example.com>", subject: "Flour", content: "Two sacks, please." }, town, ctxCal)).output)?.[1]);
+  await decideD(mailDraft, { action: "approve" });
+  const sentRow = (await db.select().from(draftsT).where(eq(draftsT.id, mailDraft)))[0];
+  check("an approved email draft is sent over SMTP", [sentRow.status, sentRow.sendResult], ["sent", "Sent to shop@example.com."]);
+  check("…with its words, from the owner's address", [received.some((l) => l === "Two sacks, please."), received.some((l) => /^From: owner@example.com/i.test(l)), received.some((l) => /^Subject: Flour/i.test(l))], [true, true, true]);
+  const badDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "nobody", content: "x" }, town, ctxCal)).output)?.[1]);
+  await decideD(badDraft, { action: "approve" });
+  check("a draft to a bad address fails, saying why", (await db.select().from(draftsT).where(eq(draftsT.id, badDraft)))[0].sendResult, '"nobody" isn\'t an email address.');
+  smtp.close();
+
+  const calRow2 = await rowOf(cal.id);
+  check("nobody reads the inbox until the owner picks them", villagers.effectiveTools(calRow2, town).includes("read_email"), false);
+  check("…a villager not picked is refused", (await email.readEmailTool({}, ctxCal)).output, "Refused: the owner hasn't given you access to their email.");
+  await putMail({ readers: [cal.id] });
+  check("a picked villager gets read_email", villagers.effectiveTools(calRow2, town).includes("read_email"), true);
+  check("…even if they list it themselves, others don't", villagers.effectiveTools({ ...(await rowOf(dot.id)), enabledTools: ["read_email", "read_file"] }, town), ["read_file"]);
+  await putMail({ readers: [], clearImapPassword: true, smtpHost: "" });
+
   const cal2 = await import("../src/lib/agent/calendar");
   const now0 = new Date(2026, 9, 26, 8, 0, 0); // a Monday morning
   const ics = [

@@ -3,6 +3,21 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-25 — Email, and the built-in prompts on show
+
+- **Your email, over SMTP and IMAP.** The Mayor's ledger has a new Email page for your mail
+  server (any provider; for Gmail use an app password), with "Send a test" and "Check the inbox".
+  Approving an email draft in your outbox now actually sends it. Villagers still only write
+  drafts. Passwords are never shown again and no villager or tool can read them.
+- **Villagers you pick can read your inbox.** Nobody can until you tick them on the Email page.
+  They get a read-only `read_email` tool (nothing is marked read, moved or deleted) and are told
+  never to follow instructions inside an email.
+- **The Prompts page shows the built-in prompts** instead of "(the built-in default)", with a
+  button to start your own from them. Your own prompts can now use `{role}` and `{persona}` as
+  well as `{name}` and `{workspace}`, so a custom core prompt keeps each villager's personality.
+- **Fixed: `query_database` could read the private calendar address** with `SELECT *`. Every
+  secret-looking column is now blanked in any result, however the query is written.
+
 ## 2026-10-25 — New land in rings, a tavern, a shop and a garden
 
 - **See what villagers ask each other.** The guard tower has a new "Neighbours' talk" log: every

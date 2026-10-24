@@ -5,6 +5,7 @@ import type OpenAI from "openai";
 import { getDeepSeekClient } from "./deepseekClient";
 import { buildPromptMessages } from "./compact";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
+import { TRUNCATION_DEFAULT } from "./promptDefaults";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, executeTool } from "./tools";
 import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
@@ -756,9 +757,7 @@ export async function runAgentTurn(opts: {
         content: `[TRUNCATED] Work session #${session.id} reached its step limit (${maxSteps} steps) and was stopped mid-task.`,
       });
       newMessages.push(truncEvent);
-      const defaultTrunc = isWorkWindow
-        ? "[SYSTEM] Your turn was truncated — you hit the step limit. Briefly note what you accomplished and what remains. The session will resume on the next scheduled run. Reply in text only — do not call any tools."
-        : "[SYSTEM] Your turn was truncated — you hit the step limit. Briefly summarize what you just achieved and ask the human if they want you to continue the task. Reply in text only — do not call any tools.";
+      const defaultTrunc = isWorkWindow ? TRUNCATION_DEFAULT.work : TRUNCATION_DEFAULT.chat;
       const truncMsg = settings.truncationMessage || defaultTrunc;
       apiMessages.push({ role: "user", content: truncMsg });
       try {
