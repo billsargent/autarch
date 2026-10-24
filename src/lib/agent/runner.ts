@@ -184,7 +184,7 @@ async function loadHistory(conversationId: number) {
   return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.id));
 }
 
-export type SessionTrigger = "chat" | "approval" | "scheduled" | "report" | "message";
+export type SessionTrigger = "chat" | "approval" | "scheduled" | "report" | "message" | "interview";
 
 // Progress events emitted (optionally) during a turn so the UI can stream a
 // live view of the agent's activity instead of only getting a final payload.
@@ -391,9 +391,11 @@ export async function runAgentTurn(opts: {
     // the single explicit control. Scheduled, approval, and self-directed turns
     // always keep tools.
     const isDirectChat = Boolean(opts.userMessage) && !opts.jobId && !opts.trigger;
+    // A hiring interview (#99) is talk only: one model call, no tools.
+    const talkOnly = trigger === "interview";
     const { toolsAvailable, toolsForbidden } = resolveToolAccess({
-      isDirectChat,
-      chatMode: conversation.chatMode,
+      isDirectChat: isDirectChat || talkOnly,
+      chatMode: talkOnly ? "conversation" : conversation.chatMode,
       toolCount: tools.length,
     });
     const systemPrompt = await buildSystemPrompt(settings, {

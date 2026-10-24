@@ -93,6 +93,8 @@ export async function PUT(req: Request) {
     "townDailyBudgetUsd",
     "bedtime",
     "wakeTime",
+    "hiringMode",
+    "maxPopulation",
   ];
   const patch: Record<string, unknown> = {};
   for (const key of allowedKeys) {

@@ -273,6 +273,31 @@ if (!globalForDb.__agentLabSqlite) {
   if (!existingCols("agents").includes("paused_by")) {
     sqlite.exec("ALTER TABLE agents ADD COLUMN paused_by TEXT");
   }
+  // Ranks and hiring (#99).
+  if (!existingCols("agents").includes("tier")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN tier TEXT NOT NULL DEFAULT 'director'");
+    sqlite.exec("ALTER TABLE agents ADD COLUMN area TEXT");
+    sqlite.exec("ALTER TABLE agents ADD COLUMN manager_id INTEGER");
+  }
+  sqlite.exec("UPDATE agents SET tier = 'mayor' WHERE is_mayor = 1 AND tier <> 'mayor'");
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS hire_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proposed_by INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    draft TEXT NOT NULL,
+    reason TEXT,
+    status TEXT NOT NULL DEFAULT 'interviewing',
+    interview TEXT,
+    verdict TEXT,
+    conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+    agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    decided_by TEXT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    decided_at INTEGER
+  )`);
+  if (!existingCols("agent_settings").includes("hiring_mode")) {
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN hiring_mode TEXT NOT NULL DEFAULT 'ask'");
+    sqlite.exec("ALTER TABLE agent_settings ADD COLUMN max_population INTEGER NOT NULL DEFAULT 8");
+  }
   if (!existingCols("conversations").includes("partner_agent_id")) {
     sqlite.exec("ALTER TABLE conversations ADD COLUMN partner_agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL");
   }

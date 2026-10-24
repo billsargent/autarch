@@ -65,23 +65,39 @@ The Mayor **cannot** dismiss anyone. Dismissal is the owner's decision.
 
 ## 4. Hiring
 
-The Mayor (or the owner) drafts a **hire**:
+**Ranks.** Besides the Mayor, villagers are **directors** or **workers**:
 
-- name, persona and role;
-- model and provider;
-- tools, chosen from the town policy and never more;
-- a daily budget, which must fit the town budget;
-- a home and a character sprite.
+- a director runs an area (for example the inbox, the garden or money) and may draft hires;
+- a worker works for a director, wears a hi-vis vest in the village, and can't hire.
 
-**Hiring mode** is a setting (`hiringMode`):
+**Who drafts.** The Mayor or a director drafts a **hire**:
 
-- **`ask`** (default): the draft appears in the town hall as a **hire request**. The owner can
-  edit it, approve it, or turn it down. Nothing is created until approved.
-- **`auto`**: the Mayor may hire on its own, as long as the town stays under the **population
-  cap** and the **town daily budget**. The owner is notified of every hire and can dismiss the new
-  villager at any time.
+- name, personality, role and area;
+- rank: a director drafts workers; only the Mayor can take on a director;
+- tools: never more than the drafter has, never more than a worker may hold, and never more
+  than the town policy;
+- a daily budget, which must be no more than the drafter's own budget or the town's budget.
 
-In both modes a hire that would break a cap is refused.
+A drafter can have at most three hire requests waiting.
+
+**Interview.** The Mayor interviews every hire request first, in a short conversation with no tools.
+This counts against his own budget. He ends with a verdict: recommend or reject.
+
+**Hiring mode** is a setting (`hiringMode`) that only the owner can change:
+
+- **`ask`** (the default): the request waits at the clerk's desk in the town hall, with the interview.
+  The owner can edit the personality and budget, then approve or decline it. Nothing is created
+  until the owner approves.
+- **`auto`**: if the Mayor recommends someone, they're hired straight away, and the owner is told.
+  An unclear verdict still waits for the owner.
+
+**If the Mayor rejects someone,** the request is declined, but the owner can still hire them.
+
+**The population cap** (a setting for now; later the beds in built houses) is checked when a
+request is drafted and again when it's approved, whoever approves it. To go over it, the owner
+raises the cap first.
+
+**Dismissal** stays with the owner.
 
 ## 5. Ideas and voting
 

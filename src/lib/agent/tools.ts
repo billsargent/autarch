@@ -523,6 +523,29 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
+  // Hiring (#99): the Mayor and directors only.
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_hire",
+      description:
+        "Draft a new villager to help with your area, when there's more work than you can do. The Mayor interviews them, then the owner decides (or, if the owner allows it, the Mayor hires them). They can only have tools you have yourself, and a budget no bigger than yours. Workers report to you; only the Mayor can take on a director.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "Their name (not already used in the village)." },
+          role: { type: "string", description: "Their job, in a few words." },
+          persona: { type: "string", description: "Their personality, in a few sentences." },
+          area: { type: "string", description: "The area they work in. Default: yours." },
+          tier: { type: "string", enum: ["worker", "director"], description: "Default worker." },
+          tools: { type: "array", items: { type: "string" }, description: "Their tools. Default: yours, minus what a worker can't hold." },
+          dailyBudgetUsd: { type: "number", description: "What they may spend a day, in USD." },
+          reason: { type: "string", description: "Why the village needs them." },
+        },
+        required: ["name", "role", "persona", "dailyBudgetUsd", "reason"],
+      },
+    },
+  },
 ];
 
 export function getEnabledToolDefinitions(enabledTools: string[]) {
@@ -596,6 +619,8 @@ export function evaluateToolRisk(
       return { risk: "low", reason: "The Mayor pausing one villager; stopping work is always safe, and the owner is told." };
     case "schedule_job_for":
       return { risk: "medium", reason: "The Mayor creating a recurring work schedule for a villager." };
+    case "propose_hire":
+      return { risk: "low", reason: "Drafts a hire request; the Mayor interviews it and the caps and the owner decide." };
     case "resume_agent":
       return { risk: "medium", reason: "The Mayor letting a villager he paused work (and spend) again." };
     case "query_database":
@@ -717,6 +742,8 @@ export async function executeTool(
     case "pause_agent":
     case "resume_agent":
       return (await import("./mayor")).runMayorTool(tool, args, ctx);
+    case "propose_hire":
+      return (await import("./hiring")).proposeHire(args, ctx);
     case "query_database":
       return queryDatabase(args);
     case "download_file":

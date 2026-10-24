@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { ToolExecutionRow } from "@/lib/agent/clientTypes";
+import type { HireRequestRow, ToolExecutionRow } from "@/lib/agent/clientTypes";
+import { useHires } from "../../data/useHires";
 import { formatToolInput, useApprovals, type Decision } from "../../data/useApprovals";
 import ParchmentDialog from "../ParchmentDialog";
 import MayorsLedger from "./MayorsLedger";
@@ -14,7 +15,8 @@ import type { RoomProps } from "./types";
 // The town hall: the clerk's desk holds every action waiting on the owner,
 // and the records cabinet keeps recent decisions (same as the Approvals page,
 // useApprovals); the Mayor's ledger holds the settings (MayorsLedger).
-// Approvals and settings are always the human's.
+// Approvals and settings are always the human's. Hire requests (#99) wait at
+// the clerk's desk too.
 
 export default function TownHallRoom({ action, onClose }: RoomProps) {
   return action === "settings.open" ? <MayorsLedger onClose={onClose} /> : <Approvals action={action} onClose={onClose} />;
@@ -23,7 +25,38 @@ export default function TownHallRoom({ action, onClose }: RoomProps) {
 function Approvals({ action, onClose }: RoomProps) {
   const { pending, decided, loaded, decide } = useApprovals();
   const { byId } = useVillagers(15000);
-  const [view, setView] = useState<"desk" | "records">(action === "approvals.records" ? "records" : "desk");
+  const hires = useHires();
+  const [view, setView] = useState<"desk" | "records" | "hires">(action === "approvals.records" ? "records" : action === "hires.open" ? "hires" : "desk");
+
+  if (view === "hires") {
+    return (
+      <ParchmentDialog
+        kicker="The town hall"
+        title="Hire requests"
+        onClose={onClose}
+        wide
+        footer={
+          <button onClick={() => setView("desk")} className="village-btn ml-auto px-3 py-2 text-xs">
+            ← The clerk&apos;s desk
+          </button>
+        }
+      >
+        <p className="mb-3 text-xs text-[#6b4a2e]">
+          New villagers the Mayor or a director would like to take on, with the Mayor&apos;s interview. You can change their
+          personality and budget before saying yes.
+        </p>
+        {!hires.loaded && <p className="text-sm">Fetching the applications…</p>}
+        {hires.loaded && hires.requests.length === 0 && (
+          <p className="rounded border-2 border-dashed border-[#c9b27a] p-4 text-center text-sm">Nobody has asked to hire anyone yet.</p>
+        )}
+        <ul className="space-y-3">
+          {hires.requests.map((r) => (
+            <HireCard key={r.id} r={r} byId={byId} onDecide={(a, d) => hires.decide(r.id, a, d)} />
+          ))}
+        </ul>
+      </ParchmentDialog>
+    );
+  }
 
   if (view === "records") {
     return (
@@ -68,9 +101,14 @@ function Approvals({ action, onClose }: RoomProps) {
       onClose={onClose}
       wide
       footer={
-        <button onClick={() => setView("records")} className="village-btn ml-auto px-3 py-2 text-xs">
-          🗄 Records cabinet
-        </button>
+        <>
+          <button onClick={() => setView("hires")} className={`village-btn px-3 py-2 text-xs ${hires.waiting.length ? "village-btn-go" : ""}`}>
+            📜 Hire requests{hires.waiting.length > 0 ? ` (${hires.waiting.length} waiting)` : ""}
+          </button>
+          <button onClick={() => setView("records")} className="village-btn ml-auto px-3 py-2 text-xs">
+            🗄 Records cabinet
+          </button>
+        </>
       }
     >
       <p className="mb-3 text-xs text-[#6b4a2e]">
@@ -152,6 +190,104 @@ function Request({
           ❌ Deny
         </button>
       </div>
+    </li>
+  );
+}
+
+const HIRE_STATUS: Record<HireRequestRow["status"], { label: string; tone: string }> = {
+  interviewing: { label: "The Mayor is interviewing them", tone: "#8a5a2b" },
+  awaiting_owner: { label: "Waiting for you", tone: "#c58a1b" },
+  hired: { label: "Hired", tone: "#3d7a2a" },
+  declined: { label: "Declined", tone: "#b3261e" },
+};
+
+function HireCard({
+  r,
+  byId,
+  onDecide,
+}: {
+  r: HireRequestRow;
+  byId: (id: number | null) => AgentRow | null | undefined;
+  onDecide: (action: "approve" | "decline", draft?: Record<string, unknown>) => Promise<{ ok: true } | { ok: false; error: string }>;
+}) {
+  const d = r.draft;
+  const [persona, setPersona] = useState(d.persona ?? "");
+  const [budget, setBudget] = useState(d.dailyBudgetUsd != null ? String(d.dailyBudgetUsd) : "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const drafter = byId(r.proposedBy);
+  const manager = byId(d.managerId ?? null);
+  const status = HIRE_STATUS[r.status];
+  // Waiting on the owner, or turned down by the Mayor (the owner can overrule him).
+  const open = r.status === "awaiting_owner" || (r.status === "declined" && r.decidedBy === "mayor");
+
+  async function decide(action: "approve" | "decline") {
+    setBusy(true);
+    setError(null);
+    const edits = action === "approve" ? { persona: persona.trim() || null, dailyBudgetUsd: budget.trim() === "" ? null : Number(budget) } : undefined;
+    const res = await onDecide(action, edits);
+    if (!res.ok) setError(res.error.charAt(0).toUpperCase() + res.error.slice(1));
+    setBusy(false);
+  }
+
+  return (
+    <li className="rounded border-2 border-[#3b2716] bg-[#fffaf0] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm">
+          <span className="village-pixel">{d.name}</span>{" "}
+          <span className="text-xs text-[#6b4a2e]">
+            · {d.role ?? "Villager"} · {d.tier === "director" ? "Director" : `🦺 Worker${manager ? ` for ${manager.name}` : ""}`}
+            {d.area ? ` · ${d.area}` : ""}
+          </span>
+        </p>
+        <span className="text-xs font-semibold" style={{ color: status.tone }}>
+          {status.label}
+          {r.decidedBy === "mayor" && r.status !== "awaiting_owner" ? " (by the Mayor)" : ""}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-[#6b4a2e]">
+        Drafted by {drafter ? drafter.name : "you"} · {new Date(r.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+      </p>
+      {r.reason && <p className="mt-1 text-xs">Why: {r.reason}</p>}
+      <p className="mt-1 text-[11px] text-[#6b4a2e]">
+        Tools: <span className="font-mono">{(d.enabledTools ?? []).join(", ") || "none"}</span>
+      </p>
+      {r.interview && (
+        <div className="mt-2 rounded border-2 border-[#d8c49a] bg-white/60 p-2 text-xs">
+          <p className="font-semibold">
+            The Mayor&apos;s interview{" "}
+            {r.verdict === "recommend" ? "👍 recommends" : r.verdict === "reject" ? "👎 doesn't recommend" : "🤔 no clear verdict"}
+          </p>
+          <p className="mt-1 whitespace-pre-wrap">{r.interview.replace(/\s*VERDICT:\s*(RECOMMEND|REJECT)\s*$/i, "")}</p>
+        </div>
+      )}
+      {open ? (
+        <>
+          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_10rem]">
+            <label className="block text-xs font-semibold">
+              Personality
+              <textarea name={`hire-persona-${r.id}`} value={persona} onChange={(e) => setPersona(e.target.value)} rows={3} className="mt-1 w-full resize-y rounded border-2 border-[#3b2716] bg-white px-2 py-1.5 text-xs font-normal outline-none" />
+            </label>
+            <label className="block text-xs font-semibold">
+              Daily budget (USD)
+              <input name={`hire-budget-${r.id}`} type="number" min={0} step="0.01" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="None of their own" className="mt-1 w-full rounded border-2 border-[#3b2716] bg-white px-2 py-1.5 text-xs font-normal outline-none" />
+            </label>
+          </div>
+          {error && <p role="alert" className="mt-2 text-xs text-[#b3261e]">{error}</p>}
+          <div className="mt-2 flex gap-2">
+            <button disabled={busy} onClick={() => void decide("approve")} className="village-btn village-btn-go px-3 py-1.5 text-xs">
+              ✅ Welcome {d.name}
+            </button>
+            {r.status === "awaiting_owner" && (
+              <button disabled={busy} onClick={() => void decide("decline")} className="village-btn village-btn-danger px-3 py-1.5 text-xs">
+                ❌ Decline
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        d.persona && <p className="mt-1 text-xs text-[#6b4a2e]">Personality: {d.persona}</p>
+      )}
     </li>
   );
 }

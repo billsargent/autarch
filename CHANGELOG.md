@@ -3,6 +3,28 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Hiring: directors and workers
+
+- **Villagers have ranks (#99).** Besides the Mayor there are **directors**, who each run an area
+  (the inbox, the garden, money…), and **workers**, who work for a director and wear a hi-vis vest
+  🦺 in the village. Set someone's rank, area and boss on the Villagers page.
+- **The village can grow by itself.** When there's more work than they can do, the Mayor or a
+  director drafts a new villager (`propose_hire`): name, personality, job, tools and budget, and
+  why they're needed.
+- **The Mayor interviews every candidate** in a short conversation with no tools, on his own
+  budget, and recommends them or not.
+- **Hire requests wait at the clerk's desk in the town hall** with the interview. Edit their
+  personality and budget, then welcome them or decline.
+- **Or let the Mayor hire:** under Mayor's ledger → Villagers → Hiring, choose "The Mayor hires
+  within the limits". A candidate he recommends is hired straight away and you're told.
+- **The limits always hold:**
+  - a new villager never gets more tools or budget than whoever drafted them;
+  - workers can't hire;
+  - only the Mayor can take on a director;
+  - the village has room for a set number of villagers ("Room for", default 8), and nobody
+    joins past it, not even when you approve, until you raise it.
+- New villagers greet the village for their first hour ("👋 Hello! I'm Hal, new in town.").
+
 ## 2026-10-24 — The Mayor's powers
 
 - **The Mayor can run the village (#58).** He has six tools of his own:

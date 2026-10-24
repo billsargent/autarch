@@ -17,6 +17,9 @@ import { ROOMS } from "./rooms";
 import { useDeferredApprovals } from "./useDeferredApprovals";
 import { useVillageClock } from "./useVillageClock";
 
+// A new villager (#99) greets the village for their first hour.
+const NEWCOMER_MS = 60 * 60_000;
+
 export default function VillageView() {
   const router = useRouter();
   const { data, refresh, mayor } = useVillageData();
@@ -129,13 +132,16 @@ export default function VillageView() {
     target,
     offset: offsets[i],
     badge: MOOD_BADGE[mood],
+    vest: v.tier === "worker",
     title: `${moodLabel(mood, v.name, strolling)} — click to talk`,
     said:
       v.talkingWith != null && !v.working
         ? `💬 Asking ${nameOf(v.talkingWith)}…`
         : v.lastSaid && v.lastSaidAt && clock - v.lastSaidAt < BUBBLE_MS
           ? bubbleLine(v.lastSaid)
-          : null,
+          : mood !== "asleep" && clock - Date.parse(v.createdAt) < NEWCOMER_MS
+            ? `👋 Hello! I'm ${v.name}, new in town.`
+            : null,
     asleep: mood === "asleep",
     hint:
       v.id === talkKeyTarget ? (

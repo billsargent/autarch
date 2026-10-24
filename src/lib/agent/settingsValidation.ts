@@ -52,6 +52,8 @@ const RULES: Record<string, Rule> = {
   cacheHitInputPricePerMTok: { kind: "number", min: 0, max: 1000 },
   townDailyBudgetUsd: { kind: "number", min: 0, max: 10000, nullable: true },
   bedtime: { kind: "time" },
+  hiringMode: { kind: "enum", values: ["ask", "auto"] },
+  maxPopulation: { kind: "int", min: 1, max: 50 },
   wakeTime: { kind: "time" },
   allowNetworkFetch: { kind: "bool" },
   paused: { kind: "bool" },

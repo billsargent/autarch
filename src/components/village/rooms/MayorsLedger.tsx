@@ -220,7 +220,12 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
     }
 
     case "villagers":
-      return <VillagersPage settings={settings} tools={s.tools} />;
+      return (
+        <>
+          <HiringSettings s={s} settings={settings} />
+          <VillagersPage settings={settings} tools={s.tools} />
+        </>
+      );
 
     case "freetime":
       return <FreeTimePage settings={settings} />;
@@ -780,6 +785,62 @@ function TownBudgetField({ s, settings }: { s: Settings; settings: SettingsRow }
       </span>
       <FieldError msg={error} />
     </label>
+  );
+}
+
+// Hiring (#99): who decides, and how many the village can hold.
+function HiringSettings({ s, settings }: { s: Settings; settings: SettingsRow }) {
+  const error = s.fieldErrors.maxPopulation;
+  const saved = String(settings.maxPopulation);
+  const [draft, setDraft] = useDraft(saved, error);
+  const commit = () => {
+    if (draft === saved) s.clearFieldError("maxPopulation");
+    else void s.save({ maxPopulation: Number(draft) });
+  };
+  return (
+    <div className="mb-4 rounded border-2 border-[#d8c49a] p-3">
+      <p className="text-xs font-semibold">Hiring</p>
+      <p className="text-[11px] text-[#6b4a2e]">
+        The Mayor and directors can draft new villagers when there&apos;s more work than they can do. The Mayor interviews each
+        one first. Hire requests wait at the clerk&apos;s desk in the town hall.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Who decides hires">
+        {(["ask", "auto"] as const).map((m) => (
+          <button
+            key={m}
+            role="radio"
+            aria-checked={settings.hiringMode === m}
+            onClick={() => void s.save({ hiringMode: m })}
+            className={`village-btn px-2.5 py-1 text-[11px] ${settings.hiringMode === m ? "village-btn-go" : ""}`}
+          >
+            {m === "ask" ? "✋ I decide every hire" : "🎩 The Mayor hires within the limits"}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-[11px] text-[#6b4a2e]">
+        {settings.hiringMode === "ask"
+          ? "Every hire waits for you, with the Mayor's interview to read."
+          : "When the Mayor recommends someone, they're hired straight away and you're told. New villagers never get more tools or budget than whoever drafted them."}
+      </p>
+      <label className="mt-2 block max-w-xs text-xs font-semibold">
+        Room for (villagers, the Mayor included)
+        <input
+          type="number"
+          name="maxPopulation"
+          min={1}
+          max={50}
+          value={draft}
+          aria-invalid={Boolean(error)}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+          }}
+          className={`${input} ${error ? "border-[#b3261e]" : ""}`}
+        />
+        <FieldError msg={error} />
+      </label>
+    </div>
   );
 }
 

@@ -64,6 +64,8 @@ export interface SettingsRow {
   townDailyBudgetUsd: number | null;
   bedtime: string;
   wakeTime: string;
+  hiringMode: "ask" | "auto";
+  maxPopulation: number;
   extraProtectedPaths: string[];
   systemPromptExtra: string | null;
   staticCorePrompt: string | null;
@@ -123,7 +125,7 @@ export interface WorkSessionRow {
   id: number;
   jobId: number | null;
   conversationId: number | null;
-  trigger: "chat" | "approval" | "scheduled" | "report" | "message";
+  trigger: "chat" | "approval" | "scheduled" | "report" | "message" | "interview";
   status: "running" | "completed" | "terminated" | "skipped" | "failed";
   startedAt: string;
   endedAt: string | null;
@@ -194,6 +196,9 @@ export interface AgentRow {
   isMayor: boolean;
   status: "active" | "paused" | "dismissed";
   pausedBy: "owner" | "mayor" | null;
+  tier: "mayor" | "director" | "worker";
+  area: string | null;
+  managerId: number | null;
   dailyBudgetUsd: number | null;
   maxActionsPerHour: number | null;
   createdAt: string;
@@ -205,4 +210,31 @@ export interface AgentRow {
   lastSaid: string | null;
   lastSaidAt: number | null;
   talkingWith: number | null;
+}
+
+// A hire request (#99): a drafted villager, the Mayor's interview, and what
+// became of it.
+export interface HireRequestRow {
+  id: number;
+  proposedBy: number | null;
+  draft: {
+    name: string;
+    role?: string | null;
+    persona?: string | null;
+    tier?: "director" | "worker";
+    area?: string | null;
+    managerId?: number | null;
+    enabledTools?: string[] | null;
+    dailyBudgetUsd?: number | null;
+    character?: string | null;
+  };
+  reason: string | null;
+  status: "interviewing" | "awaiting_owner" | "hired" | "declined";
+  interview: string | null;
+  verdict: "recommend" | "reject" | "unsure" | null;
+  conversationId: number | null;
+  agentId: number | null;
+  decidedBy: string | null;
+  createdAt: string;
+  decidedAt: string | null;
 }

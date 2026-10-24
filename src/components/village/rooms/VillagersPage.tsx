@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { AgentRow, SettingsRow } from "@/lib/agent/clientTypes";
 import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 import { CHARACTER_KEYS, CHARACTER_LABELS, VILLAGER_COLORS } from "@/lib/agent/villagerLooks";
-import { isMayorTool } from "@/lib/agent/mayorTools";
+import { tierAllows, type Tier } from "@/lib/agent/mayorTools";
 import { useVillagers, type VillagerInput } from "../../data/useVillagers";
 import { ConfirmDialog } from "../ParchmentDialog";
 import VillagerPortrait from "../VillagerPortrait";
@@ -15,6 +15,13 @@ import VillagerPortrait from "../VillagerPortrait";
 
 const input = "mt-1 w-full rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 py-1.5 text-sm font-normal outline-none";
 const usd = (n: number) => `$${n.toFixed(n < 1 ? 3 : 2)}`;
+
+// "Mayor", "Director · garden", "Worker for Gus" (#99).
+export function rankOf(v: AgentRow, byId: (id: number | null) => AgentRow | undefined): string {
+  if (v.isMayor) return "Mayor";
+  if (v.tier === "worker") return `Worker${byId(v.managerId) ? ` for ${byId(v.managerId)!.name}` : ""}${v.area ? ` · ${v.area}` : ""}`;
+  return `Director${v.area ? ` · ${v.area}` : ""}`;
+}
 
 function doing(v: AgentRow, villagePaused: boolean): string {
   if (v.status === "paused") return v.pausedBy === "mayor" ? "Resting (paused by the Mayor)" : "Resting (paused)";
@@ -55,6 +62,7 @@ export default function VillagersPage({ settings, tools }: { settings: SettingsR
     return (
       <VillagerEditor
         villager={editing === "new" ? null : editing}
+        villagers={villagers}
         settings={settings}
         tools={tools}
         onCancel={() => setEditing(null)}
@@ -88,6 +96,10 @@ export default function VillagersPage({ settings, tools }: { settings: SettingsR
                 <div className="min-w-0 flex-1">
                   <p className="village-pixel text-sm">
                     {v.name} <span className="font-sans text-xs font-normal text-[#6b4a2e]">· {v.role}</span>
+                  </p>
+                  <p className="text-[11px] font-semibold text-[#8a5a2b]">
+                    {v.tier === "worker" && <span aria-hidden>🦺 </span>}
+                    {rankOf(v, (id) => villagers.find((x) => x.id === id))}
                   </p>
                   <p className="text-xs text-[#6b4a2e]">{doing(v, settings.paused)}</p>
                 </div>
@@ -134,19 +146,26 @@ export default function VillagersPage({ settings, tools }: { settings: SettingsR
 
 function VillagerEditor({
   villager,
+  villagers,
   settings,
   tools,
   onSave,
   onCancel,
 }: {
   villager: AgentRow | null;
+  villagers: AgentRow[];
   settings: SettingsRow;
   tools: Array<{ name: string; description: string }>;
   onSave: (patch: VillagerInput) => Promise<{ ok: true } | { ok: false; error: string }>;
   onCancel: () => void;
 }) {
-  // The Mayor's own tools are only ever his (#58).
-  const townTools = tools.filter((t) => settings.enabledTools.includes(t.name) && (villager?.isMayor || !isMayorTool(t.name)));
+  const [tier, setTier] = useState<"director" | "worker">(villager?.tier === "worker" ? "worker" : "director");
+  const [area, setArea] = useState(villager?.area ?? "");
+  const [managerId, setManagerId] = useState<number | null>(villager?.managerId ?? null);
+  const rank: Tier = villager?.isMayor ? "mayor" : tier;
+  // The Mayor's own tools are only ever his (#58), and workers can't hire (#99).
+  const townTools = tools.filter((t) => settings.enabledTools.includes(t.name) && tierAllows(rank, t.name));
+  const managers = villagers.filter((v) => v.id !== villager?.id && (v.isMayor || v.tier === "director"));
   const [name, setName] = useState(villager?.name ?? "");
   const [role, setRole] = useState(villager?.role ?? "Villager");
   // Starts with the default personality written out, ready to edit.
@@ -178,7 +197,8 @@ function VillagerEditor({
       character,
       color,
       model: model.trim() || null,
-      enabledTools: allTools ? null : ownTools,
+      enabledTools: allTools ? null : ownTools.filter((t) => tierAllows(rank, t)),
+      ...(villager?.isMayor ? {} : { tier, area: area.trim() || null, managerId: tier === "worker" ? managerId : null }),
       dailyBudgetUsd: budget.trim() === "" ? null : Number(budget),
       maxActionsPerHour: perHour.trim() === "" ? null : Number(perHour),
     });
@@ -211,6 +231,39 @@ function VillagerEditor({
           {fieldError("role")}
         </label>
       </div>
+      {!villager?.isMayor && (
+        <div className="grid gap-3 rounded border-2 border-[#d8c49a] p-3 sm:grid-cols-3">
+          <fieldset>
+            <legend className="text-xs font-semibold">Rank</legend>
+            <div className="mt-1 flex gap-1.5" role="radiogroup" aria-label="Rank">
+              {(["director", "worker"] as const).map((t) => (
+                <button key={t} type="button" role="radio" aria-checked={tier === t} onClick={() => setTier(t)} className={`village-btn px-2.5 py-1 text-[11px] ${tier === t ? "village-btn-go" : ""}`}>
+                  {t === "director" ? "Director" : "🦺 Worker"}
+                </button>
+              ))}
+            </div>
+            <span className="mt-1 block text-[11px] text-[#6b4a2e]">{tier === "director" ? "Runs an area, and may draft hires." : "Works for a director; can't hire."}</span>
+          </fieldset>
+          <label className="block text-xs font-semibold">
+            Area
+            <input name="area" value={area} onChange={(e) => setArea(e.target.value)} placeholder="e.g. inbox, garden, money" className={input} />
+            {fieldError("area")}
+          </label>
+          {tier === "worker" && (
+            <label className="block text-xs font-semibold">
+              Works for
+              <select name="managerId" value={managerId ?? ""} onChange={(e) => setManagerId(e.target.value ? Number(e.target.value) : null)} className={input}>
+                <option value="">Nobody in particular</option>
+                {managers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.isMayor ? "Mayor" : m.role})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      )}
       <label className="block text-xs font-semibold">
         Personality
         <textarea name="persona" value={persona} onChange={(e) => setPersona(e.target.value)} rows={4} className={`${input} resize-y`} />
@@ -303,7 +356,7 @@ function VillagerEditor({
           {fieldError("maxActionsPerHour")}
         </label>
       </div>
-      {error && !["name", "role", "persona", "model", "enabledTools", "dailyBudgetUsd", "maxActionsPerHour"].includes(error.field) && (
+      {error && !["name", "role", "persona", "model", "enabledTools", "dailyBudgetUsd", "maxActionsPerHour", "area"].includes(error.field) && (
         <p className="text-xs text-[#b3261e]">{error.text}</p>
       )}
       <div className="flex gap-2">

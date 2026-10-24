@@ -60,6 +60,7 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
     target: center,
     offset: offsets[i],
     badge: MOOD_BADGE[mood],
+    vest: v.tier === "worker",
     title: moodLabel(mood, v.name),
     asleep: mood === "asleep",
   }));

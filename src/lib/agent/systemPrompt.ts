@@ -17,7 +17,7 @@ const MAYOR_NOTE = `AS MAYOR
 
 
 export interface PromptScope {
-  trigger?: "chat" | "approval" | "scheduled" | "report" | "message";
+  trigger?: "chat" | "approval" | "scheduled" | "report" | "message" | "interview";
   jobId?: number | null;
   conversationId?: number | null;
   maxDurationMinutes?: number;
@@ -175,6 +175,9 @@ NOTIFICATIONS
       : "",
     trigger === "message"
       ? `✉ A neighbour has asked you something (the latest "[… asks]" note). Answer them directly and briefly; your reply goes back to them. You can't send questions onward in this turn.`
+      : "",
+    trigger === "interview"
+      ? `📋 You're interviewing someone who'd like to join the village (the latest "[Hire request]" note). Think about whether the village needs them, whether their personality and tools fit the job, and whether their budget is sensible. Say what you think in a few sentences, then end with exactly one line: "VERDICT: RECOMMEND" or "VERDICT: REJECT".`
       : "",
     isNight(new Date(), settings.bedtime, settings.wakeTime)
       ? `🌙 It's night in the village (${settings.bedtime}–${settings.wakeTime}). You were asleep; the human knocked to talk. Keep it brief and don't start any work of your own until morning.`

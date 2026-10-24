@@ -329,6 +329,79 @@ async function main() {
   check("…or raise a budget", (await executeTool("query_database", { sql: "WITH x AS (SELECT 1) UPDATE agents SET daily_budget_usd = 99" }, town, ctxMayor)).output, "Only read-only SELECT queries are allowed.");
   check("…or approve his own requests", (await executeTool("query_database", { sql: "SELECT 1; UPDATE tool_executions SET status = 'approved'" }, town, ctxMayor)).output, "Only read-only SELECT queries are allowed.");
 
+  // --- hiring: directors and workers (#99) ----------------------------------------------
+  const { proposeHire } = await import("../src/lib/agent/hiring");
+  const { hireRequests } = await import("../src/db/schema");
+  const hiresRoute = await import("../src/app/api/hires/[id]/route");
+  await updateSettings({ maxPopulation: 20, hiringMode: "ask" });
+  const gus = (await add({ name: "Gus", role: "Head gardener", tier: "director", area: "garden", dailyBudgetUsd: 1, enabledTools: ["read_file", "list_directory", "update_journal", "manage_goal", "propose_hire"] })).agent;
+  const wes = (await add({ name: "Wes", role: "Gardener", tier: "worker", managerId: gus.id, enabledTools: ["read_file", "propose_hire"] })).agent;
+  const rowOf = async (id: number) => (await db.select().from(agents).where(eq(agents.id, id)))[0];
+  const town2 = await getSettings();
+  check("a director can draft hires; a worker never can", [villagers.effectiveTools(await rowOf(gus.id), town2).includes("propose_hire"), villagers.effectiveTools(await rowOf(wes.id), town2)], [true, ["read_file"]]);
+  check("…and a director doesn't get the Mayor's tools", villagers.effectiveTools({ ...(await rowOf(gus.id)), enabledTools: ["pause_agent", "read_file"] }, town2), ["read_file"]);
+
+  const ctxGus = { agentId: gus.id, agentName: "Gus", conversationId: null };
+  const hal = { name: "Hal", role: "Weeder", persona: "Quiet and thorough.", dailyBudgetUsd: 0.5, reason: "The beds are full of weeds." };
+  const ask = async (args: Record<string, unknown>, ctx: Record<string, unknown> = ctxGus) => (await proposeHire(args, ctx)).output;
+  check("a worker can't take people on", (await ask(hal, { agentId: wes.id, agentName: "Wes" })).startsWith("Refused: workers can't"), true);
+  check("only the Mayor takes on a director", (await ask({ ...hal, tier: "director" })).includes("only the Mayor"), true);
+  check("a hire can't have tools the drafter hasn't got", (await ask({ ...hal, tools: ["read_file", "run_shell_command"] })).includes("can't have run_shell_command"), true);
+  check("…nor a bigger budget than theirs", (await ask({ ...hal, dailyBudgetUsd: 5 })).includes("can't be more than yours ($1)"), true);
+  check("…and needs a reason", (await ask({ ...hal, reason: "" })).includes("say why"), true);
+  check("…and a name nobody has", (await ask({ ...hal, name: "cal" })).includes("someone called cal already lives here"), true);
+
+  const waitHire = async (id: number) => {
+    for (let i = 0; i < 50; i++) {
+      const [r] = await db.select().from(hireRequests).where(eq(hireRequests.id, id));
+      if (r.status !== "interviewing") return r;
+      await new Promise((res) => setTimeout(res, 100));
+    }
+    return null;
+  };
+  const requestId = (out: string) => Number(/#(\d+)/.exec(out)?.[1]);
+
+  fake.byAgent["Mayor Ada"] = [{ text: "Gus needs the help, and Hal sounds steady.\nVERDICT: RECOMMEND" }];
+  const halOut = await ask(hal);
+  check("a director drafts a hire", halOut.startsWith("Drafted hire request #") && halOut.includes("then the owner decides"), true);
+  const halReq = await waitHire(requestId(halOut));
+  check("the Mayor interviews them and recommends; it waits for the owner", [halReq?.status, halReq?.verdict], ["awaiting_owner", "recommend"]);
+  const interviewStep = fake.seen.filter((s) => s.system.startsWith("You are Mayor Ada") && s.system.includes("You're interviewing")).pop();
+  check("the interview is talk only (no tools)", interviewStep?.tools, []);
+  const interviewSession = (await db.select().from(workSessions).where(eq(workSessions.conversationId, halReq!.conversationId!)))[0];
+  check("…a turn of the Mayor's, on his budget", [interviewSession?.agentId, interviewSession?.trigger], [mayor.id, "interview"]);
+  check("the owner is told", (await db.select().from(notifications).where(eq(notifications.title, "Hire request: Hal"))).length, 1);
+  check("a worker's draft gets the director's tools a worker may hold", (halReq!.draft as { enabledTools: string[] }).enabledTools, ["read_file", "list_directory", "update_journal", "manage_goal"]);
+
+  const approve = (id: number, draft?: unknown) => hiresRoute.PATCH(req(`/api/hires/${id}`, "PATCH", { action: "approve", draft }), { params: Promise.resolve({ id: String(id) }) });
+  const approved = await (await approve(halReq!.id, { persona: "Quiet, thorough, and fond of worms." })).json();
+  const halRow = await rowOf(approved.agent?.id);
+  check("the owner approves (and can edit first): Hal joins as Gus's worker", [halRow?.name, halRow?.tier, halRow?.managerId, halRow?.area, halRow?.persona, halRow?.home], ["Hal", "worker", gus.id, "garden", "Quiet, thorough, and fond of worms.", "villagers/hal"]);
+  check("…and the request is closed", (await db.select().from(hireRequests).where(eq(hireRequests.id, halReq!.id)))[0].status, "hired");
+  check("a decided request can't be approved again", (await approve(halReq!.id)).status, 409);
+
+  fake.byAgent["Mayor Ada"] = [{ text: "We don't need two weeders.\nVERDICT: REJECT" }];
+  const ivyReq = await waitHire(requestId(await ask({ ...hal, name: "Ivy" })));
+  check("when the Mayor rejects, the request is declined", [ivyReq?.status, ivyReq?.decidedBy], ["declined", "mayor"]);
+  check("…but the owner can still hire them", (await (await approve(ivyReq!.id)).json()).agent?.name, "Ivy");
+
+  await updateSettings({ hiringMode: "auto" });
+  fake.byAgent["Mayor Ada"] = [{ text: "Yes.\nVERDICT: RECOMMEND" }];
+  const joReq = await waitHire(requestId(await ask({ ...hal, name: "Jo" })));
+  check("with hiring set to automatic, the Mayor's recommendation hires them", [joReq?.status, joReq?.decidedBy], ["hired", "mayor"]);
+  check("…and the owner is told", (await db.select().from(notifications).where(eq(notifications.title, "Jo joined the village"))).length, 1);
+  fake.byAgent["Mayor Ada"] = [{ text: "Hmm, maybe." }];
+  const kitReq = await waitHire(requestId(await ask({ ...hal, name: "Kit" })));
+  check("…but an unclear verdict still waits for the owner", [kitReq?.status, kitReq?.verdict], ["awaiting_owner", "unsure"]);
+
+  await updateSettings({ maxPopulation: villagers.population() });
+  check("a full village takes nobody new", (await ask({ ...hal, name: "Lou" })).includes("the village is full"), true);
+  const overCap = await approve(kitReq!.id);
+  check("…not even when the owner approves (they raise the cap first)", [overCap.status, (await overCap.json()).error?.includes("the village is full")], [409, true]);
+  const badMode = await settingsRoute.PUT(req("/api/settings", "PUT", { hiringMode: "yolo" }));
+  check("hiring mode is ask or auto", badMode.status, 400);
+  await updateSettings({ hiringMode: "ask", maxPopulation: 8 });
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

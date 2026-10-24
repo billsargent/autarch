@@ -28,6 +28,11 @@ export const agents = sqliteTable("agents", {
   status: text("status", { enum: ["active", "paused", "dismissed"] }).notNull().default("active"),
   // Who paused them (#58): the Mayor may only let villagers he paused work again.
   pausedBy: text("paused_by", { enum: ["owner", "mayor"] }),
+  // The village's ranks (#99): the Mayor, directors who run an area (and may
+  // draft hires), and workers who report to a director.
+  tier: text("tier", { enum: ["mayor", "director", "worker"] }).notNull().default("director"),
+  area: text("area"),
+  managerId: integer("manager_id"),
   // Limits (#60); empty = no cap of its own.
   dailyBudgetUsd: real("daily_budget_usd"),
   maxActionsPerHour: integer("max_actions_per_hour"),
@@ -79,7 +84,7 @@ export const workSessions = sqliteTable("work_sessions", {
   conversationId: integer("conversation_id").references(() => conversations.id, {
     onDelete: "set null",
   }),
-  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report", "message"] }).notNull(),
+  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report", "message", "interview"] }).notNull(),
   status: text("status", {
     enum: ["running", "completed", "terminated", "skipped", "failed"],
   })
@@ -172,6 +177,28 @@ export const journalEntries = sqliteTable("journal_entries", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
+// Hire requests (#99): a draft villager proposed by the Mayor or a director,
+// interviewed by the Mayor, then hired by the owner (or straight away when the
+// owner lets the Mayor hire within caps).
+export const hireRequests = sqliteTable("hire_requests", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  // Who drafted it; empty = the owner.
+  proposedBy: integer("proposed_by").references(() => agents.id, { onDelete: "set null" }),
+  // The fields of the new villager, as POST /api/agents takes them.
+  draft: text("draft", { mode: "json" }).notNull(),
+  reason: text("reason"),
+  status: text("status", { enum: ["interviewing", "awaiting_owner", "hired", "declined"] }).notNull().default("interviewing"),
+  // The Mayor's interview: what he said, and his verdict.
+  interview: text("interview"),
+  verdict: text("verdict", { enum: ["recommend", "reject", "unsure"] }),
+  conversationId: integer("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+  // The villager it became.
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  decidedBy: text("decided_by"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  decidedAt: integer("decided_at", { mode: "timestamp" }),
+});
+
 export const goals = sqliteTable("goals", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   title: text("title").notNull(),
@@ -257,6 +284,10 @@ export const agentSettings = sqliteTable("agent_settings", {
   townDailyBudgetUsd: real("town_daily_budget_usd"),
   // Day and night (#100): local "HH:MM". At night no autonomous work starts.
   bedtime: text("bedtime").notNull().default("22:00"),
+  // Hiring (#99): "ask" = every hire waits for the owner; "auto" = the Mayor
+  // hires within the caps. And how many villagers the village can hold.
+  hiringMode: text("hiring_mode", { enum: ["ask", "auto"] }).notNull().default("ask"),
+  maxPopulation: integer("max_population").notNull().default(8),
   // New tools already offered to this install (see settingsStore), so a tool
   // the owner switched off isn't switched back on.
   offeredTools: text("offered_tools", { mode: "json" }),

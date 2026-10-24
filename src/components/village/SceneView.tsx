@@ -29,6 +29,8 @@ export interface VillagerSpec {
   said?: string | null;
   // Speech bubbles are hidden while asleep.
   asleep?: boolean;
+  // Workers wear a hi-vis vest (#99).
+  vest?: boolean;
   // Small hint under the name tag, e.g. "T talk".
   hint?: ReactNode;
   // Sideways nudge (scene px) so villagers at the same spot don't overlap.
@@ -252,7 +254,23 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
               imageRendering: "pixelated",
             }}
           />
-        ) : (
+        ) : null}
+        {spriteReady && v.vest && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute"
+            style={{
+              left: "28%",
+              width: "44%",
+              top: "75%",
+              height: "13%",
+              background: "linear-gradient(180deg, #f5d000 0 40%, #fff6c2 40% 55%, #f5d000 55%)",
+              opacity: 0.85,
+              borderRadius: 2,
+            }}
+          />
+        )}
+        {spriteReady ? null : (
           <span className="absolute inset-0">
             <span className="absolute left-1/2 top-[2px] h-[24px] w-[24px] -translate-x-1/2 rounded-full border-[3px] border-[#3b2716] bg-[#f1c27d]" />
             <span className="absolute left-1/2 top-[24px] h-[26px] w-[30px] -translate-x-1/2 rounded-t-md border-[3px] border-[#3b2716]" style={{ background: v.color }} />

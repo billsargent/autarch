@@ -2,9 +2,9 @@ import { db, sqlite } from "@/db";
 import { agents } from "@/db/schema";
 import { asc, eq, ne } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
-import { isCharacterKey, VILLAGER_COLORS } from "./villagerLooks";
+import { CHARACTER_KEYS, isCharacterKey, VILLAGER_COLORS } from "./villagerLooks";
 import { ABANDONED_AFTER_MS } from "./turnLock";
-import { isMayorTool } from "./mayorTools";
+import { tierAllows } from "./mayorTools";
 
 // The villagers (#55). The Mayor is the first one: on an install from before
 // villagers existed, he is made from the old single agent's name and
@@ -33,7 +33,7 @@ export async function ensureMayor(): Promise<AgentRow> {
     const again = sqlite.prepare("SELECT id FROM agents WHERE is_mayor = 1 ORDER BY id LIMIT 1").get() as { id: number } | undefined;
     if (again) return again.id;
     const info = sqlite
-      .prepare("INSERT INTO agents (name, role, persona, character, color, home, is_mayor) VALUES (?, 'Mayor', ?, 'master', ?, '', 1)")
+      .prepare("INSERT INTO agents (name, role, persona, character, color, home, is_mayor, tier) VALUES (?, 'Mayor', ?, 'master', ?, '', 1, 'mayor')")
       .run(settings.agentName === "Root" ? "Mayor" : settings.agentName, settings.persona ?? null, VILLAGER_COLORS[0]);
     const id = Number(info.lastInsertRowid);
     for (const t of OWNED_TABLES) sqlite.prepare(`UPDATE ${t} SET agent_id = ? WHERE agent_id IS NULL`).run(id);
@@ -60,9 +60,10 @@ export async function listVillagers(): Promise<AgentRow[]> {
 
 // The tools a villager may use: its own list, but never beyond the town's tool
 // policy (docs/town-charter.md: a villager never gets more than the town allows).
-// The Mayor's tools are his alone (#58).
+// The Mayor's tools are his alone (#58), and workers can't hire (#99).
 export function effectiveTools(agent: AgentRow, settings: AgentSettingsRow): string[] {
-  const town = ((settings.enabledTools as string[]) || []).filter((t) => agent.isMayor || !isMayorTool(t));
+  const tier = agent.isMayor ? "mayor" : agent.tier === "mayor" ? "director" : agent.tier;
+  const town = ((settings.enabledTools as string[]) || []).filter((t) => tierAllows(tier, t));
   const own = agent.enabledTools as string[] | null;
   return own ? town.filter((t) => own.includes(t)) : town;
 }
@@ -96,9 +97,12 @@ export interface AgentInput {
   dailyBudgetUsd?: unknown;
   maxActionsPerHour?: unknown;
   status?: unknown;
+  tier?: unknown;
+  area?: unknown;
+  managerId?: unknown;
 }
 
-type Clean = Partial<Pick<AgentRow, "name" | "role" | "persona" | "character" | "color" | "model" | "enabledTools" | "dailyBudgetUsd" | "maxActionsPerHour" | "status">>;
+type Clean = Partial<Pick<AgentRow, "name" | "role" | "persona" | "character" | "color" | "model" | "enabledTools" | "dailyBudgetUsd" | "maxActionsPerHour" | "status" | "tier" | "area" | "managerId">>;
 
 // Checks a create/update body. Returns the clean fields, or the first problem
 // as "field: reason" (the same shape as settings errors, so forms can place it).
@@ -173,6 +177,22 @@ export function validateAgentInput(input: AgentInput, toolNames: readonly string
   if (has("status")) {
     if (input.status !== "active" && input.status !== "paused") return { ok: false, error: "status: must be active or paused." };
     out.status = input.status;
+  }
+  // There is one Mayor; everyone else is a director or a worker (#99).
+  if (has("tier")) {
+    if (input.tier !== "director" && input.tier !== "worker") return { ok: false, error: "tier: must be director or worker." };
+    out.tier = input.tier;
+  }
+  if (has("area")) {
+    const v = text("area", 60);
+    if (isErr(v)) return { ok: false, error: v.error };
+    out.area = v;
+  }
+  if (has("managerId")) {
+    const v = input.managerId;
+    if (v === null || v === "") out.managerId = null;
+    else if (typeof v !== "number" || !Number.isInteger(v) || v < 1) return { ok: false, error: "managerId: must be a villager." };
+    else out.managerId = v;
   }
   return { ok: true, value: out };
 }
@@ -305,4 +325,46 @@ export function actionsInLastHour(agentId?: number, excludeId = 0, now = Date.no
           .get(since, excludeId)
   ) as { n: number };
   return row.n;
+}
+
+// --- making a villager -------------------------------------------------------------
+
+export type NewVillager = ReturnType<typeof validateAgentInput> extends infer R ? (R extends { ok: true; value: infer V } ? V : never) : never;
+
+// Adds a villager from checked fields (validateAgentInput): a home folder of
+// their own, and a look and colour nobody else has yet if possible. Used by
+// the owner's Villagers page and by hiring (#99).
+export async function createVillager(value: NewVillager): Promise<AgentRow> {
+  const everyone = await db.select().from(agents);
+  const homes = new Set(everyone.map((a) => a.home));
+  const base = `villagers/${slugify(value.name!)}`;
+  let home = base;
+  for (let i = 2; homes.has(home); i++) home = `${base}-${i}`;
+  const living = everyone.filter((a) => a.status !== "dismissed");
+  const usedLooks = new Set(living.map((a) => a.character));
+  const usedColors = new Set(living.map((a) => a.color));
+  const [created] = await db
+    .insert(agents)
+    .values({
+      name: value.name!,
+      role: value.role ?? "Villager",
+      persona: value.persona ?? null,
+      character: value.character ?? CHARACTER_KEYS.find((c) => c !== "master" && !usedLooks.has(c)) ?? "villager",
+      color: value.color ?? VILLAGER_COLORS.find((c) => !usedColors.has(c)) ?? VILLAGER_COLORS[1],
+      model: value.model ?? null,
+      enabledTools: value.enabledTools ?? null,
+      dailyBudgetUsd: value.dailyBudgetUsd ?? null,
+      maxActionsPerHour: value.maxActionsPerHour ?? null,
+      tier: value.tier ?? "director",
+      area: value.area ?? null,
+      managerId: value.managerId ?? null,
+      home,
+    })
+    .returning();
+  return created;
+}
+
+// How many live in the village now (the Mayor included).
+export function population(): number {
+  return (sqlite.prepare("SELECT COUNT(*) AS n FROM agents WHERE status <> 'dismissed'").get() as { n: number }).n;
 }
