@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { meetings } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { MeetingError, askMeeting, closeMeeting, meetingView } from "@/lib/agent/meetings";
+import { MeetingError, askMeeting, closeMeeting, meetingView, summarizeMeeting } from "@/lib/agent/meetings";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -20,6 +20,8 @@ export async function PATCH(req: Request, { params }: Params) {
   try {
     if (body.action === "close") {
       await closeMeeting(id);
+      // The Mayor writes it up in the background.
+      void summarizeMeeting(id).catch(() => null);
       return NextResponse.json({ meeting: null });
     } else if (body.action === "ask") await askMeeting(id, String(body.message ?? ""));
     else return NextResponse.json({ error: "action: must be ask or close." }, { status: 400 });

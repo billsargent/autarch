@@ -1,6 +1,6 @@
 import { db, sqlite } from "@/db";
 import { agents, conversations, meetings, messages, notifications } from "@/db/schema";
-import { and, asc, eq, gt, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ne } from "drizzle-orm";
 import { budgetProblem, ensureMayor, type AgentRow } from "./agents";
 import { isNight } from "./daynight";
 import { getSettings } from "./settingsStore";
@@ -173,4 +173,53 @@ export async function mayorCallsMeeting(mayor: AgentRow, topic: string) {
   await db.insert(notifications).values({ kind: "meeting", title: `${mayor.name} called a town meeting`, body: topic, severity: "info", source: mayor.name, agentId: mayor.id });
   await askMeeting(m.id, topic, { agentId: mayor.id, name: mayor.name });
   return m;
+}
+
+// When the owner ends a meeting, the Mayor writes it up: a short summary for
+// the records, and any concrete ideas pinned on the notice board (#98). One
+// talk-only turn of his, in the meeting's own transcript.
+export async function summarizeMeeting(id: number): Promise<{ summary: string; ideas: string[] } | null> {
+  const [m] = await db.select().from(meetings).where(eq(meetings.id, id));
+  if (!m?.conversationId) return null;
+  const said = await db.select().from(messages).where(eq(messages.conversationId, m.conversationId));
+  if (said.filter((r) => r.role !== "user").length < 2) return null; // nothing much happened
+  const mayor = await ensureMayor();
+  if (budgetProblem(mayor, await getSettings())) return null;
+  let text = "";
+  try {
+    const { runWhenFree } = await import("./runner");
+    const result = await runWhenFree(
+      {
+        conversationId: m.conversationId,
+        eventNote:
+          '[Meeting ended] Write this meeting up for the town hall records: one short paragraph on what was said and agreed. Then, for each concrete idea worth putting to the whole village (at most three), add a line starting "IDEA: " with the idea in a few words.',
+        trigger: "meeting",
+      },
+      2000,
+      5 * 60_000,
+    );
+    text = [...result.newMessages].reverse().find((r) => r.role === "assistant" && r.content?.trim())?.content?.trim() ?? "";
+  } catch {
+    return null;
+  }
+  if (!text) return null;
+  const ideas = [...text.matchAll(/^\s*[-*]?\s*\**IDEA:?\**:?\s*(.+)$/gim)].map((x) => x[1].replace(/\*+$/, "").trim()).filter(Boolean).slice(0, 3);
+  const summary = text.replace(/^\s*[-*]?\s*\**IDEA:?\**:?.*$/gim, "").trim();
+  await db.update(meetings).set({ summary }).where(eq(meetings.id, id));
+  const { proposeIdea } = await import("./ideas");
+  const pinned: string[] = [];
+  for (const title of ideas) {
+    try {
+      await proposeIdea(title, `Raised at town meeting #${id}${m.topic ? ` (${m.topic})` : ""}.`, mayor.id);
+      pinned.push(title);
+    } catch {
+      /* the board is full, or the Mayor has pinned enough today */
+    }
+  }
+  return { summary, ideas: pinned };
+}
+
+// The last few meetings, for the long table when no meeting is on.
+export async function pastMeetings(limit = 5) {
+  return db.select({ id: meetings.id, topic: meetings.topic, createdAt: meetings.createdAt, summary: meetings.summary }).from(meetings).where(eq(meetings.status, "closed")).orderBy(desc(meetings.id)).limit(limit);
 }

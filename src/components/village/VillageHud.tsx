@@ -22,6 +22,9 @@ interface VillageHudProps {
   // Town meetings (#81): one going on now, and the way to the long table.
   meetingOn: boolean;
   onMeeting: () => void;
+  // Music and little sounds, off unless switched on.
+  soundOn: boolean;
+  onToggleSound: () => void;
 }
 
 function Chip({ label, value, dot }: { label: string; value: string; dot: string }) {
@@ -63,6 +66,9 @@ export default function VillageHud(p: VillageHudProps) {
           title={p.paused ? "Let everyone work again" : "Freeze every villager's actions and scheduled jobs, at any hour"}
         >
           {p.paused ? "▶ Resume everyone" : "❄ Pause everyone"}
+        </button>
+        <button onClick={p.onToggleSound} aria-pressed={p.soundOn} className="village-btn px-2.5 py-1.5 text-xs" title={p.soundOn ? "Sound on: click to mute" : "Sound off: click for music and little sounds"}>
+          {p.soundOn ? "🔊" : "🔇"}
         </button>
         <button onClick={p.onMeeting} className={`village-btn px-3 py-1.5 text-xs ${p.meetingOn ? "village-btn-go" : ""}`} title="The long table in the town hall">
           {p.meetingOn ? "🏛 Meeting on" : "Call meeting"}

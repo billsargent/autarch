@@ -317,6 +317,8 @@ export const meetings = sqliteTable("meetings", {
   status: text("status", { enum: ["open", "closed"] }).notNull().default("open"),
   // Who is answering right now, while a round runs.
   speakingAgentId: integer("speaking_agent_id"),
+  // The Mayor's summary, written when the meeting ends.
+  summary: text("summary"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   endedAt: integer("ended_at", { mode: "timestamp" }),
 });

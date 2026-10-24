@@ -420,6 +420,9 @@ if (!globalForDb.__agentLabSqlite) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN away_started_at INTEGER");
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN away_spend_cap_usd REAL NOT NULL DEFAULT 1");
   }
+  if (!existingCols("meetings").includes("summary")) {
+    sqlite.exec("ALTER TABLE meetings ADD COLUMN summary TEXT");
+  }
   if (!existingCols("agent_settings").includes("meeting_cost_cap_usd")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN meeting_cost_cap_usd REAL NOT NULL DEFAULT 0.25");
   }

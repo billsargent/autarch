@@ -410,6 +410,15 @@ async function main() {
   await daytime();
   const view = async (id: number) => (await meetingRoute.GET(req(`/api/meetings/${id}`, "GET"), { params: Promise.resolve({ id: String(id) }) })).json();
   const patchMeeting = (id: number, body: unknown) => meetingRoute.PATCH(req(`/api/meetings/${id}`, "PATCH", body), { params: Promise.resolve({ id: String(id) }) });
+  // Ending a meeting starts the Mayor's write-up in the background; wait for it.
+  const settleTurns = async (meetingId?: number) => {
+    for (let i = 0; i < 50; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const running = (await db.select().from(workSessions).where(eq(workSessions.status, "running"))).length;
+      const written = meetingId ? (await db.select().from(meetingsT).where(eq(meetingsT.id, meetingId)))[0]?.summary : "n/a";
+      if (!running && written && i > 2) return;
+    }
+  };
   const roundDone = async (id: number) => {
     for (let i = 0; i < 100; i++) {
       const v = await view(id);
@@ -460,6 +469,7 @@ async function main() {
   await updateSettings({ meetingCostCapUsd: 0.25 });
 
   await patchMeeting(mid, { action: "close" });
+  await settleTurns(mid);
   check("an ended meeting takes no more questions", (await patchMeeting(mid, { action: "ask", message: "Hello?" })).status, 409);
   check("…and everyone goes back to work", villagers.villagerStates([gus.id]).get(gus.id)?.inMeeting, false);
   await updateSettings({ bedtime: hm(new Date(Date.now() - 3600_000)), wakeTime: hm(new Date(Date.now() + 3600_000)) });
@@ -475,6 +485,7 @@ async function main() {
   check("…and the owner is told", (await db.select().from(notifications).where(eq(notifications.title, "Mayor Ada called a town meeting"))).length, 1);
   check("there's only ever one meeting", (await power("call_meeting", { topic: "Again" })).includes("already a meeting"), true);
   await patchMeeting(opened.meeting.id, { action: "close" });
+  await settleTurns(opened.meeting.id);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
 
   // --- away mode (#102) ---------------------------------------------------------------------
@@ -870,7 +881,13 @@ async function main() {
   await patchMeeting(echoMeet.meeting.id, { action: "ask", message: "Agreed?" });
   const echoed = await roundDone(echoMeet.meeting.id);
   check("a villager's echoed name is taken off their meeting answer", echoed.transcript.slice(1).every((t: { text: string }) => t.text === "I agree."), true);
+  fake.byAgent["Mayor Ada"] = [{ text: "We all agreed, briefly.\nIDEA: Paint the bridge red" }];
   await patchMeeting(echoMeet.meeting.id, { action: "close" });
+  await settleTurns(echoMeet.meeting.id);
+  const written = (await db.select().from(meetingsT).where(eq(meetingsT.id, echoMeet.meeting.id)))[0];
+  check("when a meeting ends the Mayor writes it up for the records", written.summary, "We all agreed, briefly.");
+  check("…and pins the ideas it raised", (await ideasLib.listIdeas()).some((i) => i.title === "Paint the bridge red" && i.proposedBy === mayor.id), true);
+  check("past meetings show at the long table", (await (await meetingsRoute.GET()).json()).past.some((p: { summary: string | null }) => p.summary === "We all agreed, briefly."), true);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
 
   // --- spending guard rails -----------------------------------------------------------------

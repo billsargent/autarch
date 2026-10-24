@@ -3,6 +3,17 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Sound, a welcome, and meeting write-ups
+
+- **Sound (off until you switch it on).** The 🔇 button in the village bar turns on quiet music,
+  with a day tune and a night tune, plus a chime when something needs your approval and a coin
+  for a new letter. Music and sounds are from the free Ninja Adventure pack.
+- **A welcome for new installs.** The first visit gets a short welcome. If no model key is set,
+  it shows where to enter one.
+- **Meetings are written up.** When you end a meeting, the Mayor writes a short summary for the
+  records (shown at the long table under "Past meetings") and pins any ideas it raised on the
+  notice board for the village to vote on.
+
 ## 2026-10-24 — After a live test run, and spending guard rails
 
 - **Tested with the real model.** One meeting, one vote, one hire interview, one away-mode review

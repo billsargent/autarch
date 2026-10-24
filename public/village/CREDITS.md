@@ -41,6 +41,13 @@ this repository; get the full packs from their authors.
   by pixel for this project. The computer sits on the Serene Village writing desk (LimeZu,
   CC BY 4.0, above), copied in unmodified.
 
+## Sound
+
+- `audio/day.ogg` (`Audio/Musics/5 - Peaceful.ogg`), `audio/night.ogg` (`Audio/Musics/27 - Chill.ogg`),
+  `audio/alert.wav` (`Audio/Sounds/Alert/Alert.wav`) and `audio/letter.wav`
+  (`Audio/Sounds/Bonus/Coin.wav`): from the Ninja Adventure pack by Pixel-boy and AAA (CC0),
+  unmodified. Off until the owner switches sound on in the village bar.
+
 ## Generated files
 
 Every scene's `scenes/<id>.png` and `scenes/<id>.tmj` (the village and each room) is composed

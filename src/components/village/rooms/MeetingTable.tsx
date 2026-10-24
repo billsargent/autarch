@@ -16,6 +16,7 @@ interface MeetingView {
   cost?: number;
   cap?: number;
   busy?: boolean;
+  past?: Array<{ id: number; topic: string | null; createdAt: string; summary: string | null }>;
 }
 
 export default function MeetingTable({ onClose }: { onClose: () => void }) {
@@ -93,6 +94,22 @@ export default function MeetingTable({ onClose }: { onClose: () => void }) {
         <button disabled={sending} onClick={() => void send("/api/meetings", "POST", { topic })} className="village-btn village-btn-go mt-3 px-4 py-2 text-xs">
           🏛 Call the meeting
         </button>
+        {view.past && view.past.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-semibold">Past meetings</p>
+            <ul className="mt-1 space-y-1.5">
+              {view.past.map((p) => (
+                <li key={p.id} className="rounded border-2 border-[#d8c49a] bg-[#fffaf0] p-2 text-xs">
+                  <p className="font-semibold">
+                    {new Date(p.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                    {p.topic ? ` · ${p.topic}` : ""}
+                  </p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-[#5a3d25]">{p.summary ?? "No write-up."}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </ParchmentDialog>
     );
   }

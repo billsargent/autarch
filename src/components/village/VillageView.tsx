@@ -10,6 +10,8 @@ import StampSprite from "./StampSprite";
 import { CELL, STAMPS, stampRect, type StampId } from "./scene";
 import { VILLAGE_SCENE } from "./scenes";
 import { useBuildings } from "../data/useBuildings";
+import { useVillageSound } from "./useVillageSound";
+import WelcomeDialog from "./WelcomeDialog";
 import { BUBBLE_MS, MOOD_BADGE, MOOD_PLACE, bubbleLine, moodLabel, nextHangout, standOffsets, villagerMood } from "./villagerState";
 import { snapshotOf, useVillageData } from "./useVillageData";
 import SceneView, { type VillagerSpec } from "./SceneView";
@@ -49,6 +51,7 @@ export default function VillageView() {
   // Real local time sets the light and puts villagers to bed (#100); the
   // same tick fades speech bubbles.
   const { now: clock, time, phase, night } = useVillageClock(data.bedtime, data.wakeTime);
+  const sound = useVillageSound(phase, data.pending.length, data.unread);
 
   // Idle villagers stroll between hangouts (plaza, market, gates, home…), each
   // on their own timer: a first walk within a few seconds, then every 20–50 s.
@@ -206,6 +209,8 @@ export default function VillageView() {
         onTogglePause={togglePause}
         onShowMail={() => openAction("mail.open")}
         meetingOn={villagers.some((v) => v.inMeeting)}
+        soundOn={sound.soundOn}
+        onToggleSound={sound.toggleSound}
         onMeeting={() => router.push("/village/townhall?open=meeting.open")}
       />
 
@@ -266,6 +271,7 @@ export default function VillageView() {
         )}
 
         {VillageRoom && action && <VillageRoom key={opened} action={action} onClose={() => setAction(null)} />}
+        <WelcomeDialog />
 
         {showPrompt && (
           <ApprovalPrompt

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { MeetingError, callMeeting, currentMeeting, meetingView } from "@/lib/agent/meetings";
+import { MeetingError, callMeeting, currentMeeting, meetingView, pastMeetings } from "@/lib/agent/meetings";
 
 export const dynamic = "force-dynamic";
 
 // The town meeting going on now, if any (#81).
 export async function GET() {
   const m = await currentMeeting();
-  return NextResponse.json(m ? await meetingView(m) : { meeting: null });
+  return NextResponse.json(m ? await meetingView(m) : { meeting: null, past: await pastMeetings() });
 }
 
 // The owner calls a meeting (or joins the one already going).
