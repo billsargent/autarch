@@ -88,7 +88,7 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
       : [];
   const goalsBlock = goalRows.length
     ? goalRows
-        .map((g) => `- [#${g.id} ${g.status}] (priority ${g.priority}) ${g.title}${g.body ? ` — ${g.body}` : ""}`)
+        .map((g) => `- [#${g.id} ${g.status}] (priority ${g.priority}) ${g.title}${g.body ? ` — ${g.body}` : ""}${isWorkTurn && g.notes ? `\n  Notes (latest last):\n  ${g.notes.split("\n").slice(-8).join("\n  ")}` : ""}`)
         .join("\n")
     : isWorkTurn
       ? "(no goals in scope — use manage_goal to set some)"
@@ -156,7 +156,8 @@ DOING TASKS
 - If something is unclear, make a sensible assumption and say what it was, or ask one short question.
 - Afterwards, say in a sentence or two what you did and how it went.
 - The town workspace "${settings.workspaceDir}" is shared by every villager. Sub-folders: skills/ (the town's playbooks, shown to everyone every session), uploads/ (files the human gives you), screenshots/.
-- Your own folder is "${home}": keep your notes there (notes/plan.md for work that spans sessions), and leave your neighbours' folders alone.
+- Your own folder is "${home}": keep your files there, and leave your neighbours' folders alone.
+- Your memory between sessions (docs/agents.md): your goals and their notes (where the work stands; manage_goal with addNote), the skills (how-to playbooks), and your diary, which is written for you after each session. Don't keep separate plan files.
 
 GUARDRAILS
 - Every tool call is risk-checked. The human's settings decide what runs on its own and what waits for their approval.
@@ -172,8 +173,8 @@ FORMATTING
 COST
 - Every model call and every step costs the human money. Fewer, better steps beat long exploring.
 
-NOTIFICATIONS
-- notify_human is for things that truly need the human: an error you can't fix, a decision only they can make, or a milestone worth a letter. Don't spam it.`;
+MESSAGING THE HUMAN
+- message_owner leaves them a message in the conversation; with severity success, warning or critical it also rings their bell as a letter. Use a letter only for what truly needs them: an error you can't fix, a decision only they can make, or a milestone. Don't spam it.`;
 
   // Dynamic tail — changes between turns (status, jobs, goals, skills, journal,
   // human instructions). Only this suffix is re-billed at cache-miss rates.
@@ -203,7 +204,7 @@ NOTIFICATIONS
       ? `🌙 It's night in the village (${settings.bedtime}–${settings.wakeTime}). You were asleep; the human knocked to talk. Keep it brief and don't start any work of your own until morning.`
       : "",
     settings.humanAtKeyboard
-      ? `👤 HUMAN AT KEYBOARD — the operator is physically present at the machine right now. You may coordinate interactive tests with them (e.g. ask them to press keys, observe a screen, or click something and report back). Ask via chat or notify_human; never assume they'll do anything.`
+      ? `👤 HUMAN AT KEYBOARD — the operator is physically present at the machine right now. You may coordinate interactive tests with them (e.g. ask them to press keys, observe a screen, or click something and report back). Ask via chat or message_owner; never assume they'll do anything.`
       : "",
     scope.toolsAvailable !== false
       ? `Tools are available in this conversation. That doesn't mean use them: talk first, and reach for a tool only for a task or a live fact.`
@@ -216,7 +217,7 @@ NOTIFICATIONS
   const workWindowSteps = scope.maxSteps ?? settings.maxAgentSteps;
   const workWindowDefault = `YOUR SCHEDULE (JOBS) — THIS WORK WINDOW
 - A scheduled work window just opened. You have up to **${workWindowMinutes} minutes** and **${workWindowSteps} steps** (one model call = one step). Pace yourself — don't blow through your step budget on tiny actions. Use multi-step operations wisely: read broadly, then act.${jobBlock ? `\n- Active job:\n${jobBlock}` : "\n- (this work window has no job record)"}
-- FIRST: read ${home}/notes/plan.md (read_file) to see what you were working on last session. If it doesn't exist, create it. Update it as you make progress.
+- FIRST: look at your goals below; each one's notes say where you left off. Pick one, work on it, and add a note (manage_goal addNote) as you make progress and before the window closes.
 - Report your progress in this session (the job's home conversation) — don't scatter updates across other chats.`;
   const focusedChatDefault = `THIS CONVERSATION
 - You're chatting with the human. Reply to what they said, in your own voice, briefly.

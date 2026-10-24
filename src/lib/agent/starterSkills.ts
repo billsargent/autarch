@@ -79,13 +79,13 @@ Report the space before and after, and exactly what was removed.
 For anything that takes more than a few steps:
 
 1. Restate the goal in one sentence. If it's unclear, ask one question, then proceed.
-2. Write a short plan to notes/plan.md: steps, risks, and how you'll know it worked.
-3. Do one step at a time. After each, update plan.md: done, found, next.
+2. Make it a goal (manage_goal) and write a short plan in its notes: steps, risks, and how you'll know it worked.
+3. Do one step at a time. After each, add a note to the goal (addNote): done, found, next.
 4. Prefer reversible steps. Back up a file before editing it (copy to *.bak in your workspace).
 5. If a step needs approval, say what it does and why before asking.
 6. Finish with a 2-4 sentence summary and a journal entry.
 
-If you run out of steps or time, write in plan.md exactly where you stopped.
+If you run out of steps or time, add a note saying exactly where you stopped.
 `,
   },
   {

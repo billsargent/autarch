@@ -11,6 +11,7 @@ import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
 import { isChatMode, resolveToolAccess } from "./chatMode";
 import { HEARTBEAT_MS, TurnBusyError, claimTurn, heartbeat, isCancelRequested } from "./turnLock";
 import { resolveRun, type RunSettings } from "./providers";
+import { autoJournal, importPlanFile } from "./memory";
 import { BudgetError, actionsInLastHour, budgetProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
 
 export { BudgetError } from "./agents";
@@ -301,6 +302,10 @@ async function finishSession(
       reason: reason ?? null,
     })
     .where(eq(workSessions.id, session.id));
+  // The diary writes itself (#69).
+  if (status === "completed" || status === "terminated") {
+    await autoJournal(session.id).catch(() => null);
+  }
 }
 
 export interface AgentTurnResult {
@@ -404,6 +409,8 @@ export async function runAgentTurn(opts: {
       chatMode: talkOnly ? "conversation" : conversation.chatMode,
       toolCount: tools.length,
     });
+    // An old notes/plan.md moves into a goal's notes, once (#71).
+    await importPlanFile(agent, settings.workspaceDir).catch(() => false);
     const systemPrompt = await buildSystemPrompt(settings, {
       trigger,
       jobId: opts.jobId ?? null,

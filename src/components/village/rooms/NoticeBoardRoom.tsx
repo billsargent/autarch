@@ -294,7 +294,7 @@ function GoalEditor({
         />
       </label>
       <label className="mt-3 block text-xs font-semibold">
-        Notes
+        Details
         <textarea
           name="body"
           value={form.body}
@@ -304,6 +304,12 @@ function GoalEditor({
           className={`${field} resize-y`}
         />
       </label>
+      {goal?.notes && (
+        <div className="mt-3 text-xs">
+          <p className="font-semibold">Where it stands (the villager&apos;s notes)</p>
+          <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded border-2 border-[#d8c49a] bg-white/60 p-2 font-sans">{goal.notes}</pre>
+        </div>
+      )}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="block text-xs font-semibold">
           Priority (1 = most urgent)

@@ -328,6 +328,9 @@ export const goals = sqliteTable("goals", {
     .notNull()
     .default("backlog"),
   priority: integer("priority").notNull().default(3),
+  // Where the work stands (#68): the villager reads and updates these instead
+  // of a free-form notes/plan.md.
+  notes: text("notes"),
   conversationId: integer("conversation_id").references(() => conversations.id, {
     onDelete: "set null",
   }),

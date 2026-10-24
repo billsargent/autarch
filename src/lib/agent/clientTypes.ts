@@ -158,6 +158,8 @@ export interface GoalRow {
   createdAt: string;
   updatedAt: string;
   agentId: number | null;
+  // Where the work stands, kept by the villager (#68).
+  notes?: string | null;
 }
 
 export interface NotificationRow {

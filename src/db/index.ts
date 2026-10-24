@@ -392,6 +392,23 @@ if (!globalForDb.__agentLabSqlite) {
   if (!existingCols("agent_settings").includes("vote_cost_cap_usd")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN vote_cost_cap_usd REAL NOT NULL DEFAULT 0.15");
   }
+  if (!existingCols("goals").includes("notes")) {
+    sqlite.exec("ALTER TABLE goals ADD COLUMN notes TEXT");
+  }
+  // One messaging tool (#70): lists naming the old two name the new one.
+  for (const [table, col] of [["agents", "enabled_tools"], ["agent_settings", "enabled_tools"]] as const) {
+    const rows = sqlite.prepare(`SELECT id, ${col} AS tools FROM ${table} WHERE ${col} LIKE '%notify_human%' OR ${col} LIKE '%post_message%'`).all() as Array<{ id: number; tools: string }>;
+    for (const r of rows) {
+      let list: string[] = [];
+      try {
+        list = JSON.parse(r.tools);
+      } catch {
+        continue;
+      }
+      const next = [...new Set(list.map((t) => (t === "notify_human" || t === "post_message" ? "message_owner" : t)))];
+      sqlite.prepare(`UPDATE ${table} SET ${col} = ? WHERE id = ?`).run(JSON.stringify(next), r.id);
+    }
+  }
   if (!existingCols("work_sessions").includes("model")) {
     sqlite.exec("ALTER TABLE work_sessions ADD COLUMN model TEXT");
   }

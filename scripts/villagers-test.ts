@@ -72,7 +72,7 @@ async function main() {
       role: "Fisherman",
       persona: "A grumpy old fisherman who loves puns.",
       model: "tom-model",
-      enabledTools: ["read_file", "list_directory", "update_journal", "manage_goal", "list_goals", "notify_human", "run_shell_command"],
+      enabledTools: ["read_file", "list_directory", "update_journal", "manage_goal", "list_goals", "message_owner", "run_shell_command"],
     })
   ).agent;
   check("a new villager gets a home folder of their own", tom.home, "villagers/tom");
@@ -101,7 +101,7 @@ async function main() {
       tools: [
         { name: "update_journal", args: { title: "Caught a big one" } },
         { name: "manage_goal", args: { title: "Mend the nets" } },
-        { name: "notify_human", args: { title: "Fish for supper" } },
+        { name: "message_owner", args: { title: "Fish for supper", message: "Caught plenty.", severity: "success" } },
       ],
     },
     { text: "Done, and no carp about it." },
@@ -113,7 +113,7 @@ async function main() {
   check("…that his folder is his own", step.system.includes(`Your own folder is "${path.join(tmp, "ws")}/villagers/tom"`), true);
   check("…and who his neighbours are", step.system.includes("YOUR NEIGHBOURS") && step.system.includes("Mayor Ada (Mayor)"), true);
   check("Tom's turn uses Tom's model", step.model, "tom-model");
-  check("Tom only gets his tools, and never beyond the town's policy", step.tools.sort(), ["list_directory", "list_goals", "manage_goal", "notify_human", "read_file", "update_journal"]);
+  check("Tom only gets his tools, and never beyond the town's policy", step.tools.sort(), ["list_directory", "list_goals", "manage_goal", "message_owner", "read_file", "update_journal"]);
   check("his diary entry is his", (await db.select().from(journalEntries).where(eq(journalEntries.title, "Caught a big one")))[0]?.agentId, tom.id);
   check("his goal is his", (await db.select().from(goals).where(eq(goals.title, "Mend the nets")))[0]?.agentId, tom.id);
   const letter = (await db.select().from(notifications).where(eq(notifications.title, "Fish for supper")))[0];
@@ -832,6 +832,28 @@ async function main() {
   await runAgentTurn({ userMessage: "hi", agentId: cal.id });
   check("each override that's on is named in the prompt", fake.seen.filter((x) => x.system.startsWith("You are Cal")).pop()?.system.includes("Supervisor overrides are ON for reading secrets"), true);
   await updateSettings({ allowSecretReads: false });
+
+  // --- the memory model (#66-#71) -------------------------------------------------------------
+  const notesOut = await executeTool("manage_goal", { title: "Fix the roof", addNote: "Bought nails." }, town, ctxCal);
+  const roofId = Number(/#(\d+)/.exec(notesOut.output)?.[1]);
+  await executeTool("manage_goal", { goalId: roofId, addNote: "Half the roof done; ladder is in the shed." }, town, ctxCal);
+  const roof = (await db.select().from(goals).where(eq(goals.id, roofId)))[0];
+  check("a goal keeps dated notes, added to as work goes on", [roof.notes?.split("\n").length, roof.notes?.includes("ladder is in the shed"), roof.title], [2, true, "Fix the roof"]);
+  check("…shown when the goals are listed", (await executeTool("list_goals", {}, town, ctxCal)).output.includes("Half the roof done"), true);
+  const planDir = path.join(tmp, "ws", cal.home, "notes");
+  fs.mkdirSync(planDir, { recursive: true });
+  fs.writeFileSync(path.join(planDir, "plan.md"), "Step 1: sand the planks.");
+  fake.byAgent.Cal = [{ tools: [{ name: "list_goals", args: {} }] }, { text: "Sanding next." }];
+  const { conversationId: memChat } = await runAgentTurn({ userMessage: "what's next?", agentId: cal.id });
+  const ongoing = (await db.select().from(goals).where(eq(goals.title, "Ongoing work"))).find((g) => g.agentId === cal.id);
+  check("an old plan.md moves into a goal's notes, once", [ongoing?.notes?.includes("sand the planks"), fs.existsSync(path.join(planDir, "plan.md")), fs.existsSync(path.join(planDir, "plan.md.imported"))], [true, false, true]);
+  const memTitle = (await db.select().from(conversations).where(eq(conversations.id, memChat)))[0].title;
+  const auto = (await db.select().from(journalEntries).where(eq(journalEntries.agentId, cal.id))).filter((j) => j.title === `Chat: ${memTitle}`);
+  check("after a session that did something, the diary writes itself", [auto.length, auto[0]?.body?.includes("Used list_goals."), auto[0]?.body?.includes('Ended with: "Sanding next."')], [1, true, true]);
+  const msgOut = await executeTool("message_owner", { message: "The roof is done." }, town, { ...ctxCal, conversationId: memChat });
+  check("one tool messages the owner: info stays in the conversation", [msgOut.output, (await msgsOf(memChat)).some((m) => m.content === "The roof is done.")], [`Message left in conversation #${memChat}.`, true]);
+  const loud = await executeTool("message_owner", { message: "The roof leaks!", severity: "warning", title: "Leak" }, town, { ...ctxCal, conversationId: memChat });
+  check("…a warning also rings the bell", [loud.output.includes("and sent as letter #"), (await db.select().from(notifications).where(eq(notifications.title, "Leak"))).length], [true, 1]);
 
   fake.close();
   try {

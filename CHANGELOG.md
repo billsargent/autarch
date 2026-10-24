@@ -3,6 +3,19 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — How villagers remember
+
+- **Goals have notes (#68).** A villager keeps where the work stands in its goal's notes,
+  adding a dated line as it goes. The notes are shown in its work windows, and on the notice
+  board for you. They replace the old `notes/plan.md`, which is moved over once (#71).
+- **The diary writes itself (#69).** After every work window, and every chat that did something,
+  a short entry says which tools ran, how it ended and what it cost. Villagers can still write
+  their own entries and notes about neighbours.
+- **One way to message you (#70).** `message_owner` replaces `notify_human` and `post_message`. A
+  normal message is left in the conversation; a success, warning or critical one also comes as a
+  letter.
+- The whole model is written down in `docs/agents.md`.
+
 ## 2026-10-24 — The old pages retire
 
 - **The village is the whole app now (#43, #76–#79).** The old Command Center pages are gone.

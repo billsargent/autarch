@@ -268,7 +268,7 @@ export const ALL_TOOL_DEFINITIONS = [
     function: {
       name: "manage_goal",
       description:
-        "Create, update, or retire a goal on your personal goals board. Record what you want to accomplish on this machine and keep it up to date so you can pick work up in future sessions.",
+        "Create, update, or retire a goal on your goals board. Each goal has notes: where the work stands, what you found, what's next. Keep them up to date (addNote) so you can pick the work up in a later session; they are your memory of the work.",
       parameters: {
         type: "object",
         properties: {
@@ -277,12 +277,14 @@ export const ALL_TOOL_DEFINITIONS = [
           status: { type: "string", enum: ["backlog", "in_progress", "done", "abandoned"] },
           priority: { type: "number", description: "1 = highest priority. Default 3." },
           goalId: { type: "number", description: "Provide to update an existing goal." },
+          notes: { type: "string", description: "Replace the goal's notes: where the work stands, what's next. Your memory between sessions." },
+          addNote: { type: "string", description: "Add one dated line to the goal's notes (keeps the rest)." },
           conversationId: {
             type: "number",
             description: "Optional. Bind this goal to a specific chat session (defaults to the current session on create). Leave unset to make it a global goal used in work windows.",
           },
         },
-        required: ["title"],
+        required: [],
       },
     },
   },
@@ -294,43 +296,23 @@ export const ALL_TOOL_DEFINITIONS = [
       parameters: { type: "object", properties: {} },
     },
   },
+  // One way to reach the human (#70): a message in the conversation, and for
+  // anything more than "info" a letter in their mailbox too.
   {
     type: "function" as const,
     function: {
-      name: "notify_human",
+      name: "message_owner",
       description:
-        "Raise an alert/notification to the human operator (shown in the dashboard bell). Use for things that genuinely need attention: an error you can't fix, a decision only a human can make, or something important you finished. Optionally also posts into a chat session.",
+        "Send the human a message. It's left in the conversation (the current one, or conversationId). With severity success, warning or critical it also rings their bell as a letter. Use it for progress they'd want, a question only they can answer, an error you can't fix, or a finished milestone. A few per session at most.",
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string" },
-          body: { type: "string" },
-          severity: { type: "string", enum: ["info", "success", "warning", "critical"] },
-          conversationId: {
-            type: "number",
-            description: "Optional. Also post the alert into this chat session. Defaults to the current session.",
-          },
+          message: { type: "string", description: "What to tell them." },
+          title: { type: "string", description: "A short headline, for a letter." },
+          severity: { type: "string", enum: ["info", "success", "warning", "critical"], description: "Default info (no letter)." },
+          conversationId: { type: "number", description: "Optional. Which conversation; defaults to the current one." },
         },
-        required: ["title"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "post_message",
-      description:
-        "Send a message to the human in a specific chat session (defaults to the current session). Use this to report progress, results, or ask a question even when the human isn't actively chatting — it will be waiting for them in that session when they open it. Use sparingly (max 4 per session).",
-      parameters: {
-        type: "object",
-        properties: {
-          content: { type: "string", description: "The message to post to the human." },
-          conversationId: {
-            type: "number",
-            description: "Optional. Which session to post into. Defaults to the current session.",
-          },
-        },
-        required: ["content"],
+        required: ["message"],
       },
     },
   },
@@ -699,8 +681,9 @@ export function evaluateToolRisk(
     case "manage_goal":
     case "list_goals":
       return { risk: "low", reason: "Self-contained goals-board bookkeeping." };
+    case "message_owner":
     case "notify_human":
-      return { risk: "low", reason: "Raises a notification for the human; no system access." };
+      return { risk: "low", reason: "A message for the human; no system access." };
     case "post_message":
       return { risk: "low", reason: "Posts a message into a chat session; no system access." };
     case "ask_villager":
@@ -835,6 +818,9 @@ export async function executeTool(
       return manageGoal(args, ctx);
     case "list_goals":
       return listGoals(ctx);
+    case "message_owner":
+      return messageOwner(args, ctx);
+    // The old two (#70), for calls already in flight.
     case "notify_human":
       return notifyHuman(args, ctx);
     case "post_message":
@@ -1248,12 +1234,27 @@ async function manageGoal(args: Record<string, unknown>, ctx?: ToolContext) {
   const status = (args.status as "backlog" | "in_progress" | "done" | "abandoned") || "backlog";
   const priority = Number(args.priority) || 3;
   const goalId = args.goalId ? Number(args.goalId) : undefined;
+  // Notes (#68): `notes` replaces them, `addNote` adds a dated line.
+  const notesArg = typeof args.notes === "string" ? args.notes.trim().slice(0, 4000) : undefined;
+  const addNote = typeof args.addNote === "string" ? args.addNote.trim().slice(0, 1000) : "";
+  const stamp = () => new Date().toISOString().slice(0, 16).replace("T", " ");
   // Default to the current session so goals created in a chat are bound there.
   const conversationId =
     args.conversationId !== undefined ? Number(args.conversationId) || null : ctx?.conversationId ?? null;
 
   if (goalId) {
-    const updateValues: Record<string, unknown> = { title, body, status, priority, updatedAt: new Date() };
+    const [current] = await db.select().from(goals).where(and(eq(goals.id, goalId), ownedBy(goals.agentId, ctx)));
+    const updateValues: Record<string, unknown> = {
+      title: args.title ? title : current?.title ?? title,
+      body: "body" in args ? body : current?.body ?? null,
+      status: args.status ? status : current?.status ?? status,
+      priority: args.priority ? priority : current?.priority ?? priority,
+      updatedAt: new Date(),
+    };
+    if (notesArg !== undefined || addNote) {
+      const base = notesArg !== undefined ? notesArg : current?.notes ?? "";
+      updateValues.notes = [base, addNote && `- ${stamp()} ${addNote}`].filter(Boolean).join("\n").slice(-6000);
+    }
     if ("conversationId" in args) updateValues.conversationId = conversationId;
     const updated = await db
       .update(goals)
@@ -1270,7 +1271,7 @@ async function manageGoal(args: Record<string, unknown>, ctx?: ToolContext) {
   }
   const inserted = await db
     .insert(goals)
-    .values({ title, body, status, priority, conversationId, agentId: ctx?.agentId ?? null })
+    .values({ title, body, status, priority, conversationId, agentId: ctx?.agentId ?? null, notes: [notesArg, addNote && `- ${stamp()} ${addNote}`].filter(Boolean).join("\n") || null })
     .returning();
   return {
     output: `Created goal #${inserted[0].id}: ${title} (${status}, priority ${priority})`,
@@ -1283,7 +1284,7 @@ async function listGoals(ctx?: ToolContext) {
   const rows = await db.select().from(goals).where(ownedBy(goals.agentId, ctx)).orderBy(asc(goals.priority), desc(goals.updatedAt));
   const text = rows.length
     ? rows
-        .map((g) => `#${g.id} [${g.status}] (p${g.priority}) ${g.title}${g.body ? ` — ${g.body}` : ""}`)
+        .map((g) => `#${g.id} [${g.status}] (p${g.priority}) ${g.title}${g.body ? ` — ${g.body}` : ""}${g.notes ? `\n  Notes:\n  ${g.notes.split("\n").slice(-15).join("\n  ")}` : ""}`)
         .join("\n")
     : "(goals board is empty)";
   return { output: text, summary: "list goals" };
@@ -1292,6 +1293,28 @@ async function listGoals(ctx?: ToolContext) {
 // ---------------------------------------------------------------------------
 // Notifications / DB / downloads / editing / screenshots
 // ---------------------------------------------------------------------------
+
+async function messageOwner(args: Record<string, unknown>, ctx?: ToolContext) {
+  const message = String(args.message ?? "").trim();
+  if (!message) return { output: "Refused: say something (`message`).", summary: "message refused" };
+  const severity = ["success", "warning", "critical"].includes(String(args.severity)) ? (String(args.severity) as "success" | "warning" | "critical") : "info";
+  const conversationId = args.conversationId ? Number(args.conversationId) : ctx?.conversationId ?? null;
+  const said: string[] = [];
+  if (conversationId) {
+    const posted = await postMessage({ content: severity === "info" ? message : `📣 ${args.title ? `${String(args.title)}\n\n` : ""}${message}`, conversationId }, ctx);
+    if (posted.summary.startsWith("post_message #")) said.push(`left in conversation #${conversationId}`);
+    else if (severity === "info") return { output: posted.output, summary: posted.summary };
+  }
+  if (severity !== "info" || !conversationId) {
+    const title = args.title ? String(args.title) : message.split("\n")[0].slice(0, 80);
+    const [row] = await db
+      .insert(notifications)
+      .values({ title, body: message, severity: severity === "info" ? "info" : severity, source: ctx?.agentName ?? "agent", agentId: ctx?.agentId ?? null })
+      .returning();
+    said.push(`sent as letter #${row.id}`);
+  }
+  return { output: `Message ${said.join(" and ")}.`, summary: `message (${severity})` };
+}
 
 async function notifyHuman(args: Record<string, unknown>, ctx?: ToolContext) {
   const title = String(args.title || "Agent notification");
