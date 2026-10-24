@@ -306,6 +306,23 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     ended_at INTEGER
   )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS economy (
+    id INTEGER PRIMARY KEY,
+    wheat INTEGER NOT NULL DEFAULT 0,
+    bread INTEGER NOT NULL DEFAULT 6,
+    shortage INTEGER NOT NULL DEFAULT 0,
+    last_tick_day TEXT
+  )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS buildings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    plot_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'proposed',
+    proposed_by INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    ready_at INTEGER,
+    keeper_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
   sqlite.exec(`CREATE TABLE IF NOT EXISTS ideas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,

@@ -4,6 +4,7 @@
 //                       monitor full of code, a keyboard, a mouse and a mug
 //   col 2,    rows 0–1  an acoustic guitar
 //   col 3,    row 0     a wall calendar
+//   cols 4–7, rows 0–2  a wheat field with a fence (the village farm, #106)
 // The pixels are this project's own; the desk underneath is from "Serene
 // Village" by LimeZu (CC BY 4.0). See public/village/CREDITS.md.
 // Run with: npm run village:custom-art (then npm run village:map).
@@ -13,8 +14,8 @@ import sharp from "sharp";
 
 const PUBLIC = path.join(process.cwd(), "public");
 const OUT = path.join(PUBLIC, "village", "tiles", "autarch-custom.png");
-const W = 64;
-const H = 32;
+const W = 128;
+const H = 48;
 
 type RGBA = [number, number, number, number];
 const PALETTE: Record<string, RGBA> = {
@@ -36,6 +37,13 @@ const PALETTE: Record<string, RGBA> = {
   D: [54, 32, 20, 255], // sound hole
   g: [70, 44, 26, 255], // bridge
   R: [196, 64, 54, 255], // calendar band, today
+  s: [122, 84, 48, 255], // soil
+  t: [96, 64, 36, 255], // soil furrow
+  h: [228, 196, 92, 255], // wheat
+  j: [250, 226, 128, 255], // wheat highlight
+  q: [176, 140, 60, 255], // wheat stalk
+  f: [150, 104, 60, 255], // fence
+  z: [110, 74, 42, 255], // fence post
   w: [250, 246, 236, 255], // paper
 };
 
@@ -131,6 +139,23 @@ const CALENDAR = {
   ],
 };
 
+// The wheat field: a fence round the edge, furrows of soil and rows of
+// wheat, drawn by rule rather than by hand (64×48).
+function wheatField(buf: Buffer, x0: number, y0: number) {
+  for (let y = 0; y < 48; y++) {
+    for (let x = 0; x < 64; x++) {
+      let ch: string;
+      const edge = x < 2 || x > 61 || y < 3 || y > 45;
+      if (edge) ch = (x % 8 === 0 || x === 63) && (y < 3 || y > 45) ? "z" : y === 1 || y === 46 || x === 0 || x === 63 ? "f" : ".";
+      else if (y % 6 === 5) ch = "t";
+      else if (y % 6 >= 1 && (x + Math.floor(y / 6)) % 3 !== 0) ch = y % 6 === 1 && x % 3 === 1 ? "j" : y % 6 >= 3 ? "q" : "h";
+      else ch = "s";
+      if (ch === ".") continue;
+      buf.set(PALETTE[ch], ((y0 + y) * W + x0 + x) * 4);
+    }
+  }
+}
+
 function draw(buf: Buffer, art: { x: number; y: number; rows: string[] }) {
   art.rows.forEach((row, dy) => {
     [...row].forEach((ch, dx) => {
@@ -153,6 +178,7 @@ async function main() {
     .toBuffer();
   for (let y = 0; y < 32; y++) desk.copy(canvas, y * W * 4, y * 32 * 4, (y + 1) * 32 * 4);
   for (const art of [COMPUTER, KEYBOARD, MUG, GUITAR, CALENDAR]) draw(canvas, art);
+  wheatField(canvas, 64, 0);
   await sharp(canvas, { raw: { width: W, height: H, channels: 4 } }).png().toFile(OUT);
   console.log(`wrote ${path.relative(process.cwd(), OUT)}`);
 }

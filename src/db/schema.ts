@@ -230,6 +230,29 @@ export const votes = sqliteTable("votes", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
+// Buildings on the village's plots (#105) and who keeps them (#106).
+export const buildings = sqliteTable("buildings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind", { enum: ["house", "farm", "bakery", "workshop"] }).notNull(),
+  plotId: text("plot_id").notNull(),
+  status: text("status", { enum: ["proposed", "building", "built", "declined"] }).notNull().default("proposed"),
+  // Who proposed it; empty = the owner.
+  proposedBy: integer("proposed_by").references(() => agents.id, { onDelete: "set null" }),
+  readyAt: integer("ready_at", { mode: "timestamp" }),
+  keeperId: integer("keeper_id").references(() => agents.id, { onDelete: "set null" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+});
+
+// The village's stores (#106): one row, updated once a day.
+export const economy = sqliteTable("economy", {
+  id: integer("id").primaryKey(),
+  wheat: integer("wheat").notNull().default(0),
+  bread: integer("bread").notNull().default(6),
+  // Loaves short at the last day's meals.
+  shortage: integer("shortage").notNull().default(0),
+  lastTickDay: text("last_tick_day"),
+});
+
 // Town meetings (#81): the owner (or the Mayor) asks, and each villager at
 // the meeting answers in turn. The transcript is a conversation of the
 // Mayor's; each villager also has a thread of their own for the meeting,

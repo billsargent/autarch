@@ -3,6 +3,23 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — The village grows, with a farm and a bakery
+
+- **New land (#105).** The village has spread: there's open land to the north and west, with
+  the roads running out to it and four building plots beside them.
+  - The Mayor can propose a house, farm, bakery or workshop on a plot, and you decide at the new
+    **map table** in your home. You can also build something yourself.
+  - A building takes half a day of scaffolding.
+  - Each house adds beds for two more villagers, which raises how many the village has room for.
+- **A farm and a bakery (#106).** Once a day the farm grows wheat, the bakery bakes it into
+  bread, and everyone eats a loaf.
+  - Click the farm or bakery to choose a **keeper**. It produces three times as much, and the
+    keeper spends their spare time there.
+  - The **pantry** at home shows the stores. Running short of bread lowers morale, but never
+    stops work.
+  - No model calls: it's simple bookkeeping.
+- The farm's wheat field is new pixel art.
+
 ## 2026-10-24 — Ideas, votes and free time
 
 - **Ideas on the notice board (#98).**

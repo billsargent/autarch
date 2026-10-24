@@ -173,6 +173,13 @@ async function runDueJobs() {
   }
   sleptLogged = false;
 
+  // Once a day: the farm, the bakery and the village's meals (#106).
+  try {
+    if (await (await import("@/lib/agent/economy")).dailyEconomy()) console.log("[worker] the village grew, baked and ate for the day");
+  } catch (err) {
+    console.error(`[worker] the day's economy failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // Once a day, the village votes on the oldest open idea (#98).
   try {
     const voted = await (await import("@/lib/agent/ideas")).dailyVote();

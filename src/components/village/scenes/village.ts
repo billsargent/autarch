@@ -2,7 +2,7 @@
 // villagers walk to; buildings with a room open it, outdoor things (the notice
 // board) open their dialogs in place, and the rest link to their Command
 // Center page until their room is built.
-import type { Rect, SceneLayout } from "../scene";
+import { shiftLayout, type Rect, type SceneLayout } from "../scene";
 
 // Roads are two tiles wide so the path edges render cleanly.
 const ROADS: Rect[] = [
@@ -15,7 +15,9 @@ const ROADS: Rect[] = [
   { col: 27, row: 0, w: 2, h: 9 }, // north road, out of town
 ];
 
-export const VILLAGE_SCENE: SceneLayout = {
+// The village as first laid out; VILLAGE_SCENE below moves it to make room
+// for building plots to the north and west (#105).
+const ORIGINAL: SceneLayout = {
   id: "village",
   title: "The village",
   cols: 40,
@@ -130,4 +132,55 @@ export const VILLAGE_SCENE: SceneLayout = {
   ],
   spawn: "cot",
   hangouts: ["c", "nb", "cot", "tc", "wg", "ng", "obs", "lib", "gt"],
+};
+
+// Land to the north and west (#105): the village moved 7 tiles right and 6
+// down, the roads out of town carried on to the new edges, and four plots
+// beside them, two along each road.
+const DC = 7;
+const DR = 6;
+const moved = shiftLayout(ORIGINAL, DC, DR);
+const NORTH_ROAD: Rect = { col: 27 + DC, row: 0, w: 2, h: DR };
+const WEST_ROAD: Rect = { col: 0, row: 9 + DR, w: DC, h: 2 };
+
+export const VILLAGE_SCENE: SceneLayout = {
+  ...moved,
+  paths: { ...moved.paths!, rects: [...moved.paths!.rects, NORTH_ROAD, WEST_ROAD] },
+  walkable: [...moved.walkable, NORTH_ROAD, WEST_ROAD],
+  decor: [
+    ...moved.decor,
+    { stamp: "svTree", col: 10, row: 1 },
+    { stamp: "roundTree", col: 21, row: 2 },
+    { stamp: "pineTree", col: 44, row: 1 },
+    { stamp: "svTree", col: 1, row: 5 },
+    { stamp: "leafyTree", col: 1, row: 25 },
+    // A sign on each empty plot.
+    { stamp: "svSign", col: 29, row: 4 },
+    { stamp: "svSign", col: 40, row: 4 },
+    { stamp: "svSign", col: 4, row: 13 },
+    { stamp: "svSign", col: 4, row: 21 },
+  ],
+  waypoints: [
+    // The gates move out to the new edges.
+    ...moved.waypoints.map((w) => (w.id === "ng" ? { ...w, y: 0.6 } : w.id === "wg" ? { ...w, x: 0.6 } : w)),
+    { id: "nrl", x: 34.5, y: 3.5 }, // north road, by the plots
+    { id: "nrr", x: 35.5, y: 3.5 },
+    { id: "wrt", x: 3.5, y: 15.4 }, // west road, by the plots
+    { id: "wrb", x: 3.5, y: 16.6 },
+  ],
+  edges: [
+    ...moved.edges.filter(([a, b]) => !(a === "ng" && b === "nj") && !(a === "wg" && b === "tl")),
+    ["ng", "nrl"],
+    ["nrl", "nrr"],
+    ["nrr", "nj"],
+    ["wg", "wrt"],
+    ["wrt", "wrb"],
+    ["wrb", "tl"],
+  ],
+  plots: [
+    { id: "north-1", col: 29, row: 1, w: 4, h: 4, door: "nrl" },
+    { id: "north-2", col: 37, row: 1, w: 4, h: 4, door: "nrr" },
+    { id: "west-1", col: 1, row: 10, w: 4, h: 4, door: "wrt" },
+    { id: "west-2", col: 1, row: 18, w: 4, h: 4, door: "wrb" },
+  ],
 };

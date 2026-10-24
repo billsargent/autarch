@@ -217,6 +217,24 @@ day:
 
 None of this costs anything: movement is decided by the app from real state, not by model calls.
 
+**The village grows.** There are four plots on the new land north and west of town, two along
+each road.
+
+- The Mayor proposes a building (`propose_building`): a house, a farm, a bakery or a workshop.
+- The owner approves or declines it at the map table at home, or builds something there directly.
+- A building takes half a day of scaffolding.
+- Each finished house adds two beds, which raises the village's room for villagers (the
+  `maxPopulation` setting plus the beds) that hiring respects.
+
+**Food.** Once a day, in the daytime, with no model calls:
+
+- each farm grows wheat, 6 with a keeper or 2 without;
+- each bakery bakes it into bread, up to 6 loaves with a keeper or 2 without;
+- every active villager eats a loaf.
+
+A keeper is a villager the owner assigns. They spend their spare time at the building. If the
+village runs short of bread, everyone's morale dips. Food never stops anyone working.
+
 ## 10. Changing this charter
 
 The charter changes only through the owner. Agents may **propose** changes as ideas, but even an

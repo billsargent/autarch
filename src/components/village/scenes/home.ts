@@ -66,6 +66,22 @@ export const HOME_SCENE = interior({
       ],
     },
     {
+      id: "maptable",
+      label: "Map table",
+      role: "The land around the village: plots, building proposals, building",
+      door: "map",
+      action: "home.map",
+      parts: [{ stamp: "readingTable", col: 10, row: 7 }],
+    },
+    {
+      id: "pantry",
+      label: "Pantry",
+      role: "The village's wheat and bread",
+      door: "pantry",
+      action: "home.pantry",
+      parts: [{ stamp: "drawers", col: 14, row: 7 }],
+    },
+    {
       id: "guitar",
       label: "Guitar",
       role: "Play a few chords",
@@ -76,7 +92,6 @@ export const HOME_SCENE = interior({
   ],
   decor: [
     { stamp: "bedRed", col: 13, row: 3 },
-    { stamp: "drawers", col: 14, row: 7 },
     { stamp: "pottedPlant", col: 8, row: 3 },
     { stamp: "clayPot", col: 13, row: 8 },
   ],
@@ -88,6 +103,8 @@ export const HOME_SCENE = interior({
     { id: "hearth", x: 10.5, y: 6.2 },
     { id: "guitar", x: 12.5, y: 6 },
     { id: "bed", x: 13.5, y: 6.8 },
+    { id: "map", x: 11, y: 9.5 },
+    { id: "pantry", x: 13.6, y: 9.5 },
   ],
   edges: [
     ["center", "computer"],
@@ -97,6 +114,8 @@ export const HOME_SCENE = interior({
     ["center", "hearth"],
     ["center", "guitar"],
     ["center", "bed"],
+    ["center", "map"],
+    ["map", "pantry"],
   ],
 });
 

@@ -66,6 +66,11 @@ export async function runMayorTool(tool: string, args: Record<string, unknown>, 
       return callMeetingTool(mayor, args, ctx);
     case "call_vote":
       return callVoteTool(args, ctx);
+    case "propose_building": {
+      const busy = notWhileAnswering(ctx);
+      if (busy) return busy;
+      return (await import("./buildings")).proposeBuildingTool(args, ctx);
+    }
     default:
       return refused(`unknown power "${tool}".`);
   }

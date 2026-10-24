@@ -2,6 +2,7 @@ import { db, sqlite } from "@/db";
 import { agents, conversations, hireRequests, notifications } from "@/db/schema";
 import { eq, inArray, ne } from "drizzle-orm";
 import { createVillager, effectiveTools, ensureMayor, population, validateAgentInput, type AgentInput, type AgentRow } from "./agents";
+import { populationCap } from "./buildings";
 import { tierAllows } from "./mayorTools";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import type { ToolContext } from "./tools";
@@ -28,10 +29,12 @@ function openRequests(proposedBy?: number): number {
 }
 
 // Room for one more villager? `waiting` counts requests already in the queue.
+// The room is the setting plus the beds in finished houses (#105).
 export function populationProblem(settings: AgentSettingsRow, waiting = 0): string | null {
   const living = population();
-  return living + waiting >= settings.maxPopulation
-    ? `the village is full (${living} living here${waiting ? `, ${waiting} more waiting to join` : ""}, room for ${settings.maxPopulation}). Only the owner can make room.`
+  const room = populationCap(settings);
+  return living + waiting >= room
+    ? `the village is full (${living} living here${waiting ? `, ${waiting} more waiting to join` : ""}, room for ${room}). The owner can make room, or the village can build a house.`
     : null;
 }
 

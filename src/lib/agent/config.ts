@@ -183,6 +183,7 @@ export const DEFAULT_ENABLED_TOOLS = [
   "resume_agent",
   "call_meeting",
   "call_vote",
+  "propose_building",
   // Ideas (#98): anyone may propose.
   "propose_idea",
   "note_about",

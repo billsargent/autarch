@@ -587,6 +587,23 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "propose_building",
+      description:
+        "Mayor only. Propose a new building on one of the empty plots north and west of town: a house (beds for two more villagers), a farm, a bakery or a workshop. The owner approves it; then it takes about half a day to build.",
+      parameters: {
+        type: "object",
+        properties: {
+          kind: { type: "string", enum: ["house", "farm", "bakery", "workshop"] },
+          plot: { type: "string", enum: ["north-1", "north-2", "west-1", "west-2"], description: "Optional; default the first free plot." },
+          reason: { type: "string", description: "Why the village needs it, for the owner." },
+        },
+        required: ["kind", "reason"],
+      },
+    },
+  },
   // Notes about neighbours (#103): kept in your own diary.
   {
     type: "function" as const,
@@ -681,6 +698,8 @@ export function evaluateToolRisk(
       return { risk: "low", reason: "A note in the villager's own diary; no system access." };
     case "propose_idea":
       return { risk: "low", reason: "Pins an idea on the notice board; the village votes and the owner can veto." };
+    case "propose_building":
+      return { risk: "low", reason: "The Mayor proposing a building; the owner approves it." };
     case "call_vote":
       return { risk: "medium", reason: "The Mayor opening a vote: a short turn for every villager, within the round's cost cap." };
     case "call_meeting":
@@ -809,6 +828,7 @@ export async function executeTool(
     case "resume_agent":
     case "call_meeting":
     case "call_vote":
+    case "propose_building":
       return (await import("./mayor")).runMayorTool(tool, args, ctx);
     case "propose_hire":
       return (await import("./hiring")).proposeHire(args, ctx);

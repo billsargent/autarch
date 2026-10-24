@@ -64,6 +64,8 @@ interface SceneViewProps {
   hints?: ReactNode;
   // Overlays inside the stage: drawers, prompts, status notes.
   children?: ReactNode;
+  // Drawn on the scene itself, under the villagers (buildings on plots, #105).
+  overlays?: ReactNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +374,7 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
 
 export type SceneLight = DayPhase | "frozen";
 
-export default function SceneView({ scene, villagers, player, light = "day", labels, onPlace, hints, children }: SceneViewProps) {
+export default function SceneView({ scene, villagers, player, light = "day", labels, onPlace, hints, children, overlays }: SceneViewProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(MIN_ZOOM);
@@ -641,6 +643,7 @@ export default function SceneView({ scene, villagers, player, light = "day", lab
               <div key={i} className="village-lamp pointer-events-none absolute" style={{ left: l.x - 120, top: l.y - 120, width: 240, height: 240 }} />
             ))}
           <PlaceHotspots scene={scene} labels={labels} onPlace={(p) => !editMode && onPlace(p)} />
+          {overlays}
           {villagers.map((v) => (
             <WalkingVillager key={v.id} scene={scene} v={v} />
           ))}

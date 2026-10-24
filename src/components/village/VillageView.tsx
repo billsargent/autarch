@@ -6,6 +6,9 @@ import "./village.css";
 import { villageFonts } from "./fonts";
 import { OWNER_SPRITE, VILLAGE, spriteFor, type Place } from "./manifest";
 import type { PlayerSpec } from "./SceneView";
+import StampSprite from "./StampSprite";
+import { CELL, STAMPS, type StampId } from "./scene";
+import { useBuildings } from "../data/useBuildings";
 import { BUBBLE_MS, MOOD_BADGE, MOOD_PLACE, bubbleLine, moodLabel, nextHangout, standOffsets, villagerMood } from "./villagerState";
 import { snapshotOf, useVillageData } from "./useVillageData";
 import SceneView, { type VillagerSpec } from "./SceneView";
@@ -29,6 +32,7 @@ function startingDoor(): string {
 }
 
 export default function VillageView() {
+  const buildings = useBuildings();
   const [player] = useState<PlayerSpec>(() => ({ name: "You", color: "#3b2716", sprite: OWNER_SPRITE, start: startingDoor() }));
   const router = useRouter();
   const { data, refresh, mayor } = useVillageData();
@@ -120,9 +124,11 @@ export default function VillageView() {
   const plans = villagers.map((v) => {
     const mood = villagerMood(snapshotOf(v, data.paused, night));
     const home = VILLAGE.places.find((p) => p.id === MOOD_PLACE[mood]) ?? VILLAGE.places[0];
-    const stroll = mood === "idle" ? strolls[v.id] : null;
-    const target = stroll ?? home.door;
-    return { v, mood, target, strolling: mood === "idle" && target !== home.door };
+    // A keeper with nothing else on is at their farm or bakery (#106).
+    const keeps = mood === "idle" ? VILLAGE.plots.find((p) => p.id === buildings.state?.keepers[v.id]) : undefined;
+    const stroll = mood === "idle" && !keeps ? strolls[v.id] : null;
+    const target = keeps?.door ?? stroll ?? home.door;
+    return { v, mood, target, strolling: mood === "idle" && !keeps && target !== home.door };
   });
   // A villager asking a neighbour something walks over to them (#57).
   for (const p of plans) {
@@ -197,6 +203,7 @@ export default function VillageView() {
       <SceneView
         scene={VILLAGE}
         player={player}
+        overlays={<PlotBuildings state={buildings.state} onOpen={(id) => openAction(`building.${id}`)} />}
         light={data.paused ? "frozen" : phase}
         labels="signs"
         onPlace={openPlace}
@@ -256,5 +263,56 @@ export default function VillageView() {
         )}
       </SceneView>
     </div>
+  );
+}
+
+// What stands on the village's plots (#105): finished buildings (click one to
+// open it), and scaffolding where one is going up.
+const KIND_STAMP: Record<string, StampId> = { house: "svHouseBlue", farm: "wheatField", bakery: "fishShop", workshop: "stoneHouse" };
+const KIND_LABEL: Record<string, string> = { house: "House", farm: "Farm", bakery: "Bakery", workshop: "Workshop" };
+
+function PlotBuildings({ state, onOpen }: { state: ReturnType<typeof useBuildings>["state"]; onOpen: (id: number) => void }) {
+  if (!state) return null;
+  return (
+    <>
+      {state.buildings
+        .filter((b) => b.status === "built" || b.status === "building")
+        .map((b) => {
+          const plot = VILLAGE.plots.find((p) => p.id === b.plotId);
+          if (!plot) return null;
+          const built = b.status === "built";
+          const st = STAMPS[KIND_STAMP[b.kind]];
+          const x = plot.rect.x + ((plot.w - st.w) / 2) * CELL;
+          const y = plot.rect.y + (plot.h - st.h) * CELL;
+          return (
+            <div key={b.id}>
+              {built ? (
+                <StampSprite stamp={KIND_STAMP[b.kind]} x={x} y={y} />
+              ) : (
+                <>
+                  <StampSprite stamp={KIND_STAMP[b.kind]} x={x} y={y} opacity={0.35} />
+                  <StampSprite stamp="plankStack" x={plot.rect.x} y={plot.rect.y + (plot.h - 1) * CELL} />
+                  <StampSprite stamp="lumber" x={plot.rect.x + CELL} y={plot.rect.y + (plot.h - 1) * CELL} />
+                  <StampSprite stamp="handcart" x={plot.rect.x + 2 * CELL} y={plot.rect.y + (plot.h - 2) * CELL} />
+                </>
+              )}
+              <div className="group absolute" style={{ left: plot.rect.x, top: plot.rect.y, width: plot.rect.w, height: plot.rect.h }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpen(b.id);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  aria-label={`${KIND_LABEL[b.kind]}${built ? "" : " (being built)"}`}
+                  className="absolute inset-0 rounded-md outline-none hover:bg-white/10 focus-visible:outline-4 focus-visible:outline-[#e3b04b]"
+                />
+                <span className="village-sign pointer-events-none absolute left-1/2 top-1 -translate-x-1/2 -translate-y-full whitespace-nowrap px-3 py-1 text-[22px]">
+                  {built ? KIND_LABEL[b.kind] : `🚧 ${KIND_LABEL[b.kind]}`}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+    </>
   );
 }

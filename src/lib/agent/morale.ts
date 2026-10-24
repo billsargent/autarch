@@ -11,6 +11,7 @@ export interface MoraleStats {
   daysSinceOwner: number | null; // since the owner last talked to them; null = never
   notesReceived: number; // neighbours' notes about them, last 7 days
   budgetSpent: boolean; // today's budget used up
+  hungry?: boolean; // the village ran short of bread (#106)
 }
 
 export function moraleScore(s: MoraleStats): { score: number; reasons: string[] } {
@@ -41,12 +42,17 @@ export function moraleScore(s: MoraleStats): { score: number; reasons: string[] 
     score -= 10;
     reasons.push("today's budget is spent (−10)");
   }
+  if (s.hungry) {
+    score -= 10;
+    reasons.push("the village ran short of bread (−10)");
+  }
   return { score: Math.max(0, Math.min(100, score)), reasons };
 }
 
 export async function villageMorale(now = Date.now()) {
   const week = Math.floor(now / 1000) - 7 * 86400;
   const villagers = await listVillagers();
+  const hungry = (sqlite.prepare("SELECT shortage FROM economy WHERE id = 1").get() as { shortage: number } | undefined)?.shortage ? true : false;
   return villagers.map((v) => {
     const count = (sql: string, ...args: unknown[]) => (sqlite.prepare(sql).get(...args) as { n: number }).n;
     const approved = count("SELECT COUNT(*) AS n FROM tool_executions WHERE agent_id = ? AND status IN ('success', 'approved') AND requested_at >= ?", v.id, week);
@@ -57,6 +63,6 @@ export async function villageMorale(now = Date.now()) {
       .get(v.id) as { t: number | null };
     const daysSinceOwner = last.t ? Math.floor((now / 1000 - last.t) / 86400) : null;
     const budgetSpent = v.dailyBudgetUsd != null && spentToday(v.id, new Date(now)) >= v.dailyBudgetUsd;
-    return { agentId: v.id, name: v.name, ...moraleScore({ approved, dropped, daysSinceOwner, notesReceived, budgetSpent }) };
+    return { agentId: v.id, name: v.name, ...moraleScore({ approved, dropped, daysSinceOwner, notesReceived, budgetSpent, hungry }) };
   });
 }

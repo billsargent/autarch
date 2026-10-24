@@ -13,6 +13,7 @@ import { useVillagers } from "../../data/useVillagers";
 import ParchmentDialog from "../ParchmentDialog";
 import TalkDrawer from "../TalkDrawer";
 import VillagerPortrait from "../VillagerPortrait";
+import { MapTable, Pantry } from "./BuildingDialogs";
 import CottageRoom from "./CottageRoom";
 import MailboxDialog from "./MailboxDialog";
 import TownHallRoom from "./TownHallRoom";
@@ -35,6 +36,10 @@ export default function HomeRoom({ action, onClose }: RoomProps) {
       return <Calendar onClose={onClose} />;
     case "home.invite":
       return <Invite onClose={onClose} />;
+    case "home.map":
+      return <MapTable onClose={onClose} />;
+    case "home.pantry":
+      return <Pantry onClose={onClose} />;
     default:
       return <Guitar onClose={onClose} />;
   }

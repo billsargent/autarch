@@ -628,6 +628,44 @@ async function main() {
   await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { daydream: false }), { params: Promise.resolve({ id: String(dot.id) }) });
   check("…and can be switched off", villagers.villagerStates([dot.id]).get(dot.id)?.daydream, false);
 
+  // --- the village grows (#105) and its farm and bakery (#106) ------------------------------
+  const bld = await import("../src/lib/agent/buildings");
+  const econ = await import("../src/lib/agent/economy");
+  const buildingsRoute = await import("../src/app/api/buildings/route");
+  const buildingRoute = await import("../src/app/api/buildings/[id]/route");
+  const patchBuilding = (id: number, body: unknown) => buildingRoute.PATCH(req(`/api/buildings/${id}`, "PATCH", body), { params: Promise.resolve({ id: String(id) }) });
+  const cap0 = bld.populationCap(await getSettings());
+  check("only the Mayor proposes buildings", (await executeTool("propose_building", { kind: "house", reason: "x" }, town, ctxCal)).output, "Refused: only the Mayor can do that.");
+  const proposed = await power("propose_building", { kind: "house", plot: "north-1", reason: "We're running out of beds." });
+  check("the Mayor proposes a house on a plot", proposed.startsWith("Proposed a house on the north-1 plot"), true);
+  check("…and the owner is told", (await db.select().from(notifications).where(eq(notifications.title, "The Mayor would like to build a house"))).length, 1);
+  check("a plot can't take two", (await power("propose_building", { kind: "farm", plot: "north-1", reason: "x" })).includes("north-1 plot is taken"), true);
+  check("there are only four plots", (await power("propose_building", { kind: "farm", plot: "south-9", reason: "x" })).includes('no plot called "south-9"'), true);
+  const houseId = Number(/#(\d+)/.exec(proposed)?.[1]);
+  check("nothing is built until the owner says so", (await bld.listBuildings()).find((b) => b.id === houseId)?.status, "proposed");
+  await patchBuilding(houseId, { action: "approve" });
+  check("approved, it's scaffolding for half a day", (await bld.listBuildings()).find((b) => b.id === houseId)?.status, "building");
+  const later = new Date(Date.now() + 13 * 3600_000);
+  check("…then it stands", (await bld.listBuildings(later)).find((b) => b.id === houseId)?.status, "built");
+  check("a house makes room for two more villagers", bld.populationCap(await getSettings()), cap0 + 2);
+
+  const farm = (await (await buildingsRoute.POST(req("/api/buildings", "POST", { kind: "farm", plotId: "west-1" }))).json()).building;
+  const bakery = (await (await buildingsRoute.POST(req("/api/buildings", "POST", { kind: "bakery", plotId: "west-2" }))).json()).building;
+  check("the owner builds straight away", [farm.status, bakery.status], ["building", "building"]);
+  const declined = await power("propose_building", { kind: "workshop", reason: "x" });
+  await patchBuilding(Number(/#(\d+)/.exec(declined)?.[1]), { action: "decline" });
+  check("…and can turn the Mayor down", (await bld.listBuildings()).some((b) => b.kind === "workshop"), false);
+  await patchBuilding(farm.id, { action: "keeper", agentId: gus.id });
+
+  check("a day's bookkeeping: grow, bake, eat", econ.economyTick({ wheat: 0, bread: 6 }, [true, false], [true], 5), { wheat: 2, bread: 7, shortage: 0, grown: 8, baked: 6 });
+  check("…running short", econ.economyTick({ wheat: 0, bread: 1 }, [], [], 4).shortage, 3);
+  const stockBefore = await econ.getEconomy();
+  check("the day's economy runs once a day", [await econ.dailyEconomy(later), await econ.dailyEconomy(later)], [true, false]);
+  const after = await econ.getEconomy();
+  check("…the kept farm grew 6 wheat, the unkept bakery baked 2", [after.wheat, after.bread], [stockBefore.wheat + 6 - 2, Math.max(0, stockBefore.bread + 2 - (await db.select().from(agents).where(eq(agents.status, "active"))).length)]);
+  check("keepers spend their spare time at their building", (await econ.keeperDoors())[gus.id], "west-1");
+  check("when the village runs short, morale dips", (await (await import("../src/lib/agent/morale")).villageMorale()).every((m) => m.reasons.includes("the village ran short of bread (−10)")), after.shortage > 0);
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });
