@@ -1,0 +1,9 @@
+# Lets the autarch service user run sudo without a password, so commands the
+# agent runs with sudo don't hang waiting for one. Autarch classifies every
+# sudo command as critical: it waits for your approval in the dashboard
+# (unless you switch on Unrestricted mode).
+#
+# Install with:
+#   sudo install -m 0440 deploy/autarch-sudoers /etc/sudoers.d/autarch
+#   sudo visudo -c
+autarch ALL=(ALL) NOPASSWD: ALL

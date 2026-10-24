@@ -1,0 +1,211 @@
+/* Village look: warm wood, parchment and a pixel font. Colors match the
+   palette in docs/village-art.md. */
+
+/* Inside Tailwind's components layer so utility classes (e.g. sm:hidden)
+   can still override these. */
+@layer components {
+  .village-root {
+    font-family: var(--font-body), system-ui, sans-serif;
+    background: #2f4a2a;
+    color: #3b2716;
+  }
+
+  .village-pixel {
+    font-family: var(--font-pixel), monospace;
+    letter-spacing: 0.02em;
+  }
+
+  .village-hud {
+    background: linear-gradient(#7a5536, #6b4a2e);
+    border-bottom: 4px solid #3b2716;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
+  }
+
+  .village-chip {
+    background: #5a3d25;
+    border: 2px solid #3b2716;
+    border-radius: 6px;
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .village-btn {
+    font-family: var(--font-pixel), monospace;
+    background: #8a6240;
+    color: #fff6e0;
+    border: 2px solid #3b2716;
+    border-radius: 6px;
+    box-shadow: 0 3px 0 #3b2716;
+    transition: transform 0.05s, box-shadow 0.05s, background 0.1s;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+  .village-btn:hover:not(:disabled) {
+    background: #9b7049;
+  }
+  .village-btn:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 #3b2716;
+  }
+  .village-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .village-btn:focus-visible {
+    outline: 3px solid #e3b04b;
+    outline-offset: 2px;
+  }
+  .village-btn-primary {
+    background: #d9643a;
+  }
+  .village-btn-primary:hover:not(:disabled) {
+    background: #e5744a;
+  }
+  .village-btn-danger {
+    background: #b3261e;
+  }
+  .village-btn-danger:hover:not(:disabled) {
+    background: #c8342b;
+  }
+  .village-btn-go {
+    background: #5f8a3c;
+  }
+  .village-btn-go:hover:not(:disabled) {
+    background: #6f9c4a;
+  }
+
+  .village-panel {
+    font-family: var(--font-body), system-ui, sans-serif;
+  }
+
+  /* Scene */
+  .village-grass {
+    background-color: #6e9b4a;
+    background-image:
+      radial-gradient(#7fae55 2px, transparent 2.5px),
+      radial-gradient(#5f8a3c 2px, transparent 2.5px);
+    background-size: 48px 48px, 64px 64px;
+    background-position: 0 0, 24px 30px;
+  }
+
+  .village-sign {
+    font-family: var(--font-pixel), monospace;
+    background: #8a6240;
+    color: #fff6e0;
+    border: 3px solid #3b2716;
+    border-radius: 4px;
+    box-shadow: 0 3px 0 #3b2716;
+  }
+
+  .village-bubble {
+    background: #fffaf0;
+    color: #3b2716;
+    border: 3px solid #3b2716;
+    border-radius: 10px;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+  }
+  .village-bubble::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -12px;
+    transform: translateX(-50%);
+    border: 9px solid transparent;
+    border-top-color: #3b2716;
+  }
+
+  @keyframes village-bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-5px);
+    }
+  }
+  .village-walking {
+    animation: village-bob 0.32s steps(2) infinite;
+  }
+
+  @keyframes village-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+  .village-badge {
+    animation: village-float 1.6s ease-in-out infinite;
+  }
+
+  /* The light over a scene: time of day (#100), or frozen while paused. */
+  .village-light-dawn {
+    background: linear-gradient(#f2a3a0, #ffd9a8);
+    mix-blend-mode: multiply;
+    opacity: 0.32;
+  }
+  .village-light-dusk {
+    background: linear-gradient(#6b4a8c, #e0855a);
+    mix-blend-mode: multiply;
+    opacity: 0.45;
+  }
+  .village-light-night {
+    background: #1d2340;
+    mix-blend-mode: multiply;
+    opacity: 0.72;
+  }
+  .village-light-frozen {
+    background: #c9dcf2;
+    mix-blend-mode: color;
+    opacity: 0.85;
+    box-shadow: inset 0 0 120px 30px rgba(220, 236, 255, 0.85);
+  }
+  .village-lamp {
+    background: radial-gradient(circle, rgba(255, 196, 110, 0.55), rgba(255, 196, 110, 0) 70%);
+    mix-blend-mode: screen;
+  }
+  /* Lit windows at dusk and night (#110): a warm glow low on each house. */
+  .village-window {
+    background: radial-gradient(ellipse at 50% 60%, rgba(255, 206, 120, 0.7), rgba(255, 186, 90, 0) 70%);
+    mix-blend-mode: screen;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .village-walking,
+    .village-badge {
+      animation: none;
+    }
+  }
+}
+
+/* Markdown on parchment (chat bubbles in the village). Outside the layers on
+   purpose: these must beat the dark-theme utility classes in Markdown.tsx. */
+.village-md a {
+  color: #2f5f9a;
+  text-decoration-color: #7a9cc4;
+}
+.village-md a:hover {
+  color: #1f4a7d;
+}
+.village-md blockquote {
+  color: #5a3d25;
+  border-color: #c9b27a;
+}
+.village-md hr {
+  border-color: #d8c49a;
+}
+.village-md :not(pre) > code {
+  background: #ead9b4;
+  color: #7a3a12;
+}
+.village-md thead {
+  background: #ead9b4;
+}
+.village-md th,
+.village-md td {
+  border-color: #c9b27a;
+}

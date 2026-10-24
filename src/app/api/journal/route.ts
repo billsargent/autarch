@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { journalEntries } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
+import { getAgent } from "@/lib/agent/agents";
 
-export async function GET() {
-  const rows = await db.select().from(journalEntries).orderBy(desc(journalEntries.updatedAt));
+// ?agent=<id>: one villager's diary.
+export async function GET(req: Request) {
+  const agent = Number(new URL(req.url).searchParams.get("agent")) || null;
+  const rows = await db
+    .select()
+    .from(journalEntries)
+    .where(agent ? eq(journalEntries.agentId, agent) : undefined)
+    .orderBy(desc(journalEntries.updatedAt));
   return NextResponse.json({ entries: rows });
 }
 
@@ -17,6 +24,8 @@ export async function POST(req: Request) {
       body: body.body ? String(body.body) : null,
       category: (body.category as "exploration" | "task" | "reflection" | "idea" | "system") || "system",
       status: (body.status as "open" | "in_progress" | "done" | "abandoned") || "open",
+      // A note in someone's diary (the Mayor's if not said).
+      agentId: (await getAgent(Number(body.agentId) || null)).id,
     })
     .returning();
   return NextResponse.json({ entry: inserted[0] });

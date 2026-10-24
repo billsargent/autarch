@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getSettings } from "@/lib/agent/settingsStore";
-import { resolvePathSafe, isSecretPath } from "@/lib/agent/risk";
+import { resolvePathSafe, isSecretPath, isReallyWithin } from "@/lib/agent/risk";
 
 const MIME: Record<string, string> = {
   ".png": "image/png",
@@ -25,8 +25,12 @@ const MIME: Record<string, string> = {
   ".json": "application/json",
   ".log": "text/plain",
   ".csv": "text/csv",
-  ".html": "text/html",
-  ".js": "text/javascript",
+  // Never served as live HTML or script on the dashboard's origin (#7).
+  ".html": "text/plain; charset=utf-8",
+  ".htm": "text/plain; charset=utf-8",
+  ".js": "text/plain; charset=utf-8",
+  ".mjs": "text/plain; charset=utf-8",
+  ".xml": "text/plain; charset=utf-8",
   ".ts": "text/plain",
   ".py": "text/plain",
   ".sh": "text/plain",
@@ -46,7 +50,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
   const settings = await getSettings();
   const rel = segs.join("/");
   const resolved = resolvePathSafe(rel, settings.workspaceDir);
-  if (!isWithin(path.resolve(settings.workspaceDir), path.resolve(resolved))) {
+  // Real locations, so a symlink in the workspace can't serve files from
+  // elsewhere (#9).
+  if (!isWithin(path.resolve(settings.workspaceDir), path.resolve(resolved)) || !isReallyWithin(settings.workspaceDir, resolved)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (isSecretPath(resolved)) {
@@ -58,7 +64,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     return new Response(new Uint8Array(data), {
       headers: {
         "content-type": MIME[ext] || "application/octet-stream",
-        "content-disposition": `inline; filename="${path.basename(resolved)}"`,
+        "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(path.basename(resolved))}`,
+        // The agent writes these files, so treat them as untrusted: no
+        // scripts, forms or plugins even if opened directly (SVGs included),
+        // and no content-type guessing.
+        "content-security-policy": "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'",
+        "x-content-type-options": "nosniff",
       },
     });
   } catch {

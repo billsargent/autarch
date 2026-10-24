@@ -1,13 +1,18 @@
-import { exec } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import fssync from "node:fs";
+import dns from "node:dns/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AgentSettingsRow } from "./settingsStore";
+import Database from "better-sqlite3";
 import { db, sqlite } from "@/db";
-import { journalEntries, jobs, goals, notifications, conversations, messages } from "@/db/schema";
-import { eq, asc, desc, and, sql as dsql } from "drizzle-orm";
+import { DB_PATH } from "@/db/path";
+import { agents, journalEntries, jobs, goals, notifications, conversations, messages } from "@/db/schema";
+import { VILLAGE_TOOLS } from "./villageTools";
+import { eq, asc, desc, and, or, isNull, ne, sql as dsql } from "drizzle-orm";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   classifyShellCommand,
   classifyFileOperation,
@@ -17,13 +22,17 @@ import {
   classifyFetchUrl,
   resolvePathSafe,
   buildOverrides,
+  invalidPackageArgs,
+  UNIT_NAME,
+  addressKind,
   type RiskResult,
   type SuperviseOverrides,
 } from "./risk";
 import { MAX_OUTPUT_CHARS, MAX_FETCH_BYTES, MAX_DOWNLOAD_BYTES, workspaceSkillsDir } from "./config";
-import { nextCronRun } from "./cron";
+import { cronProblem, nextCronRun } from "./cron";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export function ensureWorkspace(dir: string) {
   if (!fssync.existsSync(dir)) {
@@ -40,7 +49,7 @@ function truncate(text: string, max = MAX_OUTPUT_CHARS): string {
 // Tool schema (OpenAI / DeepSeek function-calling format)
 // ---------------------------------------------------------------------------
 
-export const ALL_TOOL_DEFINITIONS = [
+const CORE_TOOL_DEFINITIONS = [
   {
     type: "function" as const,
     function: {
@@ -177,13 +186,14 @@ export const ALL_TOOL_DEFINITIONS = [
     type: "function" as const,
     function: {
       name: "fetch_url",
-      description: "Fetch a URL over HTTP(S) and return the response body (truncated). Useful for research.",
+      description: "Fetch a URL over HTTP(S) and return the response body (truncated). Web pages come back as their readable text, without the HTML. Useful for research.",
       parameters: {
         type: "object",
         properties: {
           url: { type: "string" },
           method: { type: "string", enum: ["GET", "POST"], description: "Default GET." },
           body: { type: "string", description: "Optional request body for POST." },
+          raw: { type: "boolean", description: "Return the raw HTML of a web page instead of its text." },
         },
         required: ["url"],
       },
@@ -194,7 +204,7 @@ export const ALL_TOOL_DEFINITIONS = [
     function: {
       name: "update_journal",
       description:
-        "Log or update an entry in your own persistent journal describing what you are working on, exploring, or thinking about. Use this often so a human can see your progress and reasoning over time. This never requires approval.",
+        "Log or update an entry in your own persistent journal describing what you are working on, exploring, or thinking about, so the human can see your progress over time. Write one when you start or finish real work; in an ordinary chat, only when something worth remembering happened. This never requires approval.",
       parameters: {
         type: "object",
         properties: {
@@ -260,7 +270,7 @@ export const ALL_TOOL_DEFINITIONS = [
     function: {
       name: "manage_goal",
       description:
-        "Create, update, or retire a goal on your personal goals board. Record what you want to accomplish on this machine and keep it up to date so you can pick work up in future sessions.",
+        "Create, update, or retire a goal on your goals board. Each goal has notes: where the work stands, what you found, what's next. Keep them up to date (addNote) so you can pick the work up in a later session; they are your memory of the work.",
       parameters: {
         type: "object",
         properties: {
@@ -269,12 +279,14 @@ export const ALL_TOOL_DEFINITIONS = [
           status: { type: "string", enum: ["backlog", "in_progress", "done", "abandoned"] },
           priority: { type: "number", description: "1 = highest priority. Default 3." },
           goalId: { type: "number", description: "Provide to update an existing goal." },
+          notes: { type: "string", description: "Replace the goal's notes: where the work stands, what's next. Your memory between sessions." },
+          addNote: { type: "string", description: "Add one dated line to the goal's notes (keeps the rest)." },
           conversationId: {
             type: "number",
             description: "Optional. Bind this goal to a specific chat session (defaults to the current session on create). Leave unset to make it a global goal used in work windows.",
           },
         },
-        required: ["title"],
+        required: [],
       },
     },
   },
@@ -286,43 +298,23 @@ export const ALL_TOOL_DEFINITIONS = [
       parameters: { type: "object", properties: {} },
     },
   },
+  // One way to reach the human (#70): a message in the conversation, and for
+  // anything more than "info" a letter in their mailbox too.
   {
     type: "function" as const,
     function: {
-      name: "notify_human",
+      name: "message_owner",
       description:
-        "Raise an alert/notification to the human operator (shown in the dashboard bell). Use for things that genuinely need attention: an error you can't fix, a decision only a human can make, or something important you finished. Optionally also posts into a chat session.",
+        "Send the human a message. It's left in the conversation (the current one, or conversationId). With severity success, warning or critical it also rings their bell as a letter. Use it for progress they'd want, a question only they can answer, an error you can't fix, or a finished milestone. A few per session at most.",
       parameters: {
         type: "object",
         properties: {
-          title: { type: "string" },
-          body: { type: "string" },
-          severity: { type: "string", enum: ["info", "success", "warning", "critical"] },
-          conversationId: {
-            type: "number",
-            description: "Optional. Also post the alert into this chat session. Defaults to the current session.",
-          },
+          message: { type: "string", description: "What to tell them." },
+          title: { type: "string", description: "A short headline, for a letter." },
+          severity: { type: "string", enum: ["info", "success", "warning", "critical"], description: "Default info (no letter)." },
+          conversationId: { type: "number", description: "Optional. Which conversation; defaults to the current one." },
         },
-        required: ["title"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "post_message",
-      description:
-        "Send a message to the human in a specific chat session (defaults to the current session). Use this to report progress, results, or ask a question even when the human isn't actively chatting — it will be waiting for them in that session when they open it. Use sparingly (max 4 per session).",
-      parameters: {
-        type: "object",
-        properties: {
-          content: { type: "string", description: "The message to post to the human." },
-          conversationId: {
-            type: "number",
-            description: "Optional. Which session to post into. Defaults to the current session.",
-          },
-        },
-        required: ["content"],
+        required: ["message"],
       },
     },
   },
@@ -331,7 +323,7 @@ export const ALL_TOOL_DEFINITIONS = [
     function: {
       name: "query_database",
       description:
-        "Run a read-only SQL SELECT query against the app's own SQLite database (conversations, messages, tool_executions, journal_entries, jobs, work_sessions, goals, notifications, agent_settings). Great for self-observation and introspection. Only SELECT/WITH are allowed; anything else is blocked.",
+        "Run a read-only SQL SELECT query against the app's own SQLite database (conversations, messages, tool_executions, journal_entries, jobs, work_sessions, goals, notifications, agent_settings). Use it only when the human asks about these records (past sessions, spending, history) — not to check on yourself. Only SELECT/WITH are allowed; anything else is blocked.",
       parameters: {
         type: "object",
         properties: { sql: { type: "string", description: "A read-only SELECT query." } },
@@ -406,6 +398,9 @@ export const ALL_TOOL_DEFINITIONS = [
   },
 ];
 
+// The core tools, then the village's (villageTools.ts).
+export const ALL_TOOL_DEFINITIONS = [...CORE_TOOL_DEFINITIONS, ...Object.values(VILLAGE_TOOLS).map((t) => t.definition)];
+
 export function getEnabledToolDefinitions(enabledTools: string[]) {
   return ALL_TOOL_DEFINITIONS.filter((t) => enabledTools.includes(t.function.name));
 }
@@ -421,6 +416,9 @@ export function evaluateToolRisk(
 ): RiskResult {
   const extraProtected = (settings.extraProtectedPaths as string[]) || [];
   const overrides = buildOverrides(settings);
+  // The village's own tools carry their risk with them (villageTools.ts).
+  const village = VILLAGE_TOOLS[tool];
+  if (village) return village.risk;
   switch (tool) {
     case "run_shell_command":
       return classifyShellCommand(String(args.command || ""), overrides);
@@ -463,8 +461,9 @@ export function evaluateToolRisk(
     case "manage_goal":
     case "list_goals":
       return { risk: "low", reason: "Self-contained goals-board bookkeeping." };
+    case "message_owner":
     case "notify_human":
-      return { risk: "low", reason: "Raises a notification for the human; no system access." };
+      return { risk: "low", reason: "A message for the human; no system access." };
     case "post_message":
       return { risk: "low", reason: "Posts a message into a chat session; no system access." };
     case "query_database":
@@ -507,6 +506,17 @@ export function extraProcessGuard(command: string, overrides?: SuperviseOverride
 export interface ToolContext {
   conversationId?: number | null;
   sessionId?: number | null;
+  // The villager running the tool (#56): what it creates is theirs, and the
+  // list tools show them their own things.
+  agentId?: number | null;
+  agentName?: string;
+  // What started the turn ("message" = answering a neighbour, #57).
+  trigger?: string;
+}
+
+// "Belongs to this villager" (or to no one yet, for rows from before villagers).
+function ownedBy(column: AnySQLiteColumn, ctx?: ToolContext) {
+  return ctx?.agentId ? or(eq(column, ctx.agentId), isNull(column)) : undefined;
 }
 
 export async function executeTool(
@@ -521,6 +531,8 @@ export async function executeTool(
   ensureWorkspace(path.join(settings.workspaceDir, "screenshots"));
   ensureWorkspace(path.join(settings.workspaceDir, "notes"));
 
+  const village = VILLAGE_TOOLS[tool];
+  if (village) return village.run(args, ctx);
   switch (tool) {
     case "run_shell_command":
       return runShellCommand(String(args.command || ""), (args.cwd as string) || settings.workspaceDir, settings.commandTimeoutSec);
@@ -549,19 +561,22 @@ export async function executeTool(
         String(args.service || ""),
       );
     case "fetch_url":
-      return fetchUrl(String(args.url || ""), (args.method as "GET" | "POST") || "GET", args.body as string | undefined);
+      return fetchUrl(String(args.url || ""), (args.method as "GET" | "POST") || "GET", args.body as string | undefined, Boolean(args.raw));
     case "update_journal":
-      return updateJournal(args);
+      return updateJournal(args, ctx);
     case "schedule_job":
       return scheduleJob(args, ctx);
     case "list_jobs":
-      return listJobs();
+      return listJobs(ctx);
     case "cancel_job":
-      return cancelJob(args);
+      return cancelJob(args, ctx);
     case "manage_goal":
       return manageGoal(args, ctx);
     case "list_goals":
-      return listGoals();
+      return listGoals(ctx);
+    case "message_owner":
+      return messageOwner(args, ctx);
+    // The old two (#70), for calls already in flight.
     case "notify_human":
       return notifyHuman(args, ctx);
     case "post_message":
@@ -581,7 +596,7 @@ export async function executeTool(
   }
 }
 
-async function updateJournal(args: Record<string, unknown>) {
+async function updateJournal(args: Record<string, unknown>, ctx?: ToolContext) {
   const title = String(args.title || "Untitled entry");
   const body = args.body ? String(args.body) : null;
   const category = (args.category as string) || "task";
@@ -598,7 +613,7 @@ async function updateJournal(args: Record<string, unknown>) {
         status: status as "open" | "in_progress" | "done" | "abandoned",
         updatedAt: new Date(),
       })
-      .where(eq(journalEntries.id, entryId))
+      .where(and(eq(journalEntries.id, entryId), ownedBy(journalEntries.agentId, ctx)))
       .returning();
     if (updated.length) {
       return { output: `Updated journal entry #${entryId}: ${title}`, summary: `journal update #${entryId}` };
@@ -612,6 +627,7 @@ async function updateJournal(args: Record<string, unknown>) {
       body,
       category: category as "exploration" | "task" | "reflection" | "idea" | "system",
       status: status as "open" | "in_progress" | "done" | "abandoned",
+      agentId: ctx?.agentId ?? null,
     })
     .returning();
   return { output: `Created journal entry #${inserted[0].id}: ${title}`, summary: `journal create #${inserted[0].id}` };
@@ -710,10 +726,33 @@ async function getSystemStatus() {
   return { output: truncate(JSON.stringify(summary, null, 2)), summary: "system status" };
 }
 
+// Run a program directly (no shell), so arguments are never interpreted as
+// shell syntax. Optionally keep only the first `maxLines` lines of stdout.
+async function runFile(file: string, args: string[], timeoutSec: number, maxLines?: number) {
+  const shown = [file, ...args].join(" ");
+  const clip = (text: string) => (maxLines ? text.split("\n").slice(0, maxLines).join("\n") : text);
+  try {
+    const { stdout, stderr } = await execFileAsync(file, args, {
+      cwd: os.tmpdir(),
+      timeout: Math.max(1, timeoutSec) * 1000,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    const output = truncate([clip(stdout), stderr].filter(Boolean).join("\n---stderr---\n") || "(no output)");
+    return { output, summary: `$ ${shown}` };
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; message?: string; killed?: boolean };
+    const output = truncate(
+      `Command failed.\n${e.killed ? "(timed out)\n" : ""}stdout:\n${clip(e.stdout || "")}\nstderr:\n${e.stderr || e.message || ""}`,
+    );
+    return { output, summary: `$ ${shown} (failed)` };
+  }
+}
+
 async function listProcesses(sortBy: "cpu" | "mem", limit: number) {
+  const rows = Math.min(200, Math.max(1, Math.floor(limit) || 20));
   const sortFlag = sortBy === "mem" ? "-%mem" : "-%cpu";
-  const { stdout } = await execAsync(`ps axo pid,ppid,%cpu,%mem,etime,comm --sort=${sortFlag} | head -n ${Math.max(1, limit) + 1}`);
-  return { output: truncate(stdout), summary: `top processes by ${sortBy}` };
+  const res = await runFile("ps", ["axo", "pid,ppid,%cpu,%mem,etime,comm", `--sort=${sortFlag}`], 15, rows + 1);
+  return { output: res.output, summary: `top processes by ${sortBy}` };
 }
 
 async function managePackage(
@@ -722,41 +761,123 @@ async function managePackage(
   dryRun: boolean,
   timeoutSec: number,
 ) {
-  const sim = dryRun ? "-s " : "";
-  let cmd: string;
+  // Same check the risk gate uses; refuse here too in case anything bypasses it.
+  const invalid = invalidPackageArgs(action, packages);
+  if (invalid) return { output: `Refused: ${invalid}`, summary: "manage_package refused" };
+  const sim = dryRun ? ["-s"] : [];
   if (action === "search") {
     const q = packages.join(" ");
-    cmd = q ? `apt-cache search --names-only '${q}' | head -n 40` : "apt-cache search '' 2>/dev/null | head -n 40";
-  } else if (action === "update") {
-    cmd = `sudo -n apt-get ${sim}update`;
-  } else if (action === "list") {
-    cmd = packages.length ? `dpkg -l ${packages.map((p) => `'${p}'`).join(" ")}` : `apt list --installed 2>/dev/null | head -n 100`;
-  } else if (action === "install") {
-    cmd = `sudo -n apt-get ${sim}install -y ${packages.map((p) => `'${p}'`).join(" ")}`;
-  } else if (action === "upgrade") {
-    cmd = packages.length ? `sudo -n apt-get ${sim}install --only-upgrade -y ${packages.map((p) => `'${p}'`).join(" ")}` : `sudo -n apt-get ${sim}upgrade -y`;
-  } else {
-    cmd = `sudo -n apt-get ${sim}remove -y ${packages.map((p) => `'${p}'`).join(" ")}`;
+    return runFile("apt-cache", ["search", "--names-only", q], timeoutSec, 40);
   }
-  return runShellCommand(cmd, "/tmp", timeoutSec);
+  if (action === "list") {
+    return packages.length ? runFile("dpkg", ["-l", ...packages], timeoutSec) : runFile("apt", ["list", "--installed"], timeoutSec, 100);
+  }
+  if (action === "update") return runFile("sudo", ["-n", "apt-get", ...sim, "update"], timeoutSec);
+  if (action === "install") return runFile("sudo", ["-n", "apt-get", ...sim, "install", "-y", ...packages], timeoutSec);
+  if (action === "upgrade") {
+    return packages.length
+      ? runFile("sudo", ["-n", "apt-get", ...sim, "install", "--only-upgrade", "-y", ...packages], timeoutSec)
+      : runFile("sudo", ["-n", "apt-get", ...sim, "upgrade", "-y"], timeoutSec);
+  }
+  return runFile("sudo", ["-n", "apt-get", ...sim, "remove", "-y", ...packages], timeoutSec);
 }
 
 async function manageService(action: string, service: string) {
-  const cmd = `sudo -n systemctl ${action} ${service}`;
-  return runShellCommand(cmd, "/tmp", 20);
+  if (!UNIT_NAME.test(service)) return { output: `Refused: invalid service name "${service}".`, summary: "manage_service refused" };
+  if (!["start", "stop", "restart", "enable", "disable", "status"].includes(action)) {
+    return { output: `Refused: unknown action "${action}".`, summary: "manage_service refused" };
+  }
+  return runFile("sudo", ["-n", "systemctl", action, service], 20);
 }
 
-async function fetchUrl(url: string, method: "GET" | "POST", body?: string) {
+// --- Network requests (#4) ----------------------------------------------------
+// The risk gate classifies the URL's host name; this re-checks where it really
+// points (DNS) and every redirect, so a "public" name that resolves to this
+// machine or the local network can't be used to reach the dashboard.
+
+class RefusedRequest extends Error {}
+
+async function checkDestination(url: string, allowPrivate: boolean): Promise<string | null> {
+  const r = classifyFetchUrl(url);
+  if (r.risk === "blocked") return r.reason;
+  if (r.risk === "critical" && !allowPrivate) return r.reason;
+  const host = new URL(url).hostname.replace(/^\[|\]$/g, "");
+  if (/^[\d.]+$/.test(host) || host.includes(":")) return null; // an address literal is already classified
+  let addresses: Array<{ address: string }> = [];
+  try {
+    addresses = await dns.lookup(host, { all: true });
+  } catch {
+    return null; // let the request itself report the DNS failure
+  }
+  for (const a of addresses) {
+    const kind = addressKind(a.address);
+    if (kind === "self") return `${host} resolves to this machine (${a.address}); requests to its own services are blocked.`;
+    if (kind === "private" && !allowPrivate) return `${host} resolves to a local-network address (${a.address}); that needs the human's approval.`;
+  }
+  return null;
+}
+
+async function safeFetch(url: string, init: RequestInit): Promise<Response> {
+  // A local-network URL only gets here after the human approved it.
+  const allowPrivate = classifyFetchUrl(url).risk === "critical";
+  let current = url;
+  for (let hop = 0; hop <= 5; hop++) {
+    const problem = await checkDestination(current, allowPrivate);
+    if (problem) throw new RefusedRequest(problem);
+    const res = await fetch(current, { ...init, redirect: "manual" });
+    const location = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && location) {
+      current = new URL(location, current).toString();
+      if (init.method && init.method !== "GET") throw new RefusedRequest("A POST request was redirected; not following it.");
+      continue;
+    }
+    return res;
+  }
+  throw new RefusedRequest("Too many redirects.");
+}
+
+// A web page's readable text: no scripts, styles or tags, entities decoded,
+// blank runs squeezed. A page's markup is mostly noise to a model and costs
+// tokens for nothing.
+export function htmlToText(html: string): string {
+  const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", mdash: "—", ndash: "–", hellip: "…", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“" };
+  const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim();
+  const text = html
+    .replace(/<(script|style|noscript|svg|template|head)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(br|hr)\b[^>]*>/gi, "\n")
+    .replace(/<\/(p|div|li|tr|h[1-6]|section|article|header|footer|blockquote|pre|table|ul|ol|dt|dd)>/gi, "\n")
+    .replace(/<li\b[^>]*>/gi, "\n- ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&([a-z]+);/gi, (m, n) => named[n.toLowerCase()] ?? m)
+    .replace(/[ \t\f\r]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return title ? `# ${title}\n\n${text}` : text;
+}
+
+async function fetchUrl(url: string, method: "GET" | "POST", body?: string, raw = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
-    const res = await fetch(url, {
-      method,
-      body: method === "POST" ? body : undefined,
-      signal: controller.signal,
-      headers: { "user-agent": "deepseek-agent-framework/1.0" },
-    });
-    const text = await res.text();
+    let res: Response;
+    try {
+      res = await safeFetch(url, {
+        method,
+        body: method === "POST" ? body : undefined,
+        signal: controller.signal,
+        headers: { "user-agent": "autarch-agent/1.0" },
+      });
+    } catch (err) {
+      if (err instanceof RefusedRequest) return { output: `Refused: ${err.message}`, summary: `${method} ${url} refused` };
+      throw err;
+    }
+    const fetched = await res.text();
+    const isHtml = /html/i.test(res.headers.get("content-type") ?? "") || /^\s*<(!doctype html|html)/i.test(fetched);
+    const text = isHtml && !raw ? `(the page's text; ask with raw: true for the HTML)\n\n${htmlToText(fetched)}` : fetched;
     const bytes = Buffer.byteLength(text, "utf-8");
     const clipped =
       bytes > MAX_FETCH_BYTES ? Buffer.from(text).subarray(0, MAX_FETCH_BYTES).toString("utf-8") + "\n...[truncated]" : text;
@@ -773,7 +894,7 @@ async function fetchUrl(url: string, method: "GET" | "POST", body?: string) {
 // Jobs
 // ---------------------------------------------------------------------------
 
-async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
+export async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
   const name = String(args.name || "Untitled job");
   const instruction = args.instruction ? String(args.instruction) : "";
   const intervalMinutes = Math.max(5, Number(args.intervalMinutes) || 60);
@@ -781,6 +902,10 @@ async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
   const cron = args.cron && String(args.cron).trim() ? String(args.cron).trim() : "";
   const enabled = args.enabled === undefined ? true : Boolean(args.enabled);
   const jobId = args.jobId ? Number(args.jobId) : undefined;
+  const problem = cron ? cronProblem(cron) : null;
+  if (problem) {
+    return { output: `Refused: the cron expression "${cron}" won't work: ${problem}. Nothing was scheduled or changed.`, summary: "schedule refused: bad cron" };
+  }
 
   const nextFor = (e: boolean): Date | null => {
     if (!e) return null; // leave nextRunAt untouched when disabling
@@ -802,7 +927,7 @@ async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
         updatedAt: new Date(),
         ...(nextRunAt ? { nextRunAt } : {}),
       })
-      .where(eq(jobs.id, jobId))
+      .where(and(eq(jobs.id, jobId), ownedBy(jobs.agentId, ctx)))
       .returning();
     if (updated.length) {
       return { output: `Updated job #${updated[0].id}: ${name}`, summary: `job update #${updated[0].id}` };
@@ -821,6 +946,7 @@ async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
       cron: cron || null,
       enabled,
       conversationId: ctx?.conversationId ?? null,
+      agentId: ctx?.agentId ?? null,
       nextRunAt: nextFor(true)!,
     })
     .returning();
@@ -832,8 +958,8 @@ async function scheduleJob(args: Record<string, unknown>, ctx?: ToolContext) {
   };
 }
 
-async function listJobs() {
-  const rows = await db.select().from(jobs).orderBy(asc(jobs.nextRunAt));
+async function listJobs(ctx?: ToolContext) {
+  const rows = await db.select().from(jobs).where(ownedBy(jobs.agentId, ctx)).orderBy(asc(jobs.nextRunAt));
   const text = rows.length
     ? rows
         .map(
@@ -845,13 +971,13 @@ async function listJobs() {
   return { output: text, summary: "list jobs" };
 }
 
-async function cancelJob(args: Record<string, unknown>) {
+async function cancelJob(args: Record<string, unknown>, ctx?: ToolContext) {
   const jobId = Number(args.jobId);
   if (!jobId) return { output: "A jobId is required.", summary: "job cancel failed" };
   const updated = await db
     .update(jobs)
     .set({ enabled: false, updatedAt: new Date() })
-    .where(eq(jobs.id, jobId))
+    .where(and(eq(jobs.id, jobId), ownedBy(jobs.agentId, ctx)))
     .returning();
   if (updated.length) {
     return { output: `Disabled job #${jobId}: ${updated[0].name}.`, summary: `job cancel #${jobId}` };
@@ -869,38 +995,57 @@ async function manageGoal(args: Record<string, unknown>, ctx?: ToolContext) {
   const status = (args.status as "backlog" | "in_progress" | "done" | "abandoned") || "backlog";
   const priority = Number(args.priority) || 3;
   const goalId = args.goalId ? Number(args.goalId) : undefined;
+  // Notes (#68): `notes` replaces them, `addNote` adds a dated line.
+  const notesArg = typeof args.notes === "string" ? args.notes.trim().slice(0, 4000) : undefined;
+  const addNote = typeof args.addNote === "string" ? args.addNote.trim().slice(0, 1000) : "";
+  const stamp = () => new Date().toISOString().slice(0, 16).replace("T", " ");
   // Default to the current session so goals created in a chat are bound there.
   const conversationId =
     args.conversationId !== undefined ? Number(args.conversationId) || null : ctx?.conversationId ?? null;
 
   if (goalId) {
-    const updateValues: Record<string, unknown> = { title, body, status, priority, updatedAt: new Date() };
+    const [current] = await db.select().from(goals).where(and(eq(goals.id, goalId), ownedBy(goals.agentId, ctx)));
+    const updateValues: Record<string, unknown> = {
+      title: args.title ? title : current?.title ?? title,
+      body: "body" in args ? body : current?.body ?? null,
+      status: args.status ? status : current?.status ?? status,
+      priority: args.priority ? priority : current?.priority ?? priority,
+      updatedAt: new Date(),
+    };
+    if (notesArg !== undefined || addNote) {
+      const base = notesArg !== undefined ? notesArg : current?.notes ?? "";
+      updateValues.notes = [base, addNote && `- ${stamp()} ${addNote}`].filter(Boolean).join("\n").slice(-6000);
+    }
     if ("conversationId" in args) updateValues.conversationId = conversationId;
     const updated = await db
       .update(goals)
       .set(updateValues)
-      .where(eq(goals.id, goalId))
+      .where(and(eq(goals.id, goalId), ownedBy(goals.agentId, ctx)))
       .returning();
     if (updated.length) {
       return {
-        output: `Updated goal #${updated[0].id}: ${title} (${status}, priority ${priority})`,
+        output: `Updated goal #${updated[0].id}: ${updated[0].title} (${updated[0].status}, priority ${updated[0].priority})`,
         summary: `goal update #${goalId}`,
       };
     }
     return { output: `Goal #${goalId} not found.`, summary: "goal update failed" };
   }
-  const inserted = await db.insert(goals).values({ title, body, status, priority, conversationId }).returning();
+  const inserted = await db
+    .insert(goals)
+    .values({ title, body, status, priority, conversationId, agentId: ctx?.agentId ?? null, notes: [notesArg, addNote && `- ${stamp()} ${addNote}`].filter(Boolean).join("\n") || null })
+    .returning();
   return {
     output: `Created goal #${inserted[0].id}: ${title} (${status}, priority ${priority})`,
     summary: `goal create #${inserted[0].id}`,
   };
 }
 
-async function listGoals() {
-  const rows = await db.select().from(goals).orderBy(asc(goals.priority), desc(goals.updatedAt));
+async function listGoals(ctx?: ToolContext) {
+  // Your own goals and the town's (goals with no owner).
+  const rows = await db.select().from(goals).where(ownedBy(goals.agentId, ctx)).orderBy(asc(goals.priority), desc(goals.updatedAt));
   const text = rows.length
     ? rows
-        .map((g) => `#${g.id} [${g.status}] (p${g.priority}) ${g.title}${g.body ? ` — ${g.body}` : ""}`)
+        .map((g) => `#${g.id} [${g.status}] (p${g.priority}) ${g.title}${g.body ? ` — ${g.body}` : ""}${g.notes ? `\n  Notes:\n  ${g.notes.split("\n").slice(-15).join("\n  ")}` : ""}`)
         .join("\n")
     : "(goals board is empty)";
   return { output: text, summary: "list goals" };
@@ -910,13 +1055,35 @@ async function listGoals() {
 // Notifications / DB / downloads / editing / screenshots
 // ---------------------------------------------------------------------------
 
+async function messageOwner(args: Record<string, unknown>, ctx?: ToolContext) {
+  const message = String(args.message ?? "").trim();
+  if (!message) return { output: "Refused: say something (`message`).", summary: "message refused" };
+  const severity = ["success", "warning", "critical"].includes(String(args.severity)) ? (String(args.severity) as "success" | "warning" | "critical") : "info";
+  const conversationId = args.conversationId ? Number(args.conversationId) : ctx?.conversationId ?? null;
+  const said: string[] = [];
+  if (conversationId) {
+    const posted = await postMessage({ content: severity === "info" ? message : `📣 ${args.title ? `${String(args.title)}\n\n` : ""}${message}`, conversationId }, ctx);
+    if (posted.summary.startsWith("post_message #")) said.push(`left in conversation #${conversationId}`);
+    else if (severity === "info") return { output: posted.output, summary: posted.summary };
+  }
+  if (severity !== "info" || !conversationId) {
+    const title = args.title ? String(args.title) : message.split("\n")[0].slice(0, 80);
+    const [row] = await db
+      .insert(notifications)
+      .values({ title, body: message, severity: severity === "info" ? "info" : severity, source: ctx?.agentName ?? "agent", agentId: ctx?.agentId ?? null })
+      .returning();
+    said.push(`sent as letter #${row.id}`);
+  }
+  return { output: `Message ${said.join(" and ")}.`, summary: `message (${severity})` };
+}
+
 async function notifyHuman(args: Record<string, unknown>, ctx?: ToolContext) {
   const title = String(args.title || "Agent notification");
   const body = args.body ? String(args.body) : null;
   const severity = (args.severity as "info" | "success" | "warning" | "critical") || "info";
   const inserted = await db
     .insert(notifications)
-    .values({ title, body, severity, source: "agent" })
+    .values({ title, body, severity, source: ctx?.agentName ?? "agent", agentId: ctx?.agentId ?? null })
     .returning();
   // Optionally bridge into a chat session so the message is also waiting there.
   let posted = "";
@@ -977,17 +1144,44 @@ async function postMessage(args: Record<string, unknown>, ctx?: ToolContext) {
   return { output: `Posted message to conversation #${targetConversation}.`, summary: `post_message #${targetConversation}` };
 }
 
+// query_database runs on its own read-only connection, so even a statement that
+// slipped past the checks below could not change anything (#10).
+let readOnlyConnection: Database.Database | null = null;
+function readOnlyDb(): Database.Database {
+  if (!readOnlyConnection) readOnlyConnection = new Database(DB_PATH, { readonly: true, fileMustExist: true });
+  return readOnlyConnection;
+}
+
 async function queryDatabase(args: Record<string, unknown>) {
   const raw = String(args.sql || "").trim().replace(/;+$/g, "").trim();
   if (!raw) return { output: "Provide a SELECT query.", summary: "query failed" };
   if (!/^(select|with)\b/i.test(raw)) {
     return { output: "Only read-only SELECT queries are allowed.", summary: "query blocked (non-select)" };
   }
-  if (/\b(insert|update|delete|drop|alter|truncate|create|grant|revoke|copy|vacuum|analyze|call|do|merge)\b/i.test(raw)) {
+  if (/\b(insert|update|delete|drop|alter|truncate|create|grant|revoke|copy|vacuum|analyze|call|do|merge|attach|detach|pragma)\b/i.test(raw)) {
     return { output: "Only read-only SELECT queries are allowed.", summary: "query blocked (write keyword)" };
   }
+  // Naming the key column in any form (alias, function, subquery) is refused,
+  // so the key can't be read out under another name (#10).
+  // Diaries are private (#103): a villager reads only their own, with list tools.
+  if (/journal_entries/i.test(raw)) {
+    return { output: "Diaries are private: query_database can't read journal_entries. Use your own journal tools.", summary: "query blocked (diaries)" };
+  }
+  // The calendar's private address is a secret like the key (#108).
+  if (/provider_?keys/i.test(raw)) {
+    return { output: "Queries that mention provider keys are not allowed.", summary: "query blocked (secret table)" };
+  }
+  if (/calendar_?ics|ics_?url/i.test(raw)) {
+    return { output: "Queries that mention the calendar address are not allowed.", summary: "query blocked (secret column)" };
+  }
+  if (/api_?key/i.test(raw)) {
+    return { output: "Queries that mention the API key column are not allowed.", summary: "query blocked (secret column)" };
+  }
   try {
-    const stmt = sqlite.prepare(raw);
+    const stmt = readOnlyDb().prepare(raw);
+    if (!stmt.readonly || !stmt.reader) {
+      return { output: "Only read-only SELECT queries are allowed.", summary: "query blocked (not read-only)" };
+    }
     const rows = stmt.all() as Record<string, unknown>[];
     // Never leak the framework's own secrets back to the model (api_key, etc.).
     const sanitized = rows.map((r) => {
@@ -1039,11 +1233,13 @@ async function downloadFile(args: Record<string, unknown>, workspaceDir: string)
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), (Number(args.timeoutSec) || 30) * 1000);
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "user-agent": "deepseek-agent-framework/1.0" },
-    });
+    let res: Response;
+    try {
+      res = await safeFetch(url, { signal: controller.signal, headers: { "user-agent": "autarch-agent/1.0" } });
+    } catch (err) {
+      if (err instanceof RefusedRequest) return { output: `Refused: ${err.message}`, summary: `download ${url} refused` };
+      throw err;
+    }
     if (!res.ok) return { output: `HTTP ${res.status} ${res.statusText}`, summary: `download ${url} failed` };
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > MAX_DOWNLOAD_BYTES) {
@@ -1104,4 +1300,33 @@ async function takeScreenshot(args: Record<string, unknown>, workspaceDir: strin
       summary: "screenshot failed",
     };
   }
+}
+
+// --- notes about neighbours (#103) ---------------------------------------------------------
+
+export const NOTES_PER_DAY = 8;
+
+export async function noteAbout(args: Record<string, unknown>, ctx?: ToolContext) {
+  if (!ctx?.agentId) return { output: "Refused: only a villager keeps a diary.", summary: "note refused" };
+  const who = String(args.villager ?? "").trim();
+  const note = String(args.note ?? "").trim();
+  if (!who || !note) return { output: "Refused: say who (`villager`) and what (`note`).", summary: "note refused" };
+  const living = await db.select().from(agents).where(ne(agents.status, "dismissed"));
+  const subject = living.find((a) => a.name.toLowerCase() === who.toLowerCase());
+  if (!subject) return { output: `Refused: nobody called "${who}" lives in the village.`, summary: "note refused" };
+  if (subject.id === ctx.agentId) return { output: "Refused: that's you. Use update_journal for notes about yourself.", summary: "note refused" };
+  const since = Math.floor(Date.now() / 1000) - 86400;
+  const { n } = sqlite
+    .prepare("SELECT COUNT(*) AS n FROM journal_entries WHERE agent_id = ? AND category = 'neighbour' AND created_at >= ?")
+    .get(ctx.agentId, since) as { n: number };
+  if (n >= NOTES_PER_DAY) return { output: `Refused: you've written ${NOTES_PER_DAY} notes about neighbours today. Save the rest for tomorrow.`, summary: "note refused" };
+  await db.insert(journalEntries).values({
+    title: `About ${subject.name}`,
+    body: note.slice(0, 1000),
+    category: "neighbour",
+    status: "done",
+    agentId: ctx.agentId,
+    subjectAgentId: subject.id,
+  });
+  return { output: `Noted in your diary, about ${subject.name}.`, summary: `note about ${subject.name}` };
 }

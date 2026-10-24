@@ -9,12 +9,20 @@ web dashboard.
 > work windows, and pursue its own goals. Only run this on a machine you are OK with an
 > AI poking around.
 
-![Chat session screenshot](docs/chat-session.png)
+![The village: villagers going about their work, the buildings that hold every page, and you (bottom right)](docs/village.png)
 
 ## Updating
 When you pull new code from the repo, run `npm ci && npm run build` and restart the web server
 and worker. Behavior guarantees (e.g. the conversation-mode "no tools" rule) only apply to the
 latest build, not to older copied-over versions.
+
+Native packages (better-sqlite3, esbuild, sharp, unrs-resolver) need their install scripts, which
+newer npm versions only run when approved in the `allowScripts` block of `package.json`. Those
+entries pin exact versions, so after a dependency bump re-approve them with
+`npm install-scripts approve better-sqlite3 esbuild sharp unrs-resolver` and commit the change.
+
+Checks: `npm run typecheck`, `npm run lint` and `npm test` (every test suite). CI runs all
+three on each push and pull request.
 
 ## Stack
 
@@ -36,11 +44,40 @@ npm run dev
 npm run worker
 ```
 
-Open http://localhost:3000. Everything is configured from the **Settings** tab and stored in
+Open http://localhost:3000. Everything is configured from the **Mayor's ledger** in the town hall
+(the **Settings** referred to below) and stored in
 the local SQLite file `data/app.db`.
+
+### Signing in
+
+The dashboard has one owner and one password. On first run the web server prints a line like
+this in its console:
+
+```
+[auth] No password is set yet. Open /login and enter setup code 1A2B-3C4D to choose one.
+```
+
+Open the dashboard, enter that code, and choose a password (at least 8 characters). The code
+is needed so whoever reaches the page first can't claim it. To skip this step on a server, set
+`AUTARCH_PASSWORD` before the first start; it's hashed on first use and never stored in plain
+text.
+
+The password is stored as a salted scrypt hash in `data/auth.json`, next to the database. To
+reset it, stop the server, delete that file, and start again for a new setup code. Changing the
+password signs out every other session. Sessions last 30 days. After 5 wrong passwords, sign-in
+waits 30 seconds, doubling with each further miss up to 15 minutes.
 
 > The `db:push` / `db:generate` scripts still exist for schema maintenance, but the app creates
 > its own schema at startup, so they are optional.
+
+To keep the database somewhere else (for example a throwaway copy while testing), set
+`AUTARCH_DB_PATH=/path/to/file.db` for both the web server and the worker. The safety layer
+protects that file the same way it protects `data/app.db`.
+
+To open the dev server from another machine on your network, list that machine's hostname or IP
+in `ALLOWED_DEV_ORIGINS` (comma-separated) in `.env.local`. To run a second dev server next to
+the first (say, on a throwaway database), give it its own build folder:
+`NEXT_DIST_DIR=.next-test AUTARCH_DB_PATH=/tmp/test.db npx next dev -p 3123`.
 
 ## What the agent can do
 
@@ -80,7 +117,13 @@ Human-initiated chat is never throttled; only autonomous (scheduled/report) sess
 The **agent can schedule its own jobs** (`schedule_job`) and the human can create them
 in the **Jobs** tab. A separate process (`npm run worker`) polls the DB every 15s, checks
 pause/cooldown/daily caps, and opens a work window by injecting an event note into the
-job's conversation. A built-in **daily self-report** job is auto-seeded for 09:00.
+job's conversation. Cron schedules are checked when a job is saved, and a bad one is refused with
+the reason.
+
+Nothing runs on its own until you ask: the worker adds a **self-directed work** window (every 90
+minutes) and a **daily self-report** (09:00), both switched off. Turn them on in the Mayor's
+ledger → **Free time**. Stopping the worker (SIGTERM or Ctrl+C) stops its current turn cleanly
+before it exits.
 
 ### Token & cost tracking
 Each model call's token usage is recorded per message and rolled up per session. Cost is
@@ -104,9 +147,15 @@ Enter a DeepSeek API key in **Settings** (stored in the DB, masked in the UI) an
 Core protections live in **code**, not the database, so neither the agent nor a
 misconfiguration can remove them (`src/lib/agent/config.ts`):
 
-- Hard-protected paths: `node_modules`, `.git`, `.env`, `src/db`, `package.json`, …
-  — never writable/deletable, even with approval.
-- Secret paths (`.ssh/`, `id_rsa`, `credentials.json`, `.env*`, …) — never readable.
+- Hard-protected paths: the framework's own code and config (`src/`, `scripts/`, `deploy/`,
+  `public/`, `package.json`, `.git`, `node_modules`, `.env*`, …), the database and
+  `auth.json` — never writable or deletable, even with approval. Symlinks are followed, so a
+  link pointing at a protected file counts as that file.
+- Secret paths (`.ssh/`, `id_rsa`, `credentials.json`, `.env*`, the database, `auth.json`, …)
+  — never readable.
+- The agent can't call this machine's own services: `fetch_url` and `download_file` block
+  loopback addresses in every spelling and re-check redirects; other local-network addresses
+  need approval.
 - Protected packages / services / processes — removal/stop/kill is blocked.
 - Blocked shell patterns: `rm -rf /`, `mkfs`, fork bombs, killing PID 1, `chmod -R 777 /`, …
 - Critical actions (sudo, package removal, killing processes, service stop/disable,
@@ -117,8 +166,9 @@ misconfiguration can remove them (`src/lib/agent/config.ts`):
 
 By default a few categories are hard-blocked: **reading secrets**, **modifying the framework's
 own files**, **destructive shell commands**, and **protected system operations**. In
-**Settings → Supervisor overrides** the human operator can enable any of these (or flip the
-master **Unrestricted mode**).
+**Settings → Supervisor overrides** the human operator can enable any of these (or all of them
+at once with **Allow all overrides**, which is not the same as the Unrestricted autonomy mode
+below).
 
 Enabling an override downgrades those actions from *blocked* to *critical* — the agent may
 now **request** them, but each one still requires an explicit human approval before it runs.
@@ -133,9 +183,62 @@ It is opt-in with a confirmation prompt and is intended for risky testing only. 
 **Pause** button and the **hourly action cap** still apply as a hard stop. You are fully
 responsible for anything the agent does in this mode.
 
+### Threat model — what the safety layer is and isn't
+
+- **The risk classifier is a guide for the agent, not a sandbox.** It reads tool arguments
+  and shell commands and decides what needs approval. A determined process can find
+  shell spellings it doesn't recognise.
+- **The shipped setup runs as an ordinary user with passwordless `sudo`**
+  (`deploy/README.md`). Every `sudo` command the classifier sees is critical and waits for your
+  approval, and the service user can't touch other users' files without `sudo`. The cost:
+  a command that hides `sudo` from the classifier (inside a script or an interpreter, say)
+  would run as root without asking. To close that gap, replace `NOPASSWD: ALL` in
+  `/etc/sudoers.d/autarch` with the specific commands you're happy for it to run.
+- **Approvals are the human's.** No agent can approve its own requests, change settings or
+  overrides, or lift the pause: the dashboard's control API needs a signed-in session, and
+  the agent's tools can't read the session secret or reach the dashboard's port.
+- **The dashboard is a remote control for the machine.** It listens on the local network and
+  is protected by sign-in (above). Don't forward its port to the internet; to reach it from
+  outside, use a VPN or a reverse proxy with HTTPS, so the session cookie isn't sent in the
+  clear.
+- **Model output is untrusted.** Chat markdown is sanitized, files from the workspace are
+  served as plain text or downloads, and the agent's web fetches can't reach local services.
+
 > **Security note:** The DeepSeek API key is stored in the `agent_settings` row of the SQLite
 > DB and masked on read (never returned to the browser). This is a local-experiment tradeoff —
 > anyone with access to `data/app.db` can read it.
+
+## The village
+
+Home (`/`) is a small pixel-art town where the agent lives as a villager, walking between
+buildings according to what it's doing, with approvals popping up wherever you are. Every
+place works in-world:
+
+- **Library:** skills are books on the shelves; new ones are written at the desk.
+- **Workshop:** jobs are slips on the job board; new ones are set up at the workbench.
+- **Notice board:** goals pinned by priority, opened right in the village.
+- **Guard tower:** the logbook (activity log) and today's tally.
+- **Observatory:** the star charts (system monitor).
+- **Vault:** the ledger and the coffers (usage and spending).
+- **Town hall:** the clerk's desk (approvals), the records cabinet (recent decisions) and the
+  Mayor's ledger (every setting).
+- **Cottage:** the armchair by the hearth (the full chat) and the diary (the journal).
+- **Mailbox:** the agent's notifications.
+- **Your home:** your computer, your desk (approvals, hire requests, letters, the outbox), the
+  bookshelves (every diary), the wall calendar, the map table, the pantry and a guitar.
+
+**Villagers.** The village can have several agents. Each has their own name, personality, look,
+model, tools (within the town's tool policy), budget and cottage, and goes about their own work.
+Add and manage them in the Mayor's ledger → Villagers. Your original agent is the Mayor.
+
+The old Command Center pages are retired; their addresses (`/chat`, `/settings`, `/jobs` …)
+redirect to the matching room. Clicking a villager (or pressing T) opens a quick chat drawer
+anywhere in the village, and you can walk around yourself with the arrow keys or WASD. Every scene (the village and each room) is
+described in `src/components/village/scenes/`, and `npm run village:map` builds its art.
+
+Village art: "Serene Village" by [LimeZu](https://limezu.itch.io/serenevillage) (CC BY 4.0) and
+"Ninja Adventure" by [Pixel-boy and AAA](https://pixel-boy.itch.io/ninja-adventure-asset-pack)
+(CC0). See `public/village/CREDITS.md` and `docs/village-art.md`.
 
 ## Scripts
 
@@ -163,5 +266,5 @@ src/
     settingsStore.ts single-row settings store
     deepseekClient.ts DeepSeek client + /models helper
   worker/index.ts Standalone scheduler process
-  db/             Drizzle schema + Postgres pool
+  db/             Drizzle schema + SQLite (better-sqlite3)
 ```

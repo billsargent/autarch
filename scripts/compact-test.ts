@@ -1,7 +1,7 @@
-// Fixture test for the context-compaction logic (src/lib/agent/compact.ts).
+// Fixture test for the context-compaction logic (src/lib/agent/compactWindow.ts).
 // Verifies token estimation and the keep-window (what gets summarized vs kept).
 // Run with: npm run test:compact
-import { estimateTokens, totalHistoryTokens, selectKeepWindow, splitForCompaction } from "../src/lib/agent/compact";
+import { estimateTokens, totalHistoryTokens, selectKeepWindow, splitForCompaction } from "../src/lib/agent/compactWindow";
 import { type HistoryRow } from "../src/lib/agent/messageHistory";
 
 let idCounter = 0;

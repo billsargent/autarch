@@ -1,3 +1,5 @@
+import type { SessionTrigger } from "./triggers";
+
 export interface MessageRow {
   id: number;
   conversationId: number;
@@ -26,25 +28,33 @@ export interface ToolExecutionRow {
   resolvedAt: string | null;
   resolvedBy: string | null;
   durationMs: number | null;
+  agentId: number | null;
 }
 
 export interface JournalEntryRow {
   id: number;
   title: string;
   body: string | null;
-  category: "exploration" | "task" | "reflection" | "idea" | "system";
+  category: "exploration" | "task" | "reflection" | "idea" | "system" | "neighbour";
+  subjectAgentId?: number | null;
   status: "open" | "in_progress" | "done" | "abandoned";
   createdAt: string;
   updatedAt: string;
+  agentId: number | null;
 }
 
 export interface ConversationRow {
   id: number;
   title: string;
+  chatMode: "agentic" | "conversation";
   createdAt: string;
   updatedAt: string;
   running?: boolean;
   lastMessageId?: number;
+  agentId: number | null;
+  // Its own provider and model, over the villager's (#64).
+  providerId?: number | null;
+  model?: string | null;
 }
 
 export interface SettingsRow {
@@ -57,15 +67,27 @@ export interface SettingsRow {
   toolRetries: number;
   workspaceDir: string;
   enabledTools: string[];
+  townDailyBudgetUsd: number | null;
+  bedtime: string;
+  wakeTime: string;
+  hiringMode: "ask" | "auto";
+  maxPopulation: number;
+  meetingCostCapUsd: number;
+  awayUntil: string | null;
+  awayStartedAt: string | null;
+  awaySpendCapUsd: number;
+  voteCostCapUsd: number;
   extraProtectedPaths: string[];
   systemPromptExtra: string | null;
   staticCorePrompt: string | null;
+  persona: string | null;
   workWindowPrompt: string | null;
   focusedChatPrompt: string | null;
   truncationMessage: string | null;
   allowNetworkFetch: boolean;
   agentName: string;
   apiKeySet: boolean;
+  calendarSet: boolean;
   apiBaseUrl: string;
   deepseekModels: string[];
   paused: boolean;
@@ -95,7 +117,7 @@ export interface JobRow {
   id: number;
   name: string;
   instruction: string;
-  kind: "interval" | "daily_report" | "self_work";
+  kind: "interval" | "daily_report" | "self_work" | "daydream";
   conversationId: number | null;
   intervalMinutes: number;
   maxDurationMinutes: number;
@@ -108,13 +130,14 @@ export interface JobRow {
   lastError: string | null;
   createdAt: string;
   updatedAt: string;
+  agentId: number | null;
 }
 
 export interface WorkSessionRow {
   id: number;
   jobId: number | null;
   conversationId: number | null;
-  trigger: "chat" | "approval" | "scheduled" | "report";
+  trigger: SessionTrigger;
   status: "running" | "completed" | "terminated" | "skipped" | "failed";
   startedAt: string;
   endedAt: string | null;
@@ -136,6 +159,9 @@ export interface GoalRow {
   conversationId: number | null;
   createdAt: string;
   updatedAt: string;
+  agentId: number | null;
+  // Where the work stands, kept by the villager (#68).
+  notes?: string | null;
 }
 
 export interface NotificationRow {
@@ -147,6 +173,7 @@ export interface NotificationRow {
   source: string;
   read: boolean;
   createdAt: string;
+  agentId: number | null;
 }
 
 export const RISK_COLORS: Record<string, string> = {
@@ -165,4 +192,66 @@ export const STATUS_COLORS: Record<string, string> = {
   denied: "text-rose-400",
   blocked: "text-rose-300",
   rate_limited: "text-orange-400",
+  cancelled: "text-neutral-400",
 };
+
+// A villager (#55), as /api/agents lists them: the stored row plus what they're
+// up to right now.
+export interface AgentRow {
+  id: number;
+  name: string;
+  role: string;
+  persona: string | null;
+  character: string;
+  color: string;
+  model: string | null;
+  enabledTools: string[] | null;
+  home: string;
+  isMayor: boolean;
+  status: "active" | "paused" | "dismissed";
+  pausedBy: "owner" | "mayor" | null;
+  tier: "mayor" | "director" | "worker";
+  area: string | null;
+  managerId: number | null;
+  providerId?: number | null;
+  inMeeting?: boolean;
+  daydream?: boolean;
+  dailyBudgetUsd: number | null;
+  maxActionsPerHour: number | null;
+  createdAt: string;
+  updatedAt: string;
+  working: boolean;
+  waiting: number;
+  spentToday: number;
+  focusConversationId: number | null;
+  lastSaid: string | null;
+  lastSaidAt: number | null;
+  talkingWith: number | null;
+}
+
+// A hire request (#99): a drafted villager, the Mayor's interview, and what
+// became of it.
+export interface HireRequestRow {
+  id: number;
+  proposedBy: number | null;
+  draft: {
+    name: string;
+    role?: string | null;
+    persona?: string | null;
+    tier?: "director" | "worker";
+    area?: string | null;
+    managerId?: number | null;
+    enabledTools?: string[] | null;
+    dailyBudgetUsd?: number | null;
+    character?: string | null;
+  };
+  reason: string | null;
+  status: "interviewing" | "awaiting_owner" | "hired" | "declined";
+  interview: string | null;
+  verdict: "recommend" | "reject" | "unsure" | null;
+  conversationId: number | null;
+  agentId: number | null;
+  decidedBy: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+}

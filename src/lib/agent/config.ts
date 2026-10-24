@@ -4,7 +4,9 @@
 // from being damaged by the agent. Users can add *extra* protected paths via
 // settings, but these core protections can never be removed from the UI.
 
+import os from "node:os";
 import path from "node:path";
+import { AUTH_FILE, DB_FILES } from "../../db/path";
 
 export const PROJECT_ROOT = /*turbopackIgnore: true*/ process.cwd();
 
@@ -24,7 +26,13 @@ export const HARD_PROTECTED_PATHS: string[] = [
   path.join(PROJECT_ROOT, "tsconfig.json"),
   path.join(PROJECT_ROOT, "next.config.ts"),
   path.join(PROJECT_ROOT, "next.config.js"),
-  path.join(PROJECT_ROOT, "src", "db"),
+  // The framework's own code, including these guardrails, plus its scripts,
+  // deploy units and static art. An agent that could edit risk.ts could
+  // switch its own guardrails off (#12).
+  path.join(PROJECT_ROOT, "src"),
+  path.join(PROJECT_ROOT, "scripts"),
+  path.join(PROJECT_ROOT, "deploy"),
+  path.join(PROJECT_ROOT, "public"),
   path.join(PROJECT_ROOT, ".env"),
   path.join(PROJECT_ROOT, ".env.local"),
   path.join(PROJECT_ROOT, ".env.production"),
@@ -32,6 +40,9 @@ export const HARD_PROTECTED_PATHS: string[] = [
   path.join(PROJECT_ROOT, "data", "app.db"),
   path.join(PROJECT_ROOT, "data", "app.db-wal"),
   path.join(PROJECT_ROOT, "data", "app.db-shm"),
+  // ...and wherever AUTARCH_DB_PATH points it.
+  ...DB_FILES,
+  AUTH_FILE,
 ];
 
 // Any path (anywhere on disk) matching these patterns is treated as a secret
@@ -48,8 +59,10 @@ export const SECRET_PATH_PATTERNS: RegExp[] = [
   /\.aws\/credentials/i,
   /credentials\.json$/i,
   /\.npmrc$/i,
-  // The framework's own database holds the plaintext DeepSeek API key.
+  // The framework's own database holds the plaintext DeepSeek API key,
+  // including a custom AUTARCH_DB_PATH location.
   /app\.db(-wal|-shm)?$/i,
+  ...[...DB_FILES, AUTH_FILE].map((f) => new RegExp(`^${f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")),
 ];
 
 // System directories that require CRITICAL (always human-approved) risk for
@@ -69,15 +82,13 @@ export const SYSTEM_SENSITIVE_DIRS: string[] = [
 ];
 
 // apt/dpkg packages that must never be removed — doing so would break the
-// machine's ability to run this very framework (Node runtime, Postgres, core
+// machine's ability to run this very framework (Node runtime, SQLite, core
 // OS tooling). apt-get remove/purge on any of these is fully BLOCKED.
 export const PROTECTED_PACKAGES: string[] = [
   "nodejs",
   "npm",
   "node",
-  "postgresql",
-  "postgresql-common",
-  "postgresql-client-common",
+  "libsqlite3-0",
   "sudo",
   "systemd",
   "systemd-sysv",
@@ -98,11 +109,9 @@ export const PROTECTED_PACKAGES: string[] = [
 ];
 
 // systemd services that can never be stopped/disabled/masked through the
-// agent because this app depends on them (Postgres) or the box depends on
+// agent because the box depends on
 // them to stay reachable/bootable.
 export const PROTECTED_SERVICES: string[] = [
-  "postgresql",
-  "postgresql@*",
   "systemd-journald",
   "systemd-logind",
   "dbus",
@@ -119,14 +128,14 @@ export const PROTECTED_SERVICES: string[] = [
 export const PROTECTED_PROCESS_NAMES: string[] = [
   "node",
   "next-server",
-  "postgres",
-  "postgresql",
   "npm",
 ];
 
-// Persistent by default — /tmp is wiped on reboot. Existing installs are
-// auto-migrated to this value by settingsStore.getSettings().
-export const DEFAULT_WORKSPACE_DIR = "/root/agent-workspace";
+// In the home folder of the user the server runs as (/root/agent-workspace
+// when that's root), so it's always writable. Persistent — /tmp is wiped on
+// reboot; installs from before that are auto-migrated by
+// settingsStore.getSettings(). Existing installs keep their setting.
+export const DEFAULT_WORKSPACE_DIR = path.join(os.homedir(), "agent-workspace");
 
 // The agent's reusable markdown playbooks live INSIDE the workspace so the agent
 // can write them at low risk and everything agent-facing stays in one place.
@@ -151,13 +160,30 @@ export const DEFAULT_ENABLED_TOOLS = [
   "cancel_job",
   "manage_goal",
   "list_goals",
-  "notify_human",
-  "post_message",
+  "message_owner",
   "query_database",
   "download_file",
   "edit_file",
   "take_screenshot",
   "web_search",
+  "ask_villager",
+  // The Mayor's (#58); only he ever gets them.
+  "assign_goal",
+  "schedule_job_for",
+  "review_agent",
+  "flag",
+  "pause_agent",
+  "resume_agent",
+  "call_meeting",
+  "call_vote",
+  "propose_building",
+  // Ideas (#98): anyone may propose.
+  "propose_idea",
+  // The outbox (#107).
+  "save_draft",
+  "note_about",
+  // Hiring (#99): the Mayor and directors.
+  "propose_hire",
 ];
 
 export const MAX_OUTPUT_CHARS = 8000;

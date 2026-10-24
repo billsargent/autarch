@@ -66,7 +66,7 @@ function totals(sinceUnixSec?: number | null, prefixExpr?: string, prefixVal?: s
     params.push(Math.floor(sinceUnixSec));
   }
   if (prefixExpr) {
-    sql += ` AND strftime(${prefixExpr}, started_at, 'unixepoch') = ?`;
+    sql += ` AND strftime(${prefixExpr}, started_at, 'unixepoch', 'localtime') = ?`;
     params.push(prefixVal);
   }
   const r = sqlite.prepare(sql).get(...params) as Record<string, unknown>;
@@ -88,13 +88,15 @@ export async function GET() {
   todayStart.setHours(0, 0, 0, 0);
   const todayStartSec = Math.floor(todayStart.getTime() / 1000);
   const weekStartSec = Math.floor((now - 7 * DAY_MS) / 1000);
-  const month = new Date().toISOString().slice(0, 7);
+  // Local time throughout, like "today" (#32).
+  const d0 = new Date();
+  const month = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, "0")}`;
   const year = String(new Date().getFullYear());
 
-  const daily = bucketize("strftime('%Y-%m-%d', started_at, 'unixepoch')", 30);
-  const weekly = bucketize("strftime('%Y-W%W', started_at, 'unixepoch')", 12);
-  const monthly = bucketize("strftime('%Y-%m', started_at, 'unixepoch')", 12);
-  const yearly = bucketize("strftime('%Y', started_at, 'unixepoch')", 5);
+  const daily = bucketize("strftime('%Y-%m-%d', started_at, 'unixepoch', 'localtime')", 30);
+  const weekly = bucketize("strftime('%Y-W%W', started_at, 'unixepoch', 'localtime')", 12);
+  const monthly = bucketize("strftime('%Y-%m', started_at, 'unixepoch', 'localtime')", 12);
+  const yearly = bucketize("strftime('%Y', started_at, 'unixepoch', 'localtime')", 5);
 
   const periodTotals = {
     today: totals(todayStartSec),
@@ -104,5 +106,33 @@ export async function GET() {
   };
   const allTime = totals(null);
 
-  return NextResponse.json({ daily, weekly, monthly, yearly, periodTotals, allTime });
+  // The last 30 days by villager and by model (#80).
+  const since30 = Math.floor((now - 30 * DAY_MS) / 1000);
+  const byAgent = sqlite
+    .prepare(
+      `SELECT a.name AS name, COALESCE(SUM(s.cost_usd), 0) AS cost, COALESCE(SUM(s.total_tokens), 0) AS total, COUNT(*) AS sessions
+       FROM work_sessions s LEFT JOIN agents a ON a.id = s.agent_id
+       WHERE s.started_at >= ? AND s.status <> 'skipped' GROUP BY s.agent_id ORDER BY cost DESC`,
+    )
+    .all(since30);
+  const byModel = sqlite
+    .prepare(
+      `SELECT COALESCE(model, 'not recorded') AS name, COALESCE(SUM(cost_usd), 0) AS cost, COALESCE(SUM(total_tokens), 0) AS total, COUNT(*) AS sessions
+       FROM work_sessions WHERE started_at >= ? AND status <> 'skipped' GROUP BY model ORDER BY cost DESC`,
+    )
+    .all(since30);
+
+  // Today by what it was spent on (chat, jobs, meetings, votes, free time…).
+  const byActivity = sqlite
+    .prepare(
+      `SELECT CASE WHEN j.kind = 'daydream' THEN 'free time' WHEN s.trigger = 'scheduled' THEN 'jobs' WHEN s.trigger = 'report' THEN 'daily report'
+              WHEN s.trigger = 'message' THEN 'neighbours asking' WHEN s.trigger = 'review' THEN 'away-mode reviews' WHEN s.trigger = 'interview' THEN 'interviews'
+              WHEN s.trigger = 'meeting' THEN 'meetings' WHEN s.trigger = 'vote' THEN 'votes' WHEN s.trigger = 'approval' THEN 'after approvals' ELSE 'chat' END AS name,
+              COALESCE(SUM(s.cost_usd), 0) AS cost, COALESCE(SUM(s.total_tokens), 0) AS total, COUNT(*) AS sessions
+       FROM work_sessions s LEFT JOIN jobs j ON j.id = s.job_id
+       WHERE s.started_at >= ? AND s.status <> 'skipped' GROUP BY 1 ORDER BY cost DESC`,
+    )
+    .all(todayStartSec);
+
+  return NextResponse.json({ daily, weekly, monthly, yearly, periodTotals, allTime, byAgent, byModel, byActivity });
 }

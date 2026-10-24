@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
 import { DEFAULT_ENABLED_TOOLS, DEFAULT_WORKSPACE_DIR, PROJECT_ROOT } from "./config";
+import { HIRING_TOOLS, MAYOR_TOOLS } from "./mayorTools";
 
 export type AgentSettingsRow = typeof agentSettings.$inferSelect;
 
@@ -31,15 +32,24 @@ function migrateSkillsDirOnce(workspaceDir: string) {
 // The async-messaging tool is low-risk + rate-limited; auto-enable it once on
 // installs created before it existed so the agent can talk to the human in a
 // session out of the box.
+// Tools added after an install was set up are offered to its tool policy once
+// (switched on), and remembered, so if the owner later switches one off it
+// stays off.
+export const DEFAULT_TOWN_BUDGET_USD = 2;
+
+const NEW_TOOLS_TO_OFFER = ["message_owner", "ask_villager", ...MAYOR_TOOLS, ...HIRING_TOOLS, "note_about", "propose_idea", "save_draft"];
+
 async function ensureMessagingEnabled(row: AgentSettingsRow): Promise<AgentSettingsRow> {
   if (messagingEnabled) return row;
   messagingEnabled = true;
+  const offered = new Set((row.offeredTools as string[] | null) ?? []);
   const enabled = (row.enabledTools as string[]) || [];
-  if (enabled.includes("post_message")) return row;
-  const next = [...enabled, "post_message"];
+  const fresh = NEW_TOOLS_TO_OFFER.filter((t) => !offered.has(t));
+  if (!fresh.length) return row;
+  const next = [...enabled, ...fresh.filter((t) => !enabled.includes(t))];
   const updated = await db
     .update(agentSettings)
-    .set({ enabledTools: next, updatedAt: new Date() })
+    .set({ enabledTools: next, offeredTools: [...offered, ...fresh], updatedAt: new Date() })
     .where(eq(agentSettings.id, row.id))
     .returning();
   return updated[0];
@@ -70,6 +80,9 @@ export async function getSettings(): Promise<AgentSettingsRow> {
     .values({
       workspaceDir: DEFAULT_WORKSPACE_DIR,
       enabledTools: DEFAULT_ENABLED_TOOLS,
+      // A fresh village starts with a daily budget, so nothing it does on its
+      // own can run up a bill before the owner has looked (changeable in Limits).
+      townDailyBudgetUsd: DEFAULT_TOWN_BUDGET_USD,
     })
     .returning();
   cachedId = inserted[0].id;

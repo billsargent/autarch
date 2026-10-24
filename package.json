@@ -14,7 +14,17 @@
     "worker": "tsx src/worker/index.ts",
     "backup": "tsx scripts/backup.ts",
     "test:sanitizer": "tsx scripts/sanitize-test.ts",
-    "test:compact": "tsx scripts/compact-test.ts"
+    "test:compact": "tsx scripts/compact-test.ts",
+    "test:chatmode": "tsx scripts/chatmode-test.ts",
+    "test:village": "tsx scripts/village-test.ts",
+    "test:safety": "tsx scripts/safety-test.ts",
+    "test:jobs": "tsx scripts/jobs-test.ts",
+    "test:turns": "tsx scripts/turn-test.ts",
+    "test:villagers": "tsx scripts/villagers-test.ts",
+    "test": "npm run test:sanitizer && npm run test:compact && npm run test:chatmode && npm run test:village && npm run test:safety && npm run test:jobs && npm run test:turns && npm run test:villagers",
+    "pixelate": "tsx scripts/pixelate.ts",
+    "village:map": "tsx scripts/build-village-map.ts",
+    "village:custom-art": "tsx scripts/build-custom-tiles.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",
@@ -27,6 +37,7 @@
     "react-dom": "19.2.6",
     "react-markdown": "^10.1.0",
     "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1"
   },
@@ -43,5 +54,13 @@
     "tailwindcss": "4.1.17",
     "tsx": "^4.19.2",
     "typescript": "5.9.3"
+  },
+  "allowScripts": {
+    "better-sqlite3@11.10.0": true,
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true,
+    "sharp@0.34.5": true,
+    "unrs-resolver@1.12.2": true
   }
 }

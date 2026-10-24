@@ -1,5 +1,6 @@
-import JobsView from "@/components/JobsView";
+import { redirect } from "next/navigation";
 
-export default function JobsPage() {
-  return <JobsView />;
+// The old Command Center page; its room in the village does everything it did.
+export default function Page() {
+  redirect("/village/workshop?open=jobs.board");
 }

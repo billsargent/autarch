@@ -1,0 +1,95 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
+
+// Token and cost totals by period. Shared by the Usage page and the vault.
+
+export interface UsageTotals {
+  prompt: number;
+  completion: number;
+  total: number;
+  cost: number;
+  sessions: number;
+  cacheHit: number;
+  cacheMiss: number;
+}
+
+export interface UsageBucket extends UsageTotals {
+  bucket: string;
+}
+
+export interface UsageShare {
+  name: string | null;
+  cost: number;
+  total: number;
+  sessions: number;
+}
+
+export interface UsageData {
+  // The last 30 days by villager and by model (#80).
+  byAgent?: UsageShare[];
+  byModel?: UsageShare[];
+  // Today, by what it was spent on.
+  byActivity?: UsageShare[];
+  daily: UsageBucket[];
+  weekly: UsageBucket[];
+  monthly: UsageBucket[];
+  yearly: UsageBucket[];
+  periodTotals: {
+    today: UsageTotals;
+    week: UsageTotals;
+    month: UsageTotals;
+    year: UsageTotals;
+  };
+  allTime: UsageTotals;
+}
+
+export const USAGE_PERIODS = ["daily", "weekly", "monthly", "yearly"] as const;
+export type UsagePeriod = (typeof USAGE_PERIODS)[number];
+
+export function fmtTokens(n: number): string {
+  return n.toLocaleString();
+}
+
+export function fmtCost(n: number): string {
+  return `$${n.toFixed(4)}`;
+}
+
+// "73%", or "—" when nothing was cached either way.
+export function cacheHitRate(t: Pick<UsageTotals, "cacheHit" | "cacheMiss">): string {
+  const all = t.cacheHit + t.cacheMiss;
+  return all > 0 ? `${Math.round((t.cacheHit / all) * 100)}%` : "—";
+}
+
+export function usageCards(data: UsageData | null): Array<{ label: string; t: UsageTotals | undefined }> {
+  return [
+    { label: "Today", t: data?.periodTotals.today },
+    { label: "This week", t: data?.periodTotals.week },
+    { label: "This month", t: data?.periodTotals.month },
+    { label: "This year", t: data?.periodTotals.year },
+    { label: "All-time", t: data?.allTime },
+  ];
+}
+
+export function useUsage() {
+  const [data, setData] = useState<UsageData | null>(null);
+
+  const reload = useCallback(async () => {
+    const res = await fetch("/api/usage").then((r) => r.json());
+    setData(res);
+  }, []);
+
+  useEffect(() => {
+    const first = setTimeout(reload, 0);
+    const id = setInterval(reload, FALLBACK_MS);
+    return () => {
+      clearTimeout(first);
+      clearInterval(id);
+    };
+  }, [reload]);
+  // Live: refresh when something it shows changes (#74).
+  useLive(["session"], reload);
+
+  return { data, reload };
+}

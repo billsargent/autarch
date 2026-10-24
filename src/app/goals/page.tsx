@@ -1,5 +1,6 @@
-import GoalsView from "@/components/GoalsView";
+import { redirect } from "next/navigation";
 
-export default function GoalsPage() {
-  return <GoalsView />;
+// The old Command Center page; its room in the village does everything it did.
+export default function Page() {
+  redirect("/?open=goals.board");
 }

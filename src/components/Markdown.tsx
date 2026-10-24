@@ -5,6 +5,25 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema, type Options as SanitizeOptions } from "rehype-sanitize";
+
+// Model output is untrusted (a fetched web page can steer what it writes), so
+// raw HTML passes through an allowlist (#6): standard markdown elements plus
+// images, <video>, <audio> and <source>. Scripts, iframes (including srcdoc),
+// objects, forms, styles and event handlers are dropped, and URLs are limited
+// to http(s) and relative paths such as /api/files/...
+export const SANITIZE_SCHEMA: SanitizeOptions = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), "video", "audio", "source"],
+  attributes: {
+    ...defaultSchema.attributes,
+    img: [...(defaultSchema.attributes?.img ?? []), "loading"],
+    video: ["src", "controls", "poster", "loop", "muted", "playsInline", "width", "height"],
+    audio: ["src", "controls", "loop", "muted"],
+    source: ["src", "type"],
+  },
+  protocols: { ...defaultSchema.protocols, src: ["http", "https"], poster: ["http", "https"] },
+};
 
 // Fenced code block with a header bar (language label + copy button). Kept as a
 // styled <pre> — no syntax-highlighter dependency so the bundle stays light.
@@ -121,7 +140,7 @@ const components: Components = {
 export default function Markdown({ children, className = "" }: { children: string; className?: string }) {
   return (
     <div className={`min-w-0 text-sm leading-relaxed ${className}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeRaw]} components={components}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA]]} components={components}>
         {children}
       </ReactMarkdown>
     </div>

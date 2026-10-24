@@ -4,79 +4,26 @@ import { eq } from "drizzle-orm";
 import type OpenAI from "openai";
 import type { AgentSettingsRow } from "./settingsStore";
 import { historyToApiMessages, type HistoryRow } from "./messageHistory";
+import { rowTokens, splitForCompaction, totalHistoryTokens } from "./compactWindow";
 
 type ChatMessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
-// Rough token estimator. DeepSeek docs (quick_start/token_usage) say ~1 English
-// char ≈ 0.3 token (≈3.3 chars/token). 4 chars/token under-estimated real usage
-// by ~18%, so compaction was triggering later than the real token budget.
-const CHAR_PER_TOKEN = 3.3;
+// The pure helpers live in compactWindow.ts (no database access, so tests can
+// import them safely); re-exported here for existing callers.
+export { estimateTokens, selectKeepWindow, splitForCompaction, totalHistoryTokens, type CompactionSplit } from "./compactWindow";
+
 const PROMPT_OVERHEAD_TOKENS = 8000; // realistic system prompt + tools + framing
 const SUMMARY_BATCH_TOKENS = 30000;
-
-export function estimateTokens(text: string): number {
-  if (!text) return 0;
-  return Math.ceil(text.length / CHAR_PER_TOKEN);
-}
-
-function rowTokens(r: HistoryRow): number {
-  let n = estimateTokens(r.content ?? "");
-  if (r.role === "assistant" && Array.isArray(r.toolCalls)) {
-    try {
-      n += estimateTokens(JSON.stringify(r.toolCalls));
-    } catch {
-      /* ignore */
-    }
-  }
-  return n;
-}
-
-export function totalHistoryTokens(rows: HistoryRow[]): number {
-  return rows.reduce((s, r) => s + rowTokens(r), 0);
-}
-
-// Pure windowing helper: pick the newest rows that fit within `targetTokens`
-// (always keeping at least the newest message). Everything not returned is what
-// gets summarized. Exposed for testing.
-export function selectKeepWindow(rows: HistoryRow[], targetTokens: number): HistoryRow[] {
-  const keep: HistoryRow[] = [];
-  let used = 0;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    const t = rowTokens(rows[i]);
-    if (used + t > targetTokens && keep.length > 0) break;
-    keep.unshift(rows[i]);
-    used += t;
-  }
-  return keep;
-}
-
-export interface CompactionSplit {
-  keep: HistoryRow[];
-  toSummarize: HistoryRow[];
-}
-
-// Decide what stays verbatim vs what gets summarized. Any leading tool-result
-// rows of the keep window are folded into the summarize set: they can only be
-// the results of assistant tool_calls that were just summarized (a tool row
-// always immediately follows its assistant tool_calls), and leaving them in
-// `keep` would orphan them — the sanitizer would drop them and the outcome
-// would be lost entirely. Exposed for testing.
-export function splitForCompaction(rows: HistoryRow[], targetTokens: number): CompactionSplit {
-  const keepRaw = selectKeepWindow(rows, targetTokens);
-  let i = 0;
-  while (i < keepRaw.length && keepRaw[i].role === "tool") i++;
-  const extraSummarize = keepRaw.slice(0, i);
-  const keep = keepRaw.slice(i);
-  const keepIds = new Set(keep.map((r) => r.id));
-  const toSummarize = [...rows.filter((r) => !keepIds.has(r.id)), ...extraSummarize];
-  return { keep, toSummarize };
-}
 
 export interface BuildOptions {
   conversationId: number;
   rows: HistoryRow[];
   settings: AgentSettingsRow;
   client: OpenAI;
+  // Aborts the summary call when the turn is stopped.
+  signal?: AbortSignal;
+  // Told the tokens of every summary call, so the session counts them (#30).
+  onUsage?: (usage: OpenAI.Completions.CompletionUsage) => void;
 }
 
 // Build the model-facing messages for a turn. If the history fits within the
@@ -86,8 +33,11 @@ export interface BuildOptions {
 // conversation summary]" user message. No DB rows are deleted, so the UI's
 // scroll-back history is unaffected.
 export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessageParam[]> {
-  const { conversationId, rows, settings, client } = opts;
-  const full = historyToApiMessages(rows);
+  const { conversationId, rows, settings, client, signal, onUsage } = opts;
+  // Reasoning goes back only to DeepSeek, which needs it (#62).
+  const passReasoning = (settings as { providerKind?: string }).providerKind !== undefined ? (settings as { providerKind?: string }).providerKind === "deepseek" : true;
+  const history = (r: HistoryRow[]) => historyToApiMessages(r, passReasoning);
+  const full = history(rows);
   if (!settings.autoCompact) return full;
 
   const maxContext = Math.max(2000, settings.maxContextTokens ?? 24000);
@@ -105,12 +55,16 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
   const convoRows = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
   const convo = convoRows[0];
   if (convo?.summary && (convo.compactedThroughId ?? 0) >= newestToSummarizeId) {
-    return [{ role: "user", content: `[Earlier conversation summary]\n${convo.summary}` }, ...historyToApiMessages(keep)];
+    return [{ role: "user", content: `[Earlier conversation summary]\n${convo.summary}` }, ...history(keep)];
   }
+
+  // Only what the last summary didn't cover, merged with it (#31).
+  const previous = convo?.summary && convo.compactedThroughId ? convo.summary : null;
+  const fresh = previous ? toSummarize.filter((r) => r.id > (convo!.compactedThroughId ?? 0)) : toSummarize;
 
   let summary = "";
   try {
-    summary = await generateSummary(client, settings.modelName, toSummarize);
+    summary = await generateSummary(client, settings.modelName, fresh, signal, previous, onUsage, passReasoning);
   } catch {
     // Safe fallback: hard window + truncation note rather than a giant prompt.
     return [
@@ -118,7 +72,7 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
         role: "user",
         content: "[Earlier conversation history was truncated to fit the context window; older messages are not shown.]",
       },
-      ...historyToApiMessages(keep),
+      ...history(keep),
     ];
   }
 
@@ -127,10 +81,21 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
     .set({ summary, compactedThroughId: newestToSummarizeId, updatedAt: new Date() })
     .where(eq(conversations.id, conversationId));
 
-  return [{ role: "user", content: `[Earlier conversation summary]\n${summary}` }, ...historyToApiMessages(keep)];
+  return [{ role: "user", content: `[Earlier conversation summary]\n${summary}` }, ...history(keep)];
 }
 
-async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]): Promise<string> {
+// Each summary call is time-boxed and stops with the turn.
+const SUMMARY_TIMEOUT_MS = 120_000;
+
+async function generateSummary(
+  client: OpenAI,
+  model: string,
+  rows: HistoryRow[],
+  signal?: AbortSignal,
+  previous?: string | null,
+  onUsage?: BuildOptions["onUsage"],
+  deepseek = true,
+): Promise<string> {
   // Cluster-aware chunking: never split between an assistant tool_calls message
   // and its tool result rows. A `tool` row always stays in the current chunk with
   // its preceding assistant, so chunk boundaries only ever land after non-tool rows.
@@ -178,6 +143,8 @@ async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]
         return `${r.role}: ${content}`;
       })
       .join("\n");
+    // The first batch carries the earlier summary, so the new one replaces it.
+    const input = previous && chunk === chunks[0] ? `[Summary of what came before]\n${previous}\n\n[What happened next]\n${text}` : text;
     const completion = await client.chat.completions.create({
       model,
       messages: [
@@ -186,16 +153,16 @@ async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]
           content:
             "You summarize a conversation excerpt into dense bullet points. Preserve: topics discussed, actions/tools run (including tool names and arguments) and their outcomes, decisions made, unresolved issues, pending approvals, and the current task state. Be concise but information-dense. No preamble.",
         },
-        { role: "user", content: text },
+        { role: "user", content: input },
       ],
       max_tokens: chunks.length > 1 ? 800 : 1000,
       // Summarization doesn't need high-effort chain-of-thought; pin it low so
       // compaction calls stay cheap.
-      reasoning_effort: "low",
-      thinking: { type: "enabled" },
+      ...(deepseek ? { reasoning_effort: "low", thinking: { type: "enabled" } } : {}),
     } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
       thinking?: { type: "enabled" | "disabled" };
-    });
+    }, { timeout: SUMMARY_TIMEOUT_MS, signal });
+    if (completion.usage) onUsage?.(completion.usage);
     const out = completion.choices[0]?.message?.content?.trim() ?? "";
     if (out) parts.push(out);
   }

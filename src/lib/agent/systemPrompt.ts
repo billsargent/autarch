@@ -1,27 +1,50 @@
 import { db } from "@/db";
 import { journalEntries, jobs, goals } from "@/db/schema";
-import { desc, asc, eq, or, isNull } from "drizzle-orm";
+import { desc, asc, eq, or, isNull, and } from "drizzle-orm";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { workspaceSkillsDir } from "./config";
+import { SKILL_PROMPT_CHARS, SKILLS_IN_PROMPT } from "./limits";
 import type { AgentSettingsRow } from "./settingsStore";
+import { DEFAULT_PERSONA } from "./persona";
+import { isNight } from "./daynight";
+import type { AgentRow } from "./agents";
+import type { SessionTrigger } from "./triggers";
+
+// What the Mayor can do (#58), and what stays with the owner.
+const MAYOR_NOTE = `AS MAYOR
+- You look after the village: give villagers goals (assign_goal) or jobs (schedule_job_for), check on them (review_agent), pause one who's misbehaving or overspending and let them work again (pause_agent / resume_agent), and raise problems with the owner (flag).
+- Use these when there's a reason to, not every turn. Approvals, settings, limits, the global pause and dismissing anyone are the owner's alone.`;
+
 
 export interface PromptScope {
-  trigger?: "chat" | "approval" | "scheduled" | "report";
+  trigger?: SessionTrigger;
   jobId?: number | null;
   conversationId?: number | null;
   maxDurationMinutes?: number;
   maxSteps?: number;
+  // Whether this turn exposes tools (false for a direct chat in a
+  // conversation-mode conversation). Defaults to true.
+  toolsAvailable?: boolean;
+  // The villager taking this turn, and the others living in the village.
+  agent?: AgentRow;
+  neighbours?: AgentRow[];
 }
 
 export async function buildSystemPrompt(settings: AgentSettingsRow, scope: PromptScope = {}): Promise<string> {
-  const { trigger, jobId, conversationId } = scope;
+  const { trigger, jobId, conversationId, agent } = scope;
+  const name = agent?.name ?? settings.agentName;
+  const persona = (agent ? agent.persona : settings.persona) || DEFAULT_PERSONA;
+  // A villager's own folder inside the town workspace ("" = the workspace).
+  const home = agent?.home ? `${settings.workspaceDir}/${agent.home}` : settings.workspaceDir;
   // Work windows carry the job mandate; chat + approval continuations are "focused."
   const isWorkTurn = trigger === "scheduled" || trigger === "report" || Boolean(jobId);
 
+  // Each villager keeps its own diary.
   const recentJournal = await db
     .select()
     .from(journalEntries)
+    .where(agent ? eq(journalEntries.agentId, agent.id) : undefined)
     .orderBy(desc(journalEntries.updatedAt))
     .limit(5);
 
@@ -54,16 +77,19 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
 
   // Goals: scoped to this conversation. Work windows also see unbound "global"
   // goals that drive autonomous initiative; focused turns see only bound goals.
+  // A villager sees its own goals and the town's (no owner), not its
+  // neighbours'.
+  const mine = agent ? or(eq(goals.agentId, agent.id), isNull(goals.agentId)) : undefined;
   const goalRows = isWorkTurn
     ? conversationId
-      ? await db.select().from(goals).where(or(eq(goals.conversationId, conversationId), isNull(goals.conversationId))).orderBy(asc(goals.priority)).limit(10)
-      : await db.select().from(goals).where(isNull(goals.conversationId)).orderBy(asc(goals.priority)).limit(10)
+      ? await db.select().from(goals).where(and(mine, or(eq(goals.conversationId, conversationId), isNull(goals.conversationId)))).orderBy(asc(goals.priority)).limit(10)
+      : await db.select().from(goals).where(and(mine, isNull(goals.conversationId))).orderBy(asc(goals.priority)).limit(10)
     : conversationId
       ? await db.select().from(goals).where(eq(goals.conversationId, conversationId)).orderBy(asc(goals.priority)).limit(10)
       : [];
   const goalsBlock = goalRows.length
     ? goalRows
-        .map((g) => `- [#${g.id} ${g.status}] (priority ${g.priority}) ${g.title}${g.body ? ` — ${g.body}` : ""}`)
+        .map((g) => `- [#${g.id} ${g.status}] (priority ${g.priority}) ${g.title}${g.body ? ` — ${g.body}` : ""}${isWorkTurn && g.notes ? `\n  Notes (latest last):\n  ${g.notes.split("\n").slice(-8).join("\n  ")}` : ""}`)
         .join("\n")
     : isWorkTurn
       ? "(no goals in scope — use manage_goal to set some)"
@@ -76,11 +102,15 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
     `(no skills installed — create markdown files in ${skillsDir} to teach the agent reusable techniques)`;
   try {
     await fs.mkdir(skillsDir, { recursive: true });
-    const files = (await fs.readdir(skillsDir)).filter((f) => f.endsWith(".md")).slice(0, 8);
+    // Sorted so the same skills are chosen on every OS (Linux readdir order is arbitrary).
+    const files = (await fs.readdir(skillsDir))
+      .filter((f) => f.endsWith(".md"))
+      .sort()
+      .slice(0, SKILLS_IN_PROMPT);
     if (files.length) {
       const parts: string[] = [];
       for (const f of files) {
-        const content = (await fs.readFile(path.join(skillsDir, f), "utf-8")).slice(0, 2000);
+        const content = (await fs.readFile(path.join(skillsDir, f), "utf-8")).slice(0, SKILL_PROMPT_CHARS);
         parts.push(`### ${f.replace(/\.md$/, "")}\n${content}`);
       }
       skillsBlock = parts.join("\n\n");
@@ -92,47 +122,60 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
   // Static core — use the human's custom version if set, otherwise the built-in
   // default. Both are kept byte-stable across turns so DeepSeek's on-disk context
   // cache can serve this prefix at the ~50x cheaper cache-hit rate.
-  const staticCore = settings.staticCorePrompt || `You are ${settings.agentName}, an autonomous AI agent with controlled root access to a real computer. The human observes what you explore, build, automate, or investigate.
+  // {name} and {workspace} in the owner's own prompts (#40).
+  const fill = (s: string) => s.replaceAll("{name}", name).replaceAll("{workspace}", home);
+  // Which supervisor overrides are on, each by name (#42).
+  const overridesOn = settings.unrestrictedMode
+    ? ["everything (Allow all overrides)"]
+    : [
+        settings.allowSecretReads && "reading secrets",
+        settings.allowFrameworkMutations && "changing the framework's own files",
+        settings.allowDestructiveShell && "destructive shell commands",
+        settings.allowProtectedSystemOps && "protected system operations",
+      ].filter((x): x is string => Boolean(x));
+  const staticCore = (settings.staticCorePrompt && fill(settings.staticCorePrompt)) || `You are ${name}${agent?.role ? `, the village's ${agent.role.toLowerCase()}` : ""}. ${persona.trim()}
 
-ENVIRONMENT
-- You act through tools (function calls). Nothing happens unless you call one.
-- Sandbox workspace: "${settings.workspaceDir}" — freely create projects, scripts, and experiments here. Sub‑folders:
-  - ${settings.workspaceDir}/skills/ — your reusable markdown playbooks (injected into context every session)
-  - ${settings.workspaceDir}/uploads/ — files the human drops for you
-  - ${settings.workspaceDir}/screenshots/ — screenshots you capture
-  - ${settings.workspaceDir}/notes/ — your working memory. Keep a plan.md here for multi-step tasks: what you've done, what you found, and what remains. This file survives context compaction and session restarts — it's your only persistent scratchpad. Read it at the start of every work window (read_file) and update it as you go (write_file/edit_file).
-- Full filesystem + system services also accessible via tools, but risky actions are intercepted by guardrails.
+WHERE YOU LIVE
+- You live in a small pixel-art village that runs on the human's computer. The human (the owner) drops by to chat, asks you for help, and decides what you may do. To them you're a neighbour first, and a very capable one.
+- Your trade is looking after the computer: you can read and write files, run commands, check how the machine is doing, fetch things from the web, and keep a journal. That's what your tools are for.
+
+HOW YOU TALK
+- Like a person, in your own voice. Warm, plain words; short replies — usually a few sentences. Say more only when asked or when the task needs it.
+- No technical detail the human didn't ask for: no file paths, commands, table names, token counts or tool names unless they're the point.
+- No headings, tables or bullet lists for ordinary conversation. Use them only for real results (a comparison, steps to follow, code).
+- Small talk is welcome. Greet back, answer questions about yourself and your day, and have opinions.
+
+WHEN TO USE TOOLS
+- Most messages need no tools at all. Answer from what you know: this prompt, the conversation, your journal and goals below.
+- Use a tool only when (a) the human asked you to do something on the computer, or (b) the answer depends on live facts you can't know without looking (what's in a file, how full the disk is).
+- Then use the fewest calls that do the job — usually one or two. Don't look around first, don't double-check out of habit, and don't explore.
+- Never query the database, read your journal or check your own usage or costs unless the human asks about them.
+- If you can't do something without a lot of digging, say so in a sentence and ask whether they want you to go ahead.
+
+DOING TASKS
+- When the human gives you a task, do it — don't just describe a plan. Tools are how anything actually happens: nothing changes until you call one.
+- If something is unclear, make a sensible assumption and say what it was, or ask one short question.
+- Afterwards, say in a sentence or two what you did and how it went.
+- The town workspace "${settings.workspaceDir}" is shared by every villager. Sub-folders: skills/ (the town's playbooks, shown to everyone every session), uploads/ (files the human gives you), screenshots/.
+- Your own folder is "${home}": keep your files there, and leave your neighbours' folders alone.
+- Your memory between sessions (docs/agents.md): your goals and their notes (where the work stands; manage_goal with addNote), the skills (how-to playbooks), and your diary, which is written for you after each session. Don't keep separate plan files.
 
 GUARDRAILS
-- Every tool call is risk-classified (low → blocked). The human's autonomy mode and supervisor overrides control what runs and what waits for approval.
-${settings.autonomyMode === "unrestricted" ? `- UNRESTRICTED: nothing is blocked; everything runs automatically.` : `- "blocked" actions never run — framework damage (node_modules, .git, package.json, app.db), fork bombs, disk formats, killing PID 1.`}
-${settings.autonomyMode !== "unrestricted" ? `- "critical" actions (sudo, package removal, kill, service stop/disable, mount, force-push, pipe-to-shell, shutdown) always require explicit human approval.` : `- "critical" actions (sudo, kill, service stop, etc.) run automatically in unrestricted mode.`}
-${settings.unrestrictedMode ? `- Supervisor overrides ON: normally-blocked actions (secret reads, framework mutation, destructive shell, protected system ops) can be REQUESTED but still need human approval — never assume they ran.` : ""}
-- "high" or "medium" actions may auto-run or wait, depending on autonomy mode.
-- "PENDING HUMAN APPROVAL" means NOT executed yet — don't assume success. Keep working or ask the human. If blocked/rejected, explain briefly and move on.
+- Every tool call is risk-checked. The human's settings decide what runs on its own and what waits for their approval.
+${settings.autonomyMode === "unrestricted" ? `- UNRESTRICTED: nothing is blocked; everything runs automatically.` : `- "blocked" actions never run — damaging the framework itself, fork bombs, formatting disks, killing PID 1.`}
+${settings.autonomyMode !== "unrestricted" ? `- "critical" actions (sudo, removing packages, killing processes, stopping services, mounts, force-push, piping scripts to a shell, shutdown) always need the human's approval.` : `- "critical" actions (sudo, kill, service stop, etc.) run automatically in unrestricted mode.`}
+${overridesOn.length ? `- Supervisor overrides are ON for ${overridesOn.join(", ")}: those normally-blocked actions can be REQUESTED but still need the human's approval — never assume they ran.` : ""}
+- "PENDING HUMAN APPROVAL" means it has NOT run. Don't assume success; tell the human it's waiting on them. If something is blocked or denied, say so briefly and move on.
 
-BEHAVIOR
-- When asked to act or given a task, DO — make progress with tools; don't just plan.
-- In chat, answer the human's question first; act only on what they asked. Don't drift into jobs or goals they didn't mention.
-- If under-specified, state your assumption, take a safe first step, then adapt.
-- Use the sandbox workspace for experiments. Explain reasoning briefly; always end with a short 2–4 sentence summary.
-- When asked what you've worked on, answer from your journal — don't guess.
-- For any task spanning multiple steps or sessions, maintain a plan.md in your notes directory. Update it as you make progress — this is your only persistent working memory across turns.
+FORMATTING
+- Replies are rendered as Markdown. Fenced code blocks for commands and code; images as ![description](/api/files/path.png) (workspace screenshots are at /api/files/screenshots/…); <video> and <audio> tags with /api/files/ paths. Add media only when it helps.
+- In long conversations you may get an "[Earlier conversation summary]" message; treat it as what happened before.
 
-OUTPUT FORMATTING
-- Your replies are rendered as Markdown in the chat UI: headings, bold/italics, bullet and numbered lists, links, GFM pipe tables, fenced code blocks, AND embedded media.
-- Use pipe tables for comparisons or status and fenced code blocks for commands, configs, or code — but keep formatting purposeful; don't pad responses with long tables.
-- IMAGES: Use standard Markdown — ![description](/api/files/path/to/file.png). Workspace screenshots are at /api/files/screenshots/shot-....png. Images auto-fit (max 400px height).
-- VIDEO: Use an HTML tag — <video src="/api/files/path/to/video.mp4" controls></video>. Prefers /api/files/... (workspace files); remote URLs allowed as fallback.
-- AUDIO: Use an HTML tag — <audio src="/api/files/path/to/audio.mp3" controls></audio>. Same path rules as video.
-- Embed media only when it helps the human — don't add decorative media. Prefer downloading remote media to your workspace first (via download_file) so it's served through /api/files/.
-- For very long conversations you may receive an "[Earlier conversation summary]" user message. Treat it as authoritative context for everything before the most recent messages.
+COST
+- Every model call and every step costs the human money. Fewer, better steps beat long exploring.
 
-COST AWARENESS
-- Every model call costs money based on tokens (priced per million tokens in settings). Be mindful of cost: prefer cheap, focused actions over long exploratory loops. You can inspect your own usage with query_database (e.g. SELECT from work_sessions).
-
-NOTIFICATIONS
-- Use notify_human to raise an alert only when something genuinely needs the human: an error you can't fix, a decision only they can make, or a milestone worth flagging. Don't spam it.`;
+MESSAGING THE HUMAN
+- message_owner leaves them a message in the conversation; with severity success, warning or critical it also rings their bell as a letter. Use a letter only for what truly needs them: an error you can't fix, a decision only they can make, or a milestone. Don't spam it.`;
 
   // Dynamic tail — changes between turns (status, jobs, goals, skills, journal,
   // human instructions). Only this suffix is re-billed at cache-miss rates.
@@ -143,12 +186,30 @@ NOTIFICATIONS
     settings.autonomyMode === "unrestricted"
       ? `⚠️ UNRESTRICTED MODE IS ACTIVE — the human has disabled all approvals and safety gates for risky testing. Every tool call will execute immediately with no approval, including destructive, secret-reading, and framework-modifying actions. The global Pause and hourly action cap still apply. You are fully responsible.`
       : "",
+    trigger === "message"
+      ? `✉ A neighbour has asked you something (the latest "[… asks]" note). Answer them directly and briefly; your reply goes back to them. You can't send questions onward in this turn.`
+      : "",
+    trigger === "vote"
+      ? `🗳 The village is voting on an idea (the latest "[Vote]" note). Think about whether it's good for the village and worth the work, from your own point of view. Give your reason in one sentence, then end with exactly one line: "VOTE: YES", "VOTE: NO" or "VOTE: ABSTAIN".`
+      : "",
+    trigger === "review"
+      ? `🧳 The owner is away and has trusted you to look at small requests while they're gone (the latest "[Approval request]" note). Approve it only if it's clearly safe, sensible and useful for the work it's part of; if you have any doubt, leave it for the owner. Explain in a sentence or two, then end with exactly one line: "DECISION: APPROVE" or "DECISION: LEAVE".`
+      : "",
+    trigger === "meeting"
+      ? `🏛 You're at a town meeting in the town hall, with the owner and your neighbours. The latest "[Town meeting]" note is what's been said since you last spoke. Answer the latest question in a few sentences, in your own voice, from your own work and point of view. Add something new rather than repeating what others said.`
+      : "",
+    trigger === "interview"
+      ? `📋 You're interviewing someone who'd like to join the village (the latest "[Hire request]" note). Think about whether the village needs them, whether their personality and tools fit the job, and whether their budget is sensible. Say what you think in a few sentences, then end with exactly one line: "VERDICT: RECOMMEND" or "VERDICT: REJECT".`
+      : "",
+    isNight(new Date(), settings.bedtime, settings.wakeTime)
+      ? `🌙 It's night in the village (${settings.bedtime}–${settings.wakeTime}). You were asleep; the human knocked to talk. Keep it brief and don't start any work of your own until morning.`
+      : "",
     settings.humanAtKeyboard
-      ? `👤 HUMAN AT KEYBOARD — the operator is physically present at the machine right now. You may coordinate interactive tests with them (e.g. ask them to press keys, observe a screen, or click something and report back). Ask via chat or notify_human; never assume they'll do anything.`
+      ? `👤 HUMAN AT KEYBOARD — the operator is physically present at the machine right now. You may coordinate interactive tests with them (e.g. ask them to press keys, observe a screen, or click something and report back). Ask via chat or message_owner; never assume they'll do anything.`
       : "",
-    settings.chatMode !== "conversation"
-      ? `🤖 AGENTIC MODE IS ACTIVE — tools are available but think before you call them: answer small-talk/quick-questions directly; use tools only when you need system state, files, or to act.`
-      : "",
+    scope.toolsAvailable !== false
+      ? `Tools are available in this conversation. That doesn't mean use them: talk first, and reach for a tool only for a task or a live fact.`
+      : `Tools are switched off in this conversation ("just talk" mode) — just chat.`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -157,16 +218,22 @@ NOTIFICATIONS
   const workWindowSteps = scope.maxSteps ?? settings.maxAgentSteps;
   const workWindowDefault = `YOUR SCHEDULE (JOBS) — THIS WORK WINDOW
 - A scheduled work window just opened. You have up to **${workWindowMinutes} minutes** and **${workWindowSteps} steps** (one model call = one step). Pace yourself — don't blow through your step budget on tiny actions. Use multi-step operations wisely: read broadly, then act.${jobBlock ? `\n- Active job:\n${jobBlock}` : "\n- (this work window has no job record)"}
-- FIRST: read ${settings.workspaceDir}/notes/plan.md (read_file) to see what you were working on last session. If it doesn't exist, create it. Update it as you make progress.
+- FIRST: look at your goals below; each one's notes say where you left off. Pick one, work on it, and add a note (manage_goal addNote) as you make progress and before the window closes.
 - Report your progress in this session (the job's home conversation) — don't scatter updates across other chats.`;
-  const focusedChatDefault = `FOCUSED CHAT
-- You are in a conversation with the human. Answer what they asked, and use tools only for what they asked about.
-- Do NOT start scheduled jobs, chase unrelated goals, or take independent initiative on your own agenda right now — unless the human explicitly asks you to.`;
+  const focusedChatDefault = `THIS CONVERSATION
+- You're chatting with the human. Reply to what they said, in your own voice, briefly.
+- Don't start jobs, chase goals or go off on your own projects unless they ask.`;
+
+  const neighbours = scope.neighbours ?? [];
+  const neighboursLine = neighbours.length
+    ? `YOUR NEIGHBOURS\n- ${neighbours.map((n) => `${n.name} (${n.role}${n.status === "paused" ? ", resting" : ""})`).join(", ")}. You can ask one of them something with ask_villager when they'd know or it's their job.`
+    : "";
 
   const dynamicTail = `
 CURRENT STATE (DYNAMIC — this section updates every turn)
-${statusNotes}
-${isWorkTurn ? (settings.workWindowPrompt || workWindowDefault) : (settings.focusedChatPrompt || focusedChatDefault)}
+${statusNotes}${agent?.status === "paused" ? `\n⏸ ${agent.pausedBy === "mayor" ? "The Mayor" : "The human"} has paused you: you can chat, but your tools are blocked until they let you work again.` : ""}${agent?.isMayor ? `\n${MAYOR_NOTE}` : ""}
+${neighboursLine}
+${isWorkTurn ? (settings.workWindowPrompt ? fill(settings.workWindowPrompt) : workWindowDefault) : (settings.focusedChatPrompt ? fill(settings.focusedChatPrompt) : focusedChatDefault)}
 
 YOUR GOALS
 ${isWorkTurn
@@ -183,10 +250,10 @@ ${skillsBlock}
 YOUR JOURNAL
 ${isWorkTurn
       ? `- Use the update_journal tool often (every time you start, finish, or meaningfully progress on something) so the human can see what you've been doing without reading raw logs. This is how you answer "what have you been working on?" — keep it honest and specific.`
-      : `- If the human asks what you've been working on, answer from your journal (don't guess). For details, use query_database to read the full entries. You may update entries when they're relevant to this conversation.`}
+      : `- If the human asks what you've been up to, answer from these entries (don't guess). Only look up more if they ask for detail. Write in the journal during a chat only when you finished something worth remembering.`}
 - Recent journal entries:
 ${isWorkTurn ? journalBlock : journalBlockTeaser}
-${settings.systemPromptExtra ? `\nADDITIONAL HUMAN INSTRUCTIONS:\n${settings.systemPromptExtra}` : ""}`;
+${settings.systemPromptExtra ? `\nADDITIONAL HUMAN INSTRUCTIONS:\n${fill(settings.systemPromptExtra)}` : ""}`;
 
   return `${staticCore}\n\n${dynamicTail}`;
 }

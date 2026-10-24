@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { jobs, conversations } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { nextCronRun } from "@/lib/agent/cron";
+import { cronProblem, nextCronRun } from "@/lib/agent/cron";
+import { getAgent } from "@/lib/agent/agents";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -25,6 +26,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       patch.conversationId = null;
     }
   }
+  if ("agentId" in body && Number(body.agentId)) {
+    patch.agentId = (await getAgent(Number(body.agentId))).id;
+    // Turns run as their conversation's villager, so a job handed to someone
+    // else starts a fresh conversation with them (unless one was chosen).
+    const [current] = await db.select({ agentId: jobs.agentId }).from(jobs).where(eq(jobs.id, Number(id)));
+    if (current && current.agentId !== patch.agentId && !("conversationId" in body)) patch.conversationId = null;
+  }
   if ("intervalMinutes" in body) patch.intervalMinutes = Math.max(5, Number(body.intervalMinutes) || 60);
   if ("maxDurationMinutes" in body) patch.maxDurationMinutes = Math.max(1, Number(body.maxDurationMinutes) || 10);
   if ("reportSessionTitle" in body) {
@@ -33,14 +41,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   if ("cron" in body) {
     const c = typeof body.cron === "string" ? body.cron.trim() : "";
+    const problem = c ? cronProblem(c) : null;
+    if (problem) return NextResponse.json({ error: `That cron schedule won't work: ${problem}.` }, { status: 400 });
     patch.cron = c || null;
   }
-  if (patch.enabled === true) {
-    const row = await db.select().from(jobs).where(eq(jobs.id, Number(id))).limit(1);
-    const rawCron = (patch.cron as string | undefined) ?? row[0]?.cron ?? "";
+  // Re-plan the next run when the job is switched on or its schedule changes;
+  // otherwise a new cron would wait for the old schedule's time.
+  const [row] = await db.select().from(jobs).where(eq(jobs.id, Number(id))).limit(1);
+  const scheduleChanged =
+    ("cron" in patch && patch.cron !== (row?.cron ?? null)) ||
+    ("intervalMinutes" in patch && patch.intervalMinutes !== row?.intervalMinutes);
+  if (patch.enabled === true || scheduleChanged) {
+    const rawCron = "cron" in patch ? ((patch.cron as string | null) ?? "") : (row?.cron ?? "");
     const cron = rawCron.trim();
     // Use the new intervalMinutes if it was patched, otherwise the existing DB value.
-    const interval = ((patch.intervalMinutes as number | undefined) ?? Number(row[0]?.intervalMinutes)) || 60;
+    const interval = ((patch.intervalMinutes as number | undefined) ?? Number(row?.intervalMinutes)) || 60;
     patch.nextRunAt = cron ? nextCronRun(cron, new Date()) ?? new Date(Date.now() + interval * 60_000) : new Date(Date.now() + interval * 60_000);
   }
   const updated = await db

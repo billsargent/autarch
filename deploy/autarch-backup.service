@@ -1,0 +1,12 @@
+[Unit]
+Description=Autarch - nightly WAL-safe DB backup
+
+[Service]
+Type=oneshot
+User=autarch
+Group=autarch
+WorkingDirectory=/home/autarch/autarch
+ExecStart=/usr/bin/npm run backup
+Environment=BACKUP_DIR=/home/autarch/backups
+# Backups older than this many days are deleted after each run.
+Environment=BACKUP_KEEP_DAYS=14

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
@@ -71,13 +72,40 @@ export function resolvePathSafe(input: string, base: string): string {
   return path.isAbsolute(expanded) ? path.normalize(expanded) : path.resolve(base, expanded);
 }
 
+// The real location of a path, following symlinks (and junctions). For a path
+// that doesn't exist yet (a file about to be written), the nearest existing
+// parent is resolved and the rest appended. Path checks use this so a link in
+// the workspace can't point the agent at a secret or protected file (#9).
+export function realPath(p: string): string {
+  let current = path.resolve(p);
+  const rest: string[] = [];
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync.native(current), ...rest);
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) return path.resolve(p);
+      rest.unshift(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
 export function isHardProtectedPath(target: string, extra: string[] = []): boolean {
   const all = [...HARD_PROTECTED_PATHS, ...extra.map((p) => path.resolve(p))];
-  return all.some((p) => isWithin(p, target) || target === p);
+  const real = realPath(target);
+  return all.some((p) => isWithin(p, target) || isWithin(realPath(p), real));
 }
 
 export function isSecretPath(target: string): boolean {
-  return SECRET_PATH_PATTERNS.some((re) => re.test(target));
+  // Patterns use forward slashes (".ssh/"); normalise Windows separators too.
+  const forms = [target, realPath(target)].flatMap((p) => [p, p.replace(/\\/g, "/")]);
+  return SECRET_PATH_PATTERNS.some((re) => forms.some((f) => re.test(f)));
+}
+
+// True if `target` really lives inside `dir` once symlinks are followed.
+export function isReallyWithin(dir: string, target: string): boolean {
+  return isWithin(realPath(dir), realPath(target));
 }
 
 export function classifyFileOperation(
@@ -138,7 +166,9 @@ export function classifyFileOperation(
   // The agent's skills folder lives INSIDE the workspace, so the workspace check
   // below already classifies writes there as low risk.
 
-  if (isWithin(path.resolve(workspaceDir), resolved)) {
+  // Judged on the real location, so a link inside the workspace pointing
+  // elsewhere doesn't count as "inside the workspace".
+  if (isReallyWithin(workspaceDir, resolved)) {
     return { risk: "low", reason: "Inside the agent's dedicated sandbox workspace." };
   }
 
@@ -146,7 +176,8 @@ export function classifyFileOperation(
     return { risk: "low", reason: "Read-only filesystem access." };
   }
 
-  const isSystemDir = SYSTEM_SENSITIVE_DIRS.some((d) => isWithin(d, resolved) || resolved === d);
+  const real = realPath(resolved);
+  const isSystemDir = SYSTEM_SENSITIVE_DIRS.some((d) => isWithin(d, resolved) || isWithin(d, real));
   if (isSystemDir) {
     return {
       risk: "critical",
@@ -238,6 +269,16 @@ export function classifyShellCommand(command: string, overrides?: SuperviseOverr
   const cmd = command.trim();
   if (!cmd) return { risk: "low", reason: "Empty command." };
 
+  // Talking to the dashboard's own control API from the shell (it could
+  // approve its own actions or change settings) is blocked, override or not (#4).
+  const dashboardPort = process.env.PORT || "3000";
+  if (/\/api\/(approvals|settings|chat|auth|conversations)\b/i.test(cmd)) {
+    return { risk: "blocked", reason: "Commands that call the dashboard's control API are blocked." };
+  }
+  if (new RegExp(`(localhost|127\\.\\d+\\.\\d+\\.\\d+|0\\.0\\.0\\.0|\\[?::1\\]?|\\[?::ffff:[0-9a-f.:]+\\]?)(:${dashboardPort})\\b`, "i").test(cmd)) {
+    return { risk: "blocked", reason: "Commands that connect to the dashboard on this machine are blocked." };
+  }
+
   for (const rule of BLOCKED_RULES) {
     if (rule.test.test(cmd)) {
       return liftBlock({ risk: rule.risk, reason: rule.reason }, anyOverride(overrides, ["allowDestructiveShell"]));
@@ -258,8 +299,20 @@ export function classifyShellCommand(command: string, overrides?: SuperviseOverr
   }
 
   // Protect self-critical paths referenced from arbitrary shell commands.
-  const touchesHardProtected = HARD_PROTECTED_PATHS.some((p) => cmd.includes(p)) ||
-    HARD_PROTECTED_PATHS.some((p) => cmd.includes(path.relative(PROJECT_ROOT, p)) && path.relative(PROJECT_ROOT, p) !== "");
+  // Absolute protected paths anywhere in the command, or relative names (src,
+  // package.json, src/db...) as whole path tokens — not as substrings, so
+  // "/tmp/mysrc" doesn't match "src".
+  const tokens = cmd.split(/[\s;|&()<>"'`]+/).filter(Boolean);
+  const touchesHardProtected =
+    HARD_PROTECTED_PATHS.some((p) => cmd.includes(p)) ||
+    HARD_PROTECTED_PATHS.some((p) => {
+      const rel = path.relative(PROJECT_ROOT, p).split(path.sep).join("/");
+      if (!rel) return false;
+      return tokens.some((t) => {
+        const tok = t.replace(/^\.\//, "").replace(/\/+$/, "");
+        return tok === rel || tok.startsWith(`${rel}/`);
+      });
+    });
   const destructiveVerb = /\b(rm|mv|dd|truncate|>|>>|sed\s+-i)\b/i.test(cmd);
   if (touchesHardProtected && destructiveVerb) {
     return liftBlock(
@@ -284,11 +337,38 @@ export function classifyShellCommand(command: string, overrides?: SuperviseOverr
   return { risk: "medium", reason: "Unrecognized command pattern; treated as medium risk by default." };
 }
 
+// Package and service names are checked against their real naming rules
+// before anything runs, and the commands run without a shell, so a name can
+// never smuggle in a command (#2).
+// Debian package names (lowercase letters, digits, + - .), optional :arch.
+export const PACKAGE_NAME = /^[a-z0-9][a-z0-9+.-]*(:[a-z0-9]+)?$/;
+// apt-cache search terms: plain words only.
+export const PACKAGE_SEARCH = /^[A-Za-z0-9+._ -]{1,64}$/;
+// systemd unit names (letters, digits, : _ . @ -).
+export const UNIT_NAME = /^[A-Za-z0-9:_.@-]{1,128}$/;
+
+export function invalidPackageArgs(
+  action: "install" | "remove" | "upgrade" | "search" | "update" | "list",
+  packages: unknown,
+): string | null {
+  if (packages !== undefined && !Array.isArray(packages)) return "packages must be a list of names.";
+  const list = (packages as unknown[] | undefined) ?? [];
+  if (list.some((p) => typeof p !== "string")) return "packages must be a list of names.";
+  if (action === "search") {
+    const q = (list as string[]).join(" ");
+    return q && !PACKAGE_SEARCH.test(q) ? `Invalid search term "${q}" (letters, digits, + . _ - and spaces only).` : null;
+  }
+  const bad = (list as string[]).find((p) => !PACKAGE_NAME.test(p));
+  return bad !== undefined ? `Invalid package name "${bad}".` : null;
+}
+
 export function classifyPackageAction(
   action: "install" | "remove" | "upgrade" | "search" | "update" | "list",
   packages: string[],
   overrides?: SuperviseOverrides,
 ): RiskResult {
+  const invalid = invalidPackageArgs(action, packages);
+  if (invalid) return { risk: "blocked", reason: invalid };
   if (action === "search" || action === "list") {
     return { risk: "low", reason: "Read-only package query." };
   }
@@ -316,6 +396,10 @@ export function classifyServiceAction(
   service: string,
   overrides?: SuperviseOverrides,
 ): RiskResult {
+  if (!UNIT_NAME.test(service)) return { risk: "blocked", reason: `Invalid service name "${service}".` };
+  if (!["start", "stop", "restart", "enable", "disable", "status"].includes(action)) {
+    return { risk: "blocked", reason: `Unknown service action "${action}".` };
+  }
   const isProtected = PROTECTED_SERVICES.some((s) =>
     s.endsWith("*") ? service.startsWith(s.slice(0, -1)) : s === service,
   );
@@ -353,20 +437,81 @@ export function classifyProcessTarget(target: string, overrides?: SuperviseOverr
   return { risk: "critical", reason: "Terminating a process requires human approval." };
 }
 
+// --- Network destinations (#4) ----------------------------------------------
+// The agent must not reach this machine's own services (above all the
+// dashboard's control API, where it could approve its own actions), and
+// reaching other machines on the local network needs the human's approval.
+
+type AddressKind = "self" | "private" | "public";
+
+function ipv4Kind(ip: string): AddressKind | null {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ip);
+  if (!m) return null;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  if (a === 127 || a === 0) return "self";
+  if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254) || (a === 100 && b >= 64 && b <= 127)) {
+    return "private";
+  }
+  return "public";
+}
+
+function ownAddresses(): Set<string> {
+  const out = new Set<string>();
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const a of list ?? []) out.add(a.address.toLowerCase().replace(/%.*$/, ""));
+  }
+  return out;
+}
+
+// Classify one IP address (v4 or v6, no brackets).
+export function addressKind(ip: string): AddressKind {
+  const addr = ip.toLowerCase().replace(/^\[|\]$/g, "").replace(/%.*$/, "");
+  if (ownAddresses().has(addr)) return "self";
+  const v4 = ipv4Kind(addr);
+  if (v4) return v4;
+  if (addr === "::1" || addr === "::") return "self";
+  // IPv4-mapped IPv6, dotted or hex (::ffff:127.0.0.1 / ::ffff:7f00:1).
+  const mapped = /^::ffff:(.+)$/.exec(addr);
+  if (mapped) {
+    const tail = mapped[1];
+    if (tail.includes(".")) return ipv4Kind(tail) ?? "public";
+    const hex = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(tail);
+    if (hex) {
+      const n = (parseInt(hex[1], 16) << 16) | parseInt(hex[2], 16);
+      return ipv4Kind([(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".")) ?? "public";
+    }
+  }
+  if (/^f[cd][0-9a-f]{2}:/.test(addr) || /^fe[89ab][0-9a-f]:/.test(addr)) return "private";
+  return "public";
+}
+
+// Classify a URL's host name (before any DNS lookup).
+export function hostKind(hostname: string): AddressKind {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host === os.hostname().toLowerCase()) return "self";
+  if (host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".lan") || host.endsWith(".home.arpa")) return "private";
+  if (/^[\d.]+$/.test(host) || host.includes(":")) return addressKind(host);
+  return "public";
+}
+
 export function classifyFetchUrl(url: string): RiskResult {
+  let u: URL;
   try {
-    const u = new URL(url);
-    const host = u.hostname.toLowerCase();
-    if (["localhost", "127.0.0.1", "0.0.0.0", "::1"].includes(host) || host.endsWith(".local")) {
-      return { risk: "blocked", reason: "Fetching the framework's own host is blocked to avoid feedback loops." };
-    }
-    if (u.protocol === "file:") {
-      return { risk: "blocked", reason: "file:// URLs are blocked." };
-    }
-    return { risk: "medium", reason: "Outbound network request." };
+    u = new URL(url);
   } catch {
     return { risk: "blocked", reason: "Invalid URL." };
   }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    return { risk: "blocked", reason: `${u.protocol}// URLs are blocked; only http and https are allowed.` };
+  }
+  const kind = hostKind(u.hostname);
+  if (kind === "self") {
+    return { risk: "blocked", reason: "Requests to this machine's own services are blocked (including the dashboard's control API)." };
+  }
+  if (kind === "private") {
+    return { risk: "critical", reason: "Requests to other machines on the local network require human approval." };
+  }
+  return { risk: "medium", reason: "Outbound network request." };
 }
 
 export function autonomyAllowsAuto(
