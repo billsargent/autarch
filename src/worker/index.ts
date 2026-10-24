@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { db, sqlite } from "@/db";
 import { jobs, workSessions, conversations } from "@/db/schema";
 import { eq, and, gte, lte, ne, inArray, asc, desc, count } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "@/lib/agent/settingsStore";
@@ -172,6 +172,14 @@ async function runDueJobs() {
     return;
   }
   sleptLogged = false;
+
+  // The live event log only needs the last day (#74); the web server prunes
+  // it too, but only while a browser is connected.
+  try {
+    sqlite.prepare("DELETE FROM events WHERE created_at < unixepoch() - 86400").run();
+  } catch {
+    /* the table may not exist yet on a very old database */
+  }
 
   // Once a day: the farm, the bakery and the village's meals (#106).
   try {

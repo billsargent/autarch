@@ -6,6 +6,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import { DEFAULT_ENABLED_TOOLS } from "../lib/agent/config";
+import { SESSION_TRIGGERS } from "../lib/agent/triggers";
 
 // The villagers (#55). Each is an agent with its own name, personality, look,
 // model, tools and home folder; the first one is the Mayor. Town-wide things
@@ -91,7 +92,7 @@ export const workSessions = sqliteTable("work_sessions", {
   conversationId: integer("conversation_id").references(() => conversations.id, {
     onDelete: "set null",
   }),
-  trigger: text("trigger", { enum: ["chat", "approval", "scheduled", "report", "message", "interview", "meeting", "review", "vote"] }).notNull(),
+  trigger: text("trigger", { enum: SESSION_TRIGGERS }).notNull(),
   status: text("status", {
     enum: ["running", "completed", "terminated", "skipped", "failed"],
   })

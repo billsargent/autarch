@@ -10,6 +10,7 @@ import Database from "better-sqlite3";
 import { db, sqlite } from "@/db";
 import { DB_PATH } from "@/db/path";
 import { agents, journalEntries, jobs, goals, notifications, conversations, messages } from "@/db/schema";
+import { VILLAGE_TOOLS } from "./villageTools";
 import { eq, asc, desc, and, or, isNull, ne, sql as dsql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
@@ -48,7 +49,7 @@ function truncate(text: string, max = MAX_OUTPUT_CHARS): string {
 // Tool schema (OpenAI / DeepSeek function-calling format)
 // ---------------------------------------------------------------------------
 
-export const ALL_TOOL_DEFINITIONS = [
+const CORE_TOOL_DEFINITIONS = [
   {
     type: "function" as const,
     function: {
@@ -395,235 +396,10 @@ export const ALL_TOOL_DEFINITIONS = [
       },
     },
   },
-  {
-    type: "function" as const,
-    function: {
-      name: "ask_villager",
-      description:
-        "Ask another villager something: a question, a favour or a hand-off. They answer in their own time and their reply is posted in this conversation (you'll see it on your next turn). Use it when a neighbour knows something or does that job; don't use it for chit-chat. You can't ask onward while you're answering someone else.",
-      parameters: {
-        type: "object",
-        properties: {
-          to: { type: "string", description: "The villager's name." },
-          message: { type: "string", description: "What you want to ask or tell them, in a sentence or two." },
-        },
-        required: ["to", "message"],
-      },
-    },
-  },
-  // The Mayor's powers (#58): only the Mayor is ever given these.
-  {
-    type: "function" as const,
-    function: {
-      name: "assign_goal",
-      description: "Mayor only. Put a goal on a villager's goals board, for them to pick up in their work.",
-      parameters: {
-        type: "object",
-        properties: {
-          to: { type: "string", description: "The villager's name." },
-          title: { type: "string" },
-          body: { type: "string", description: "What done looks like, in a sentence or two." },
-          priority: { type: "number", description: "1 = highest. Default 3." },
-        },
-        required: ["to", "title"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "schedule_job_for",
-      description: "Mayor only. Give a villager a new recurring job (their own scheduled work window). It runs as them, on their budget.",
-      parameters: {
-        type: "object",
-        properties: {
-          to: { type: "string", description: "The villager's name." },
-          name: { type: "string", description: "Short name for the job." },
-          instruction: { type: "string", description: "What they should do in each work window." },
-          intervalMinutes: { type: "number", description: "How often, in minutes (min 5). Default 60." },
-          maxDurationMinutes: { type: "number", description: "Max minutes per run. Default 10." },
-          cron: { type: "string", description: "Optional 5-field cron expression; overrides intervalMinutes." },
-        },
-        required: ["to", "name", "instruction"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "review_agent",
-      description: "Mayor only. Read-only look at a villager: status, today's spending, recent work sessions and tool calls, open goals and jobs.",
-      parameters: {
-        type: "object",
-        properties: { name: { type: "string", description: "The villager's name." } },
-        required: ["name"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "flag",
-      description: "Mayor only. Raise a problem with the owner (a notification). For things they need to know or decide; a few an hour at most.",
-      parameters: {
-        type: "object",
-        properties: {
-          title: { type: "string" },
-          body: { type: "string" },
-          severity: { type: "string", enum: ["info", "warning", "critical"] },
-        },
-        required: ["title"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "pause_agent",
-      description: "Mayor only. Pause one villager who is misbehaving or burning budget: they stop what they're doing and can only chat. Never yourself, never the whole town. The owner is told why.",
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "The villager's name." },
-          reason: { type: "string", description: "Why, for the owner." },
-        },
-        required: ["name", "reason"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "resume_agent",
-      description: "Mayor only. Let a villager you paused work again. Villagers the owner paused stay paused until the owner says.",
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "The villager's name." },
-          reason: { type: "string" },
-        },
-        required: ["name"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "call_meeting",
-      description: "Mayor only. Call a town meeting about something the whole village should talk over. Everyone awake gathers in the town hall and answers in turn. Daytime only, and rarely: meetings cost every villager a turn.",
-      parameters: {
-        type: "object",
-        properties: { topic: { type: "string", description: "What you want to talk about, as a question or a sentence." } },
-        required: ["topic"],
-      },
-    },
-  },
-  // Hiring (#99): the Mayor and directors only.
-  {
-    type: "function" as const,
-    function: {
-      name: "propose_hire",
-      description:
-        "Draft a new villager to help with your area, when there's more work than you can do. The Mayor interviews them, then the owner decides (or, if the owner allows it, the Mayor hires them). They can only have tools you have yourself, and a budget no bigger than yours. Workers report to you; only the Mayor can take on a director.",
-      parameters: {
-        type: "object",
-        properties: {
-          name: { type: "string", description: "Their name (not already used in the village)." },
-          role: { type: "string", description: "Their job, in a few words." },
-          persona: { type: "string", description: "Their personality, in a few sentences." },
-          area: { type: "string", description: "The area they work in. Default: yours." },
-          tier: { type: "string", enum: ["worker", "director"], description: "Default worker." },
-          tools: { type: "array", items: { type: "string" }, description: "Their tools. Default: yours, minus what a worker can't hold." },
-          dailyBudgetUsd: { type: "number", description: "What they may spend a day, in USD." },
-          reason: { type: "string", description: "Why the village needs them." },
-        },
-        required: ["name", "role", "persona", "dailyBudgetUsd", "reason"],
-      },
-    },
-  },
-  // Ideas (#98): anyone may pin one; the village votes.
-  {
-    type: "function" as const,
-    function: {
-      name: "propose_idea",
-      description:
-        "Pin an idea for the village on the notice board: a project, an improvement, an event. The village votes on it; if it's adopted it becomes a town goal. Only ideas you'd really back; a few a day at most.",
-      parameters: {
-        type: "object",
-        properties: {
-          title: { type: "string", description: "The idea, in a few words." },
-          body: { type: "string", description: "Why it's worth doing and roughly how, in a few sentences." },
-        },
-        required: ["title"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "call_vote",
-      description: "Mayor only. Put an open idea from the notice board to a vote now (daytime only). Each villager votes once; a majority with quorum adopts it.",
-      parameters: {
-        type: "object",
-        properties: { ideaId: { type: "number" } },
-        required: ["ideaId"],
-      },
-    },
-  },
-  {
-    type: "function" as const,
-    function: {
-      name: "propose_building",
-      description:
-        "Mayor only. Propose a new building on one of the empty plots north and west of town: a house (beds for two more villagers), a farm, a bakery or a workshop. The owner approves it; then it takes about half a day to build.",
-      parameters: {
-        type: "object",
-        properties: {
-          kind: { type: "string", enum: ["house", "farm", "bakery", "workshop"] },
-          plot: { type: "string", enum: ["north-1", "north-2", "west-1", "west-2"], description: "Optional; default the first free plot." },
-          reason: { type: "string", description: "Why the village needs it, for the owner." },
-        },
-        required: ["kind", "reason"],
-      },
-    },
-  },
-  // The outbox (#107): anything meant to leave the machine is a draft.
-  {
-    type: "function" as const,
-    function: {
-      name: "save_draft",
-      description:
-        "Save something meant for the outside world (an email, a post, a shop listing, a message to someone) as a draft in the owner's outbox. Nothing is ever sent by you: the owner reads it, may edit it, and decides. Use this instead of trying to send anything yourself.",
-      parameters: {
-        type: "object",
-        properties: {
-          kind: { type: "string", enum: ["email", "post", "listing", "message", "other"] },
-          to: { type: "string", description: "Who or where it's for: an address, a channel, a shop." },
-          subject: { type: "string" },
-          content: { type: "string", description: "The full text, ready to send." },
-        },
-        required: ["kind", "content"],
-      },
-    },
-  },
-  // Notes about neighbours (#103): kept in your own diary.
-  {
-    type: "function" as const,
-    function: {
-      name: "note_about",
-      description:
-        "Write a short note in your own diary about a neighbour: how they helped, what they're good at, if they seem stuck or overloaded. Your diary is private (the owner can read it; the Mayor sees a summary). A few a day at most; be fair and specific.",
-      parameters: {
-        type: "object",
-        properties: {
-          villager: { type: "string", description: "Who it's about." },
-          note: { type: "string", description: "The note, in a sentence or two." },
-        },
-        required: ["villager", "note"],
-      },
-    },
-  },
 ];
+
+// The core tools, then the village's (villageTools.ts).
+export const ALL_TOOL_DEFINITIONS = [...CORE_TOOL_DEFINITIONS, ...Object.values(VILLAGE_TOOLS).map((t) => t.definition)];
 
 export function getEnabledToolDefinitions(enabledTools: string[]) {
   return ALL_TOOL_DEFINITIONS.filter((t) => enabledTools.includes(t.function.name));
@@ -640,6 +416,9 @@ export function evaluateToolRisk(
 ): RiskResult {
   const extraProtected = (settings.extraProtectedPaths as string[]) || [];
   const overrides = buildOverrides(settings);
+  // The village's own tools carry their risk with them (villageTools.ts).
+  const village = VILLAGE_TOOLS[tool];
+  if (village) return village.risk;
   switch (tool) {
     case "run_shell_command":
       return classifyShellCommand(String(args.command || ""), overrides);
@@ -687,32 +466,6 @@ export function evaluateToolRisk(
       return { risk: "low", reason: "A message for the human; no system access." };
     case "post_message":
       return { risk: "low", reason: "Posts a message into a chat session; no system access." };
-    case "ask_villager":
-      return { risk: "low", reason: "Asks another villager something; they answer on their own budget. No system access." };
-    case "assign_goal":
-    case "review_agent":
-    case "flag":
-      return { risk: "low", reason: "The Mayor's bookkeeping: goals, a read-only review, or a note to the owner." };
-    case "pause_agent":
-      return { risk: "low", reason: "The Mayor pausing one villager; stopping work is always safe, and the owner is told." };
-    case "schedule_job_for":
-      return { risk: "medium", reason: "The Mayor creating a recurring work schedule for a villager." };
-    case "note_about":
-      return { risk: "low", reason: "A note in the villager's own diary; no system access." };
-    case "save_draft":
-      return { risk: "low", reason: "Saves a draft in the owner's outbox; nothing is sent." };
-    case "propose_idea":
-      return { risk: "low", reason: "Pins an idea on the notice board; the village votes and the owner can veto." };
-    case "propose_building":
-      return { risk: "low", reason: "The Mayor proposing a building; the owner approves it." };
-    case "call_vote":
-      return { risk: "medium", reason: "The Mayor opening a vote: a short turn for every villager, within the round's cost cap." };
-    case "call_meeting":
-      return { risk: "medium", reason: "The Mayor calling a town meeting: a turn for every villager, within the meeting's cost cap." };
-    case "propose_hire":
-      return { risk: "low", reason: "Drafts a hire request; the Mayor interviews it and the caps and the owner decide." };
-    case "resume_agent":
-      return { risk: "medium", reason: "The Mayor letting a villager he paused work (and spend) again." };
     case "query_database":
       return { risk: "medium", reason: "Read-only access to the app's own database (SELECT only)." };
     case "download_file": {
@@ -778,6 +531,8 @@ export async function executeTool(
   ensureWorkspace(path.join(settings.workspaceDir, "screenshots"));
   ensureWorkspace(path.join(settings.workspaceDir, "notes"));
 
+  const village = VILLAGE_TOOLS[tool];
+  if (village) return village.run(args, ctx);
   switch (tool) {
     case "run_shell_command":
       return runShellCommand(String(args.command || ""), (args.cwd as string) || settings.workspaceDir, settings.commandTimeoutSec);
@@ -826,26 +581,6 @@ export async function executeTool(
       return notifyHuman(args, ctx);
     case "post_message":
       return postMessage(args, ctx);
-    case "ask_villager":
-      return (await import("./messaging")).askVillager(args, ctx);
-    case "assign_goal":
-    case "schedule_job_for":
-    case "review_agent":
-    case "flag":
-    case "pause_agent":
-    case "resume_agent":
-    case "call_meeting":
-    case "call_vote":
-    case "propose_building":
-      return (await import("./mayor")).runMayorTool(tool, args, ctx);
-    case "propose_hire":
-      return (await import("./hiring")).proposeHire(args, ctx);
-    case "note_about":
-      return noteAbout(args, ctx);
-    case "propose_idea":
-      return (await import("./ideas")).proposeIdeaTool(args, ctx);
-    case "save_draft":
-      return (await import("./drafts")).saveDraftTool(args, ctx);
     case "query_database":
       return queryDatabase(args);
     case "download_file":
@@ -1571,7 +1306,7 @@ async function takeScreenshot(args: Record<string, unknown>, workspaceDir: strin
 
 export const NOTES_PER_DAY = 8;
 
-async function noteAbout(args: Record<string, unknown>, ctx?: ToolContext) {
+export async function noteAbout(args: Record<string, unknown>, ctx?: ToolContext) {
   if (!ctx?.agentId) return { output: "Refused: only a villager keeps a diary.", summary: "note refused" };
   const who = String(args.villager ?? "").trim();
   const note = String(args.note ?? "").trim();

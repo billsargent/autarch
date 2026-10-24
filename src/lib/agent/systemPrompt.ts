@@ -9,6 +9,7 @@ import type { AgentSettingsRow } from "./settingsStore";
 import { DEFAULT_PERSONA } from "./persona";
 import { isNight } from "./daynight";
 import type { AgentRow } from "./agents";
+import type { SessionTrigger } from "./triggers";
 
 // What the Mayor can do (#58), and what stays with the owner.
 const MAYOR_NOTE = `AS MAYOR
@@ -17,7 +18,7 @@ const MAYOR_NOTE = `AS MAYOR
 
 
 export interface PromptScope {
-  trigger?: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review" | "vote";
+  trigger?: SessionTrigger;
   jobId?: number | null;
   conversationId?: number | null;
   maxDurationMinutes?: number;

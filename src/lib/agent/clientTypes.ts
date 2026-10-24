@@ -1,3 +1,5 @@
+import type { SessionTrigger } from "./triggers";
+
 export interface MessageRow {
   id: number;
   conversationId: number;
@@ -135,7 +137,7 @@ export interface WorkSessionRow {
   id: number;
   jobId: number | null;
   conversationId: number | null;
-  trigger: "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review" | "vote";
+  trigger: SessionTrigger;
   status: "running" | "completed" | "terminated" | "skipped" | "failed";
   startedAt: string;
   endedAt: string | null;

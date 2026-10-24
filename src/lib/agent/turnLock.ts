@@ -1,4 +1,5 @@
 import { sqlite } from "@/db";
+import type { SessionTrigger } from "./triggers";
 
 // One turn per conversation (#18), and Stop that works in any process (#19).
 //
@@ -21,7 +22,7 @@ export class TurnBusyError extends Error {
   }
 }
 
-type Trigger = "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review" | "vote";
+type Trigger = SessionTrigger;
 
 interface RunningRow {
   id: number;

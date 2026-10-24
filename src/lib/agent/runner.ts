@@ -12,6 +12,7 @@ import { isChatMode, resolveToolAccess } from "./chatMode";
 import { HEARTBEAT_MS, TurnBusyError, claimTurn, heartbeat, isCancelRequested } from "./turnLock";
 import { resolveRun, type RunSettings } from "./providers";
 import { autoJournal, importPlanFile } from "./memory";
+import { TALK_ONLY_TRIGGERS, type SessionTrigger } from "./triggers";
 import { BudgetError, actionsInLastHour, budgetAlerts, budgetProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
 
 export { BudgetError } from "./agents";
@@ -187,7 +188,7 @@ async function loadHistory(conversationId: number) {
   return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(asc(messages.id));
 }
 
-export type SessionTrigger = "chat" | "approval" | "scheduled" | "report" | "message" | "interview" | "meeting" | "review" | "vote";
+export type { SessionTrigger } from "./triggers";
 
 // Progress events emitted (optionally) during a turn so the UI can stream a
 // live view of the agent's activity instead of only getting a final payload.
@@ -405,7 +406,7 @@ export async function runAgentTurn(opts: {
     // A hiring interview (#99) and a town meeting (#81) are talk only: one
     // model call, no tools. So is the Mayor reviewing a request while the
     // owner is away (#102).
-    const talkOnly = trigger === "interview" || trigger === "meeting" || trigger === "review" || trigger === "vote";
+    const talkOnly = TALK_ONLY_TRIGGERS.includes(trigger);
     const { toolsAvailable, toolsForbidden } = resolveToolAccess({
       isDirectChat: isDirectChat || talkOnly,
       chatMode: talkOnly ? "conversation" : conversation.chatMode,

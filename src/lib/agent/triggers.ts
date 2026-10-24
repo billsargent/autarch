@@ -1,0 +1,8 @@
+// What starts a turn: the one list (schema, runner, turn lock, prompt and the
+// browser all use it). Add a new kind of turn here only.
+export const SESSION_TRIGGERS = ["chat", "approval", "scheduled", "report", "message", "interview", "meeting", "review", "vote"] as const;
+
+export type SessionTrigger = (typeof SESSION_TRIGGERS)[number];
+
+// Talk-only turns: one model call, no tools (#81, #98, #99, #102).
+export const TALK_ONLY_TRIGGERS: readonly SessionTrigger[] = ["interview", "meeting", "review", "vote"];
