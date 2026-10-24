@@ -14,10 +14,18 @@ const parts = [
 const children = [];
 let stopping = false;
 
+// Stop a child and everything it started (a shell, npx, then the real
+// process): on Windows killing the shell alone leaves the rest running.
+function stop(child) {
+  if (child.exitCode !== null) return;
+  if (process.platform === "win32") spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+  else child.kill("SIGTERM");
+}
+
 function stopAll(code = 0) {
   if (stopping) return;
   stopping = true;
-  for (const c of children) if (c.exitCode === null) c.kill("SIGTERM");
+  for (const c of children) stop(c);
   setTimeout(() => process.exit(code), 3000).unref();
 }
 
