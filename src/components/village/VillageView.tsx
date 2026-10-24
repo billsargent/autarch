@@ -48,16 +48,24 @@ function rememberedLevel(): number {
 
 export default function VillageView() {
   const buildings = useBuildings();
-  const [savedLevel] = useState(() => (typeof window === "undefined" ? 0 : rememberedLevel()));
+  // Read after mount: the server renders level 0, and the first client render
+  // must match it.
+  const [savedLevel, setSavedLevel] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setSavedLevel(rememberedLevel()), 0);
+    return () => clearTimeout(t);
+  }, []);
   const level = Math.min(VILLAGE_MANIFESTS.length - 1, buildings.state?.level ?? savedLevel);
   const scene = VILLAGE_MANIFESTS[level];
+  const levelKnown = buildings.state != null;
   useEffect(() => {
+    if (!levelKnown) return; // only remember a level the server told us
     try {
       window.localStorage.setItem(LEVEL_KEY, String(level));
     } catch {
       /* private window: fine */
     }
-  }, [level]);
+  }, [level, levelKnown]);
   const [player] = useState<PlayerSpec>(() => ({ name: "You", color: "#3b2716", sprite: OWNER_SPRITE, start: startingDoor() }));
   // ?open=<action> opens an outdoor dialog straight away (the notice board, the mailbox).
   useEffect(() => {

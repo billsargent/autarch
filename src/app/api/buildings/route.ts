@@ -20,7 +20,10 @@ export const dynamic = "force-dynamic";
 // The plots and what stands on them (#105), the stores (#106), how many the
 // village has room for, and how far its land reaches.
 export async function GET() {
-  const [list, stock, keepers, settings, landBlocked] = await Promise.all([listBuildings(), getEconomy(), keeperDoors(), getSettings(), landProblem()]);
+  // Finished buildings first: the level, the plots and the land check all
+  // depend on what's done.
+  const list = await listBuildings();
+  const [stock, keepers, settings, landBlocked] = await Promise.all([getEconomy(), keeperDoors(), getSettings(), landProblem()]);
   const level = villageLevel();
   return NextResponse.json({
     plots: plotsForLevel(level),

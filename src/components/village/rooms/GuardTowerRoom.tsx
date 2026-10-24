@@ -32,7 +32,7 @@ export default function GuardTowerRoom({ action, onClose }: RoomProps) {
   const [open, setOpen] = useState<number | null>(null);
   const shown = filterActivity(rows, filter);
 
-  if (view === "talk") return <NeighboursTalk onClose={onClose} onBack={() => setView("log")} />;
+  if (view === "talk") return <NeighboursTalk byId={byId} onClose={onClose} onBack={() => setView("log")} />;
 
   if (view === "tally") {
     return (
@@ -176,8 +176,7 @@ interface Exchange {
 
 // Every question one villager has put to another, and the answer, newest
 // first. The full thread is in the asked villager's chat, in their cottage.
-function NeighboursTalk({ onClose, onBack }: { onClose: () => void; onBack: () => void }) {
-  const { byId } = useVillagers(15000);
+function NeighboursTalk({ byId, onClose, onBack }: { byId: ReturnType<typeof useVillagers>["byId"]; onClose: () => void; onBack: () => void }) {
   const [rows, setRows] = useState<Exchange[] | null>(null);
   const [open, setOpen] = useState<number | null>(null);
   const reload = useCallback(async () => {
@@ -243,7 +242,7 @@ function NeighboursTalk({ onClose, onBack }: { onClose: () => void; onBack: () =
                       <p className="mt-1 whitespace-pre-wrap">{x.answer}</p>
                     </>
                   ) : (
-                    <p className="text-[#6b4a2e]">{name(x.toId)} hasn&apos;t answered.</p>
+                    <p className="text-[#6b4a2e]">{`${name(x.toId)} hasn't answered.`}</p>
                   )}
                 </div>
               )}

@@ -50,48 +50,63 @@ export class BuildingError extends Error {
 }
 
 // Buildings whose scaffolding time is up are finished.
-async function finishDue(now = new Date()) {
-  await db.update(buildings).set({ status: "built" }).where(and(eq(buildings.status, "building"), lte(buildings.readyAt, now)));
+function finishDue(now = new Date()) {
+  db.update(buildings).set({ status: "built" }).where(and(eq(buildings.status, "building"), lte(buildings.readyAt, now))).run();
 }
 
+const current = (): BuildingRow[] => db.select().from(buildings).where(inArray(buildings.status, ["proposed", "building", "built"])).all();
+
 export async function listBuildings(now = new Date()): Promise<BuildingRow[]> {
-  await finishDue(now);
-  return db.select().from(buildings).where(inArray(buildings.status, ["proposed", "building", "built"]));
+  finishDue(now);
+  return current();
 }
 
 // Plots with nothing on them and nothing proposed.
-async function freePlots(): Promise<string[]> {
-  const taken = new Set((await listBuildings()).map((b) => b.plotId));
+function freePlots(): string[] {
+  const taken = new Set(current().map((b) => b.plotId));
   return plotsForLevel(villageLevel()).filter((p) => !taken.has(p));
 }
 
-// Whether the next ring of land can be cleared, and if not, why.
-export async function landProblem(): Promise<string | null> {
+// Why the next ring of land can't be cleared yet (null = it can): every plot
+// there is now must be spoken for first.
+function landProblemNow(): string | null {
   const level = villageLevel();
   if (level >= MAX_VILLAGE_LEVEL) return "The village has all the land it can have.";
-  const list = await listBuildings();
+  const list = current();
   if (list.some((b) => b.kind === "land" && b.status !== "built")) return "New land is already being cleared, or waiting for the owner.";
   const taken = new Set(list.map((b) => b.plotId));
-  const open = ringPlotIds(level).filter((p) => !taken.has(p));
+  const open = plotsForLevel(level).filter((p) => !taken.has(p));
   if (open.length) return `There's still room: build on ${open.join(", ")} first.`;
   return null;
 }
 
+export async function landProblem(): Promise<string | null> {
+  finishDue();
+  return landProblemNow();
+}
+
 // Clear the next ring of land: the owner's starts straight away, the Mayor's
-// waits for the owner, like a building.
+// waits for the owner, like a building. Checked and written in one
+// transaction, so two requests at once (the web app and the worker) can't
+// both clear the same ring.
 export async function proposeLand(by: number | null): Promise<BuildingRow> {
-  const problem = await landProblem();
-  if (problem) throw new BuildingError(problem);
-  const plotId = `ring-${villageLevel() + 1}`;
-  const [row] = await db
-    .insert(buildings)
-    .values(
-      by === null
-        ? { kind: "land", plotId, status: "building", proposedBy: null, readyAt: new Date(Date.now() + LAND_HOURS * 3600_000) }
-        : { kind: "land", plotId, status: "proposed", proposedBy: by },
-    )
-    .returning();
-  return row;
+  finishDue();
+  return sqlite
+    .transaction(() => {
+      const problem = landProblemNow();
+      if (problem) throw new BuildingError(problem);
+      const plotId = `ring-${villageLevel() + 1}`;
+      return db
+        .insert(buildings)
+        .values(
+          by === null
+            ? { kind: "land", plotId, status: "building", proposedBy: null, readyAt: new Date(Date.now() + LAND_HOURS * 3600_000) }
+            : { kind: "land", plotId, status: "proposed", proposedBy: by },
+        )
+        .returning()
+        .get();
+    })
+    .immediate();
 }
 
 // Room for villagers: the setting, plus the beds in every finished house.
@@ -100,23 +115,29 @@ export function populationCap(settings: Pick<AgentSettingsRow, "maxPopulation">)
   return settings.maxPopulation + houses * BUILDING_KINDS.house.beds;
 }
 
+// One transaction, like proposeLand, so a plot can't be taken twice.
 export async function proposeBuilding(kind: BuildingKind, plotId: string | null, by: number | null): Promise<BuildingRow> {
-  const free = await freePlots();
-  if (!free.length) throw new BuildingError("Every plot is taken.");
-  const plot = plotId ?? free[0];
-  const plots = plotsForLevel(villageLevel());
-  if (!plots.includes(plot)) throw new BuildingError(`There's no plot called "${plot}". Plots: ${plots.join(", ")}.`, 400);
-  if (!free.includes(plot)) throw new BuildingError(`The ${plot} plot is taken. Free: ${free.join(", ")}.`);
-  // The owner builds straight away; the Mayor's proposals wait for the owner.
-  const [row] = await db
-    .insert(buildings)
-    .values(
-      by === null
-        ? { kind, plotId: plot, status: "building", proposedBy: null, readyAt: new Date(Date.now() + BUILD_HOURS * 3600_000) }
-        : { kind, plotId: plot, status: "proposed", proposedBy: by },
-    )
-    .returning();
-  return row;
+  finishDue();
+  return sqlite
+    .transaction(() => {
+      const free = freePlots();
+      if (!free.length) throw new BuildingError("Every plot is taken.");
+      const plot = plotId ?? free[0];
+      const plots = plotsForLevel(villageLevel());
+      if (!plots.includes(plot)) throw new BuildingError(`There's no plot called "${plot}". Plots: ${plots.join(", ")}.`, 400);
+      if (!free.includes(plot)) throw new BuildingError(`The ${plot} plot is taken. Free: ${free.join(", ")}.`);
+      // The owner builds straight away; the Mayor's proposals wait for the owner.
+      return db
+        .insert(buildings)
+        .values(
+          by === null
+            ? { kind, plotId: plot, status: "building", proposedBy: null, readyAt: new Date(Date.now() + BUILD_HOURS * 3600_000) }
+            : { kind, plotId: plot, status: "proposed", proposedBy: by },
+        )
+        .returning()
+        .get();
+    })
+    .immediate();
 }
 
 export async function approveBuilding(id: number): Promise<BuildingRow> {

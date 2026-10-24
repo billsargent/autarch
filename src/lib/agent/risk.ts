@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { gitBashPath } from "./host";
 import {
   HARD_PROTECTED_PATHS,
   SECRET_PATH_PATTERNS,
@@ -211,8 +212,17 @@ const BLOCKED_RULES: ShellRule[] = [
   { test: /\bnode_modules\b.*\brm\b|\brm\b.*\bnode_modules\b/i, risk: "blocked", reason: "Deleting node_modules would break this framework's own runtime." },
   // Windows (PowerShell, cmd and Git Bash).
   { test: /\b(Format-Volume|Clear-Disk|Initialize-Disk|diskpart)\b|\bformat(\.com)?\s+[a-z]:/i, risk: "blocked", reason: "Formatting or wiping a disk would destroy data irrecoverably." },
+  // A recursive delete anywhere in the command, and a bare drive (C:\, C:\*)
+  // anywhere in it, in any order: `Remove-Item C:\ -Recurse`, `gci C:\ | ri -r`.
   {
-    test: /\b(Remove-Item|ri|rm|del|erase|rd|rmdir)\b(?=[^;|&]*(-r\w*|\/s)\b)[^;|&]*\s["']?(\/[a-z]|[a-z]:)[\\/]?\*?["']?\s*($|;|&|\|)/i,
+    test: /^(?=[\s\S]*\b(Remove-Item|ri|del|erase|rd|rmdir)\b)(?=[\s\S]*\s(-r\w*|\/s)\b)(?=[\s\S]*(^|[\s=:,])["']?[a-z]:[\\/]?\*?["']?(\s|$|;|&|\|))/i,
+    risk: "blocked",
+    reason: "Recursive delete of a whole drive.",
+  },
+  // Git Bash's drives are /c, /d …: `rm -rf /c`. (Only with rm, so a cmd
+  // switch like `/q` is never taken for a drive.)
+  {
+    test: /^(?=[\s\S]*\brm\b)(?=[\s\S]*\s-\w*r)(?=[\s\S]*\s["']?\/[a-z]\/?\*?["']?(\s|$|;|&|\|))/i,
     risk: "blocked",
     reason: "Recursive delete of a whole drive.",
   },
@@ -298,6 +308,13 @@ const MEDIUM_RULES: ShellRule[] = [
   },
   { test: /\b(Remove-Item|Clear-Content)\b|(^|[;&|]\s*)(ri|del|erase|rd)\s/i, risk: "medium", reason: "Deleting files." },
   { test: /\b(Invoke-WebRequest|iwr|Invoke-RestMethod|irm|Start-BitsTransfer)\b/i, risk: "medium", reason: "Outbound network request." },
+  // Running code on what a read-only command finds (`Get-Process | % { $_.Kill() }`,
+  // `find . -delete`) isn't read-only, however the command starts.
+  {
+    test: /\b(ForEach-Object|Invoke-Expression|iex|Invoke-Command|Invoke-Item)\b|\|\s*%\s*\{|\$_\.\w+\s*\(|\[[\w.]+\]::\w+\s*\(|\bfind\b.*\s-(delete|exec|execdir|ok)\b|\bxargs\b/i,
+    risk: "medium",
+    reason: "Runs code or commands on what it finds.",
+  },
 ];
 
 const LOW_PREFIXES: RegExp[] = [
@@ -364,8 +381,7 @@ export function classifyShellCommand(command: string, overrides?: SuperviseOverr
   // On Windows an absolute path can be written D:\x, D:/x or (Git Bash) /d/x,
   // in any case.
   const win = process.platform === "win32";
-  const pathForms = (p: string) =>
-    win ? [p, p.replace(/\\/g, "/"), p.replace(/^([A-Za-z]):[\\/]*/, (_, d: string) => `/${d}/`).replace(/\\/g, "/")].map((f) => f.toLowerCase()) : [p];
+  const pathForms = (p: string) => (win ? [p, p.replace(/\\/g, "/"), gitBashPath(p)].map((f) => f.toLowerCase()) : [p]);
   const cmdForm = win ? cmd.toLowerCase() : cmd;
   const touchesHardProtected =
     HARD_PROTECTED_PATHS.some((p) => pathForms(p).some((f) => cmdForm.includes(f))) ||
@@ -377,7 +393,10 @@ export function classifyShellCommand(command: string, overrides?: SuperviseOverr
         return tok === rel || tok.startsWith(`${rel}/`);
       });
     });
-  const destructiveVerb = /\b(rm|mv|dd|truncate|>|>>|sed\s+-i|Remove-Item|ri|del|erase|rd|rmdir|Move-Item|mi|move|Set-Content|Out-File|Clear-Content|Rename-Item|ren)\b/i.test(cmd);
+  // Short cmd verbs and aliases (del, move, ren …) are also ordinary words, so
+  // they only count where a command starts.
+  const destructiveVerb =
+    /\b(rm|mv|dd|truncate|>|>>|sed\s+-i|Remove-Item|rmdir|Move-Item|Set-Content|Out-File|Clear-Content|Rename-Item)\b|(^|[;&|]\s*)(ri|mi|del|erase|rd|move|ren)\s/i.test(cmd);
   if (touchesHardProtected && destructiveVerb) {
     return liftBlock(
       {

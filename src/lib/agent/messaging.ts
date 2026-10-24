@@ -109,31 +109,44 @@ export interface NeighbourExchange {
 }
 
 export function neighbourTalk(limit = 100): NeighbourExchange[] {
-  const asks = sqlite
+  // One query: each ask with the next ask in its thread (LEAD), and the last
+  // reply between the two.
+  const rows = sqlite
     .prepare(
-      `SELECT m.id, m.conversation_id AS conversationId, m.content, m.created_at AS at, c.agent_id AS toId, c.partner_agent_id AS fromId
-       FROM messages m JOIN conversations c ON c.id = m.conversation_id
-       WHERE c.partner_agent_id IS NOT NULL AND m.role = 'event' AND m.content LIKE '[% asks] %'
-       ORDER BY m.id DESC LIMIT ?`,
+      `WITH asks AS (
+         SELECT m.id, m.conversation_id AS conversationId, m.content, m.created_at AS at, c.agent_id AS toId, c.partner_agent_id AS fromId,
+                LEAD(m.id) OVER (PARTITION BY m.conversation_id ORDER BY m.id) AS nextId
+         FROM messages m JOIN conversations c ON c.id = m.conversation_id
+         WHERE c.partner_agent_id IS NOT NULL AND m.role = 'event' AND m.content LIKE '[% asks] %'
+       ),
+       recent AS (SELECT * FROM asks ORDER BY id DESC LIMIT ?)
+       SELECT a.*, r.content AS answer, r.created_at AS answeredAt
+       FROM recent a
+       LEFT JOIN messages r ON r.id = (
+         SELECT MAX(x.id) FROM messages x
+         WHERE x.conversation_id = a.conversationId AND x.id > a.id AND x.id < COALESCE(a.nextId, 1e18)
+           AND x.role = 'assistant' AND TRIM(COALESCE(x.content, '')) <> ''
+       )
+       ORDER BY a.id DESC`,
     )
-    .all(limit) as Array<{ id: number; conversationId: number; content: string; at: number; toId: number | null; fromId: number | null }>;
-  const reply = sqlite.prepare(
-    `SELECT content, created_at AS at FROM messages
-     WHERE conversation_id = ? AND id > ? AND role = 'assistant' AND TRIM(COALESCE(content, '')) <> ''
-       AND id < COALESCE((SELECT MIN(id) FROM messages WHERE conversation_id = ? AND id > ? AND role = 'event' AND content LIKE '[% asks] %'), 1e18)
-     ORDER BY id DESC LIMIT 1`,
-  );
-  return asks.map((a) => {
-    const r = reply.get(a.conversationId, a.id, a.conversationId, a.id) as { content: string; at: number } | undefined;
-    return {
-      id: a.id,
-      conversationId: a.conversationId,
-      fromId: a.fromId,
-      toId: a.toId,
-      question: a.content.replace(/^\[[^\]]* asks\]\s*/, ""),
-      askedAt: a.at * 1000,
-      answer: r?.content.trim() ?? null,
-      answeredAt: r ? r.at * 1000 : null,
-    };
-  });
+    .all(limit) as Array<{
+    id: number;
+    conversationId: number;
+    content: string;
+    at: number;
+    toId: number | null;
+    fromId: number | null;
+    answer: string | null;
+    answeredAt: number | null;
+  }>;
+  return rows.map((a) => ({
+    id: a.id,
+    conversationId: a.conversationId,
+    fromId: a.fromId,
+    toId: a.toId,
+    question: a.content.replace(/^\[[^\]]* asks\]\s*/, ""),
+    askedAt: a.at * 1000,
+    answer: a.answer?.trim() ?? null,
+    answeredAt: a.answeredAt != null ? a.answeredAt * 1000 : null,
+  }));
 }

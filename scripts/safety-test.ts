@@ -172,7 +172,7 @@ async function main() {
     check("shell: rm -rf src (relative) is blocked", risk.classifyShellCommand("rm -rf src").risk === "blocked");
     check("shell: a path merely containing 'src' isn't mistaken for it", risk.classifyShellCommand("rm -rf /tmp/mysrc").risk !== "blocked");
     if (process.platform === "win32") {
-      const gitBash = path.join(PROJECT_ROOT, "src").replace(/^([A-Za-z]):[\\/]*/, (_, d: string) => `/${d.toLowerCase()}/`).replace(/\\/g, "/");
+      const gitBash = (await import("../src/lib/agent/host")).gitBashPath(path.join(PROJECT_ROOT, "src"));
       const got = [path.join(PROJECT_ROOT, "src"), gitBash].map((p) => risk.classifyShellCommand(`rm -rf "${p}"`).risk);
       check("windows: the framework's code is protected however its path is written", got.every((x) => x === "blocked"), got);
     }
@@ -185,7 +185,14 @@ async function main() {
       const misses = commands.map((c) => `${c} → ${risk.classifyShellCommand(c).risk}`).filter((m) => !m.endsWith(`→ ${want}`));
       check(name, misses.length === 0, misses);
     };
-    all("windows: wiping a drive is blocked", ["Remove-Item -Recurse -Force C:\\", "rd /s /q D:\\", "rm -rf /c", "format d:", "Clear-Disk -Number 1"], "blocked");
+    all(
+      "windows: wiping a drive is blocked, whatever the order",
+      ["Remove-Item -Recurse -Force C:\\", "Remove-Item C:\\ -Recurse -Force", "Remove-Item -Path C:\\* -Recurse -Force", "gci C:\\ | Remove-Item -Recurse -Force", "rd /s /q D:\\", "rm -rf /c", "rm -rf /c/*", "format d:", "Clear-Disk -Number 1"],
+      "blocked",
+    );
+    all("windows: a cmd switch isn't taken for a drive", ["rd build /s /q", "del *.tmp /s /q"], "medium");
+    all("windows: running code on what a Get- finds isn't read-only", ["Get-Process | ForEach-Object { $_.Refresh() }", "gci C:\\Users -Recurse | % { $_.Delete() }", "find . -name '*.log' -delete"], "medium");
+    all("reading framework code that mentions a short verb isn't blocked", ['grep -rn "move" src', "git log --grep del src/db"], "low");
     all(
       "windows: killing, services, registry, users, firewall, tasks and admin need approval",
       [
