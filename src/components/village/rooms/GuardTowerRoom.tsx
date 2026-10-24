@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useLive } from "../../data/useLive";
 import { ACTIVITY_FILTERS, filterActivity, useActivity, type ActivityFilter, type TodayStats } from "../../data/useActivity";
 import ParchmentDialog from "../ParchmentDialog";
 import { RISK_WORDS, STATUS_WORDS } from "../tones";
@@ -8,8 +9,8 @@ import type { RoomProps } from "./types";
 import { useVillagers } from "../../data/useVillagers";
 
 // The guard tower: the logbook is the activity log (every tool call the agent
-// has attempted) and the tally board shows today's numbers. Same data as the
-// Activity page (useActivity).
+// has attempted), the tally board shows today's numbers, and the watch also
+// notes down what villagers ask each other (#57).
 
 const FILTER_LABEL: Record<ActivityFilter, string> = {
   all: "Everything",
@@ -26,10 +27,12 @@ const FILTER_LABEL: Record<ActivityFilter, string> = {
 export default function GuardTowerRoom({ action, onClose }: RoomProps) {
   const { rows, stats, loaded } = useActivity();
   const { byId } = useVillagers(15000);
-  const [view, setView] = useState<"log" | "tally">(action === "activity.today" ? "tally" : "log");
+  const [view, setView] = useState<"log" | "tally" | "talk">(action === "activity.today" ? "tally" : "log");
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [open, setOpen] = useState<number | null>(null);
   const shown = filterActivity(rows, filter);
+
+  if (view === "talk") return <NeighboursTalk onClose={onClose} onBack={() => setView("log")} />;
 
   if (view === "tally") {
     return (
@@ -71,7 +74,10 @@ export default function GuardTowerRoom({ action, onClose }: RoomProps) {
               ))}
             </select>
           </label>
-          <button onClick={() => setView("tally")} className="village-btn ml-auto px-3 py-2 text-xs">
+          <button onClick={() => setView("talk")} className="village-btn ml-auto px-3 py-2 text-xs">
+            💬 Neighbours&apos; talk
+          </button>
+          <button onClick={() => setView("tally")} className="village-btn px-3 py-2 text-xs">
             Today&apos;s tally
           </button>
         </>
@@ -154,5 +160,97 @@ function Tally({ stats }: { stats: TodayStats }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+interface Exchange {
+  id: number;
+  conversationId: number;
+  fromId: number | null;
+  toId: number | null;
+  question: string;
+  askedAt: number;
+  answer: string | null;
+  answeredAt: number | null;
+}
+
+// Every question one villager has put to another, and the answer, newest
+// first. The full thread is in the asked villager's chat, in their cottage.
+function NeighboursTalk({ onClose, onBack }: { onClose: () => void; onBack: () => void }) {
+  const { byId } = useVillagers(15000);
+  const [rows, setRows] = useState<Exchange[] | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
+  const reload = useCallback(async () => {
+    try {
+      const data = await fetch("/api/neighbours", { cache: "no-store" }).then((r) => r.json());
+      if (Array.isArray(data.exchanges)) setRows(data.exchanges);
+    } catch {
+      /* keep what we have */
+    }
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(reload, 0);
+    return () => clearTimeout(t);
+  }, [reload]);
+  useLive(["message"], reload, { debounceMs: 1500 });
+  const name = (id: number | null) => (id != null && byId(id)?.name) || "A former villager";
+  const when = (ms: number) => new Date(ms).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+  return (
+    <ParchmentDialog
+      kicker="The guard tower"
+      title="Neighbours' talk"
+      onClose={onClose}
+      wide
+      footer={
+        <button onClick={onBack} className="village-btn ml-auto px-3 py-2 text-xs">
+          📖 Back to the logbook
+        </button>
+      }
+    >
+      <p className="mb-3 text-xs text-[#6b4a2e]">
+        What the villagers have asked each other, and what they said back. Newest first. Each villager&apos;s side of it is also
+        in their chat, at their cottage.
+      </p>
+      {!rows && <p className="text-sm">Turning the pages…</p>}
+      {rows?.length === 0 && (
+        <p className="rounded border-2 border-dashed border-[#c9b27a] p-4 text-center text-sm">Nobody has asked a neighbour anything yet.</p>
+      )}
+      <ul className="space-y-2">
+        {rows?.map((x) => {
+          const expanded = open === x.id;
+          return (
+            <li key={x.id} className="rounded border-2 border-[#3b2716] bg-[#fffaf0] text-xs">
+              <button onClick={() => setOpen(expanded ? null : x.id)} aria-expanded={expanded} className="w-full px-3 py-2 text-left hover:bg-white">
+                <span className="flex flex-wrap items-baseline gap-x-2">
+                  <strong>
+                    {name(x.fromId)} → {name(x.toId)}
+                  </strong>
+                  <span className="text-[#6b4a2e]">{when(x.askedAt)}</span>
+                  <span className="ml-auto font-semibold" style={{ color: x.answer ? "#2f6b2f" : "#8a6d1f" }}>
+                    {x.answer ? "answered" : "no answer yet"}
+                  </span>
+                </span>
+                <span className={`mt-1 block ${expanded ? "whitespace-pre-wrap" : "truncate"}`}>“{x.question}”</span>
+              </button>
+              {expanded && (
+                <div className="border-t-2 border-dashed border-[#e6d6b0] px-3 py-2">
+                  {x.answer ? (
+                    <>
+                      <p className="font-semibold">
+                        {name(x.toId)} replied{x.answeredAt ? `, ${when(x.answeredAt)}` : ""}:
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap">{x.answer}</p>
+                    </>
+                  ) : (
+                    <p className="text-[#6b4a2e]">{name(x.toId)} hasn&apos;t answered.</p>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </ParchmentDialog>
   );
 }

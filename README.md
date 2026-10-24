@@ -31,7 +31,8 @@ call risk-checked, and anything risky waiting for your approval.
   and pause villagers, call meetings and votes, propose hiring someone new, and propose
   buildings. The Mayor can't spend your money, approve their own requests, or change settings.
 - **Villagers talk to each other.** A villager can ask a neighbour a question or hand off a
-  job; the neighbour answers in their own time and on their own budget.
+  job; the neighbour answers in their own time and on their own budget. Every exchange is
+  listed in the guard tower.
 - **Meetings and votes.** Call a meeting at the town hall to talk something through; what's
   agreed becomes goals afterwards. Ideas go on the notice board and the villagers vote.
 - **Day and night.** The village follows your clock: lights come on at dusk and villagers go
@@ -268,7 +269,8 @@ and approvals pop up wherever you are. Every page of the app is a place in the v
 - **Library:** skills are books on the shelves; new ones are written at the desk.
 - **Workshop:** jobs are slips on the job board; new ones are set up at the workbench.
 - **Notice board:** goals pinned by priority, and ideas up for a vote.
-- **Guard tower:** the logbook (activity log) and today's tally.
+- **Guard tower:** the logbook (activity log), today's tally, and the neighbours' talk (everything
+  villagers have asked each other, and their answers).
 - **Observatory:** the star charts (system monitor).
 - **Vault:** the ledger and the coffers (usage and spending).
 - **Town hall:** the long table (meetings and their records), the clerk's desk (approvals),

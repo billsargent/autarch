@@ -258,6 +258,15 @@ async function main() {
   await waitFor(calChat, "[Reply from Dot] Also in the shed.");
   const onward = (await msgsOf(thread.id)).find((m) => m.role === "tool" && m.toolName === "ask_villager");
   check("someone answering can't send questions onward", onward?.content?.startsWith("Refused: you're answering a neighbour"), true);
+  const talk = (await import("../src/lib/agent/messaging")).neighbourTalk();
+  check(
+    "the guard tower lists who asked whom, and each answer (newest first)",
+    talk.slice(0, 2).map((x) => [x.fromId, x.toId, x.question, x.answer]),
+    [
+      [cal.id, dot.id, "And the oars?", "Also in the shed."],
+      [cal.id, dot.id, "Where are the nets?", "In the shed by the pond."],
+    ],
+  );
 
   // The pair limit, and the other refusals (called directly: no model needed).
   const ctxCal = { agentId: cal.id, agentName: "Cal", conversationId: calChat };

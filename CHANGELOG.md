@@ -5,6 +5,8 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 
 ## 2026-10-25 — New land in rings, a tavern, a shop and a garden
 
+- **See what villagers ask each other.** The guard tower has a new "Neighbours' talk" log: every
+  question one villager put to another, who asked whom, when, and the answer (or that none came).
 - **The village can grow outwards.** Once every plot is taken, the Mayor can propose clearing
   the next ring of land (or you can, at the map table). It takes a day; then the roads reach
   further and four more plots open, two on each road. There are four rings in all. Every ring
