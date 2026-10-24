@@ -3,6 +3,20 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — More than one model provider
+
+- **Providers (#61, #62).** Mayor's ledger → Providers. Add any OpenAI-compatible server
+  (OpenAI, OpenRouter, Ollama, LM Studio…), Anthropic, or another DeepSeek. List each one's
+  models from the page. The town's own provider stays the one on Identity & model.
+- **Each villager can use a different provider and model (#64),** set on the Villagers page. Any
+  conversation can switch to another model with the 🧠 button in the cottage chat.
+- **Prices per model (#63).** Set them on the Providers page; a model without one uses the
+  town's prices. The vault's spending by model shows provider and model.
+- **Keys stay secret (#65).** A provider's key is saved but never shown again. Keys live in their
+  own table that no API returns and no villager can read. `AUTARCH_KEY_<NAME>` in the environment
+  overrides a stored key.
+- DeepSeek-only extras (thinking mode, passing reasoning back) are only sent to DeepSeek.
+
 ## 2026-10-24 — Housekeeping
 
 - **Summaries cost what they cost (#30, #31).** When a long conversation is summarised, that

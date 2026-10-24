@@ -307,6 +307,33 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     ended_at INTEGER
   )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS providers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS provider_keys (
+    provider_id INTEGER PRIMARY KEY REFERENCES providers(id) ON DELETE CASCADE,
+    api_key TEXT NOT NULL
+  )`);
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS model_prices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider_id INTEGER NOT NULL DEFAULT 0,
+    model TEXT NOT NULL,
+    input_per_mtok REAL NOT NULL,
+    output_per_mtok REAL NOT NULL,
+    cache_hit_per_mtok REAL
+  )`);
+  sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_model_prices ON model_prices(provider_id, model)");
+  if (!existingCols("agents").includes("provider_id")) {
+    sqlite.exec("ALTER TABLE agents ADD COLUMN provider_id INTEGER");
+  }
+  if (!existingCols("conversations").includes("provider_id")) {
+    sqlite.exec("ALTER TABLE conversations ADD COLUMN provider_id INTEGER");
+    sqlite.exec("ALTER TABLE conversations ADD COLUMN model TEXT");
+  }
   sqlite.exec(`CREATE TABLE IF NOT EXISTS drafts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL DEFAULT 'other',

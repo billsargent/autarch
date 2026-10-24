@@ -32,6 +32,8 @@ export const agents = sqliteTable("agents", {
   // The village's ranks (#99): the Mayor, directors who run an area (and may
   // draft hires), and workers who report to a director.
   tier: text("tier", { enum: ["mayor", "director", "worker"] }).notNull().default("director"),
+  // Their provider (#64); empty = the town's.
+  providerId: integer("provider_id"),
   area: text("area"),
   managerId: integer("manager_id"),
   // Limits (#60); empty = no cap of its own.
@@ -50,6 +52,9 @@ export const conversations = sqliteTable("conversations", {
   // For a thread between two villagers (#57): the one asking. The owner
   // (agent_id) is the one being asked.
   partnerAgentId: integer("partner_agent_id").references(() => agents.id, { onDelete: "set null" }),
+  // This conversation's own provider and model, over its villager's (#64).
+  providerId: integer("provider_id"),
+  model: text("model"),
   // The villager this belongs to (#56).
   agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
@@ -244,6 +249,30 @@ export const buildings = sqliteTable("buildings", {
   readyAt: integer("ready_at", { mode: "timestamp" }),
   keeperId: integer("keeper_id").references(() => agents.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+});
+
+// Model providers beyond the town's own (#61): keys in their own table, which
+// no API returns; prices per provider and model (0 = the town's provider).
+export const providers = sqliteTable("providers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  kind: text("kind", { enum: ["deepseek", "openai", "anthropic"] }).notNull(),
+  baseUrl: text("base_url").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+});
+
+export const providerKeys = sqliteTable("provider_keys", {
+  providerId: integer("provider_id").primaryKey().references(() => providers.id, { onDelete: "cascade" }),
+  apiKey: text("api_key").notNull(),
+});
+
+export const modelPrices = sqliteTable("model_prices", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  providerId: integer("provider_id").notNull().default(0),
+  model: text("model").notNull(),
+  inputPerMTok: real("input_per_mtok").notNull(),
+  outputPerMTok: real("output_per_mtok").notNull(),
+  cacheHitPerMTok: real("cache_hit_per_mtok"),
 });
 
 // The outbox (#107): outward-facing work waits here for the owner.

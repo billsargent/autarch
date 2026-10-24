@@ -34,7 +34,10 @@ export interface BuildOptions {
 // scroll-back history is unaffected.
 export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessageParam[]> {
   const { conversationId, rows, settings, client, signal, onUsage } = opts;
-  const full = historyToApiMessages(rows);
+  // Reasoning goes back only to DeepSeek, which needs it (#62).
+  const passReasoning = (settings as { providerKind?: string }).providerKind !== undefined ? (settings as { providerKind?: string }).providerKind === "deepseek" : true;
+  const history = (r: HistoryRow[]) => historyToApiMessages(r, passReasoning);
+  const full = history(rows);
   if (!settings.autoCompact) return full;
 
   const maxContext = Math.max(2000, settings.maxContextTokens ?? 24000);
@@ -52,7 +55,7 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
   const convoRows = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1);
   const convo = convoRows[0];
   if (convo?.summary && (convo.compactedThroughId ?? 0) >= newestToSummarizeId) {
-    return [{ role: "user", content: `[Earlier conversation summary]\n${convo.summary}` }, ...historyToApiMessages(keep)];
+    return [{ role: "user", content: `[Earlier conversation summary]\n${convo.summary}` }, ...history(keep)];
   }
 
   // Only what the last summary didn't cover, merged with it (#31).
@@ -61,7 +64,7 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
 
   let summary = "";
   try {
-    summary = await generateSummary(client, settings.modelName, fresh, signal, previous, onUsage);
+    summary = await generateSummary(client, settings.modelName, fresh, signal, previous, onUsage, passReasoning);
   } catch {
     // Safe fallback: hard window + truncation note rather than a giant prompt.
     return [
@@ -69,7 +72,7 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
         role: "user",
         content: "[Earlier conversation history was truncated to fit the context window; older messages are not shown.]",
       },
-      ...historyToApiMessages(keep),
+      ...history(keep),
     ];
   }
 
@@ -78,7 +81,7 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
     .set({ summary, compactedThroughId: newestToSummarizeId, updatedAt: new Date() })
     .where(eq(conversations.id, conversationId));
 
-  return [{ role: "user", content: `[Earlier conversation summary]\n${summary}` }, ...historyToApiMessages(keep)];
+  return [{ role: "user", content: `[Earlier conversation summary]\n${summary}` }, ...history(keep)];
 }
 
 // Each summary call is time-boxed and stops with the turn.
@@ -91,6 +94,7 @@ async function generateSummary(
   signal?: AbortSignal,
   previous?: string | null,
   onUsage?: BuildOptions["onUsage"],
+  deepseek = true,
 ): Promise<string> {
   // Cluster-aware chunking: never split between an assistant tool_calls message
   // and its tool result rows. A `tool` row always stays in the current chunk with
@@ -154,8 +158,7 @@ async function generateSummary(
       max_tokens: chunks.length > 1 ? 800 : 1000,
       // Summarization doesn't need high-effort chain-of-thought; pin it low so
       // compaction calls stay cheap.
-      reasoning_effort: "low",
-      thinking: { type: "enabled" },
+      ...(deepseek ? { reasoning_effort: "low", thinking: { type: "enabled" } } : {}),
     } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
       thinking?: { type: "enabled" | "disabled" };
     }, { timeout: SUMMARY_TIMEOUT_MS, signal });

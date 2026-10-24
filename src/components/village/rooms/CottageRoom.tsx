@@ -6,6 +6,7 @@ import { useChat } from "../../data/useChat";
 import { JOURNAL_ICON, useJournal } from "../../data/useJournal";
 import { MessageList, VILLAGE_THEME } from "../../MessageList";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
+import { useProviders } from "./ProvidersPage";
 import type { RoomProps } from "./types";
 
 // The cottage: the armchair by the hearth is the full chat (every
@@ -158,6 +159,7 @@ function Parlour({ agentId, onClose }: { agentId: number | null; onClose: () => 
                 >
                   {chatMode === "agentic" ? "🤖 Agentic" : "💬 Just talk"}
                 </button>
+                {active && <ModelOverride key={active.id} conversation={active} onSaved={() => void chat.reloadConversations()} />}
                 {chat.dailyCost !== null && (
                   <span className="hidden rounded border-2 border-[#d8c49a] px-1.5 py-0.5 font-mono text-[10px] text-[#6b4a2e] sm:inline" title="Spent today">
                     ${chat.dailyCost.toFixed(4)}
@@ -367,5 +369,55 @@ function Diary({ agentId, onClose }: { agentId: number | null; onClose: () => vo
         })}
       </ul>
     </ParchmentDialog>
+  );
+}
+
+// This conversation's own provider and model, over the villager's (#64).
+function ModelOverride({ conversation, onSaved }: { conversation: { id: number; providerId?: number | null; model?: string | null }; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const { state } = useProviders();
+  const [providerId, setProviderId] = useState<number | null>(conversation.providerId ?? null);
+  const [model, setModel] = useState(conversation.model ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const label = conversation.model ? `🧠 ${conversation.model}` : "🧠 Model";
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className={`village-btn px-2 py-1 ${conversation.model || conversation.providerId ? "village-btn-go" : ""}`} title="Use a different model in this conversation">
+        {label}
+      </button>
+    );
+  }
+  async function save(clear = false) {
+    setError(null);
+    const res = await fetch(`/api/conversations/${conversation.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(clear ? { providerId: null, model: null } : { providerId, model: model.trim() || null }),
+    });
+    if (!res.ok) setError((await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`);
+    else {
+      setOpen(false);
+      onSaved();
+    }
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      <select aria-label="Provider" value={providerId ?? ""} onChange={(e) => setProviderId(e.target.value ? Number(e.target.value) : null)} className="rounded border-2 border-[#3b2716] bg-white px-1 py-0.5 text-[11px]">
+        <option value="">Town</option>
+        {state?.providers.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <input aria-label="Model" value={model} onChange={(e) => setModel(e.target.value)} placeholder="model" className="w-28 rounded border-2 border-[#3b2716] bg-white px-1 py-0.5 text-[11px]" />
+      <button onClick={() => void save()} className="village-btn px-1.5 py-0.5 text-[11px]">
+        Use
+      </button>
+      <button onClick={() => void save(true)} className="village-btn px-1.5 py-0.5 text-[11px]" title="Back to the villager's own model">
+        Reset
+      </button>
+      {error && <span className="text-[11px] text-[#b3261e]">{error}</span>}
+    </span>
   );
 }

@@ -6,6 +6,7 @@ import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 import { CHARACTER_KEYS, CHARACTER_LABELS, VILLAGER_COLORS } from "@/lib/agent/villagerLooks";
 import { tierAllows, type Tier } from "@/lib/agent/mayorTools";
 import { useVillagers, type VillagerInput } from "../../data/useVillagers";
+import { useProviders } from "./ProvidersPage";
 import { ConfirmDialog } from "../ParchmentDialog";
 import VillagerPortrait from "../VillagerPortrait";
 
@@ -184,6 +185,8 @@ function VillagerEditor({
   const [character, setCharacter] = useState(villager?.character ?? CHARACTER_KEYS.find((c) => c !== "master") ?? "villager");
   const [color, setColor] = useState(villager?.color ?? VILLAGER_COLORS[1]);
   const [model, setModel] = useState(villager?.model ?? "");
+  const [providerId, setProviderId] = useState<number | null>(villager?.providerId ?? null);
+  const { state: providers } = useProviders();
   const [allTools, setAllTools] = useState(villager?.enabledTools == null);
   const [ownTools, setOwnTools] = useState<string[]>(villager?.enabledTools ?? townTools.map((t) => t.name));
   const [budget, setBudget] = useState(villager?.dailyBudgetUsd != null ? String(villager.dailyBudgetUsd) : "");
@@ -208,6 +211,7 @@ function VillagerEditor({
       character,
       color,
       model: model.trim() || null,
+      providerId,
       enabledTools: allTools ? null : ownTools.filter((t) => tierAllows(rank, t)),
       ...(villager?.isMayor ? {} : { tier, area: area.trim() || null, managerId: tier === "worker" ? managerId : null }),
       dailyBudgetUsd: budget.trim() === "" ? null : Number(budget),
@@ -324,11 +328,24 @@ function VillagerEditor({
           ))}
         </div>
       </fieldset>
-      <label className="block text-xs font-semibold">
-        Model
-        <input name="model" value={model} onChange={(e) => setModel(e.target.value)} placeholder={`The town's (${settings.modelName})`} className={input} />
-        {fieldError("model")}
-      </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-xs font-semibold">
+          Provider
+          <select name="providerId" value={providerId ?? ""} onChange={(e) => setProviderId(e.target.value ? Number(e.target.value) : null)} className={input}>
+            <option value="">The town&apos;s own</option>
+            {providers?.providers.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs font-semibold">
+          Model
+          <input name="model" value={model} onChange={(e) => setModel(e.target.value)} placeholder={providerId ? "e.g. gpt-4o-mini, llama3.1" : `The town's (${settings.modelName})`} className={input} />
+          {fieldError("model")}
+        </label>
+      </div>
       <fieldset>
         <legend className="text-xs font-semibold">Tools</legend>
         <label className="mt-1 flex items-center gap-2 text-xs">

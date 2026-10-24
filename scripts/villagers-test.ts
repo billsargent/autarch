@@ -760,6 +760,50 @@ async function main() {
   check("the next summary starts from the last one, with only the new lines", [secondSummary?.lastUser.startsWith("[Summary of what came before]"), secondSummary?.lastUser.includes("Line 0:")], [true, false]);
   await updateSettings({ maxContextTokens: 24000, compactTargetTokens: 9000 });
 
+  // --- model providers (#61-#65) ---------------------------------------------------------------
+  const prov = await import("../src/lib/agent/providers");
+  const providersRoute = await import("../src/app/api/providers/route");
+  const pricesRoute = await import("../src/app/api/prices/route");
+  const convRoute = await import("../src/app/api/conversations/[id]/route");
+  check("a provider's kind follows its address", [prov.kindOfUrl(null), prov.kindOfUrl("https://api.deepseek.com"), prov.kindOfUrl("https://api.anthropic.com/v1/"), prov.kindOfUrl("http://localhost:11434/v1")], ["deepseek", "deepseek", "anthropic", "openai"]);
+  const added = await (await providersRoute.POST(req("/api/providers", "POST", { name: "Second", kind: "openai", baseUrl: `http://127.0.0.1:${port}/v1x`, apiKey: "sk-second-secret" }))).json();
+  check("the owner adds a provider", [added.provider?.name, added.provider?.keySet], ["Second", true]);
+  const listed2 = JSON.stringify(await (await providersRoute.GET()).json());
+  check("keys are never sent back", [listed2.includes("sk-second-secret"), listed2.includes("test-key")], [false, false]);
+  check("…and no villager can read them from the database", (await executeTool("query_database", { sql: "SELECT * FROM provider_keys" }, town, ctxMayor)).output, "Queries that mention provider keys are not allowed.");
+  const townNow = await getSettings();
+  check("a villager on the town's provider", [prov.resolveRun(townNow, { providerId: null, model: null }).providerName, prov.resolveRun(townNow, { providerId: null, model: null }).modelName], ["Town", "town-model"]);
+  const onSecond = prov.resolveRun(townNow, { providerId: added.provider.id, model: "second-model" });
+  check("…and one on another, with its own address, key and model", [onSecond.providerName, onSecond.apiBaseUrl.endsWith("/v1x"), onSecond.apiKey, onSecond.modelName], ["Second", true, "sk-second-secret", "second-model"]);
+  check("a conversation can override its villager's model", prov.resolveRun(townNow, { providerId: added.provider.id, model: "second-model" }, { providerId: null, model: "talk-model" }).modelName, "talk-model");
+  await pricesRoute.PUT(req("/api/prices", "PUT", { providerId: added.provider.id, model: "second-model", input: 3, output: 15 }));
+  const priced = prov.resolveRun(townNow, { providerId: added.provider.id, model: "second-model" });
+  check("prices are per model", [priced.inputPricePerMTok, priced.outputPricePerMTok], [3, 15]);
+
+  // Two villagers on different providers, side by side. The second provider's
+  // address ends in /v1x so the fake server answers it too (it ignores paths).
+  await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { providerId: added.provider.id, model: "second-model" }), { params: Promise.resolve({ id: String(dot.id) }) });
+  fake.byAgent.Dot = [{ text: "From the second provider." }];
+  fake.byAgent.Cal = [{ text: "From the town's." }];
+  const seenP = fake.seen.length;
+  const [dotRun, calRun] = await Promise.all([runAgentTurn({ userMessage: "hello", agentId: dot.id }), runAgentTurn({ userMessage: "hello", agentId: cal.id })]);
+  const steps = fake.seen.slice(seenP).filter((x) => x.stream);
+  check("two villagers run side by side on different providers", [steps.find((x) => x.system.startsWith("You are Dot"))?.model, steps.find((x) => x.system.startsWith("You are Cal"))?.model], ["second-model", "town-model"]);
+  check("…and the spend is recorded per provider and model", (await db.select().from(workSessions).where(eq(workSessions.conversationId, dotRun.conversationId)))[0].model, "Second/second-model");
+  check("DeepSeek's own request fields go only to DeepSeek", steps.some((x) => x.thinking), false);
+  await convRoute.PATCH(req(`/api/conversations/${calRun.conversationId}`, "PATCH", { model: "special-model" }), { params: Promise.resolve({ id: String(calRun.conversationId) }) });
+  fake.byAgent.Cal = [{ text: "ok" }];
+  const seenQ = fake.seen.length;
+  await runAgentTurn({ conversationId: calRun.conversationId, userMessage: "again" });
+  check("a conversation's own model is used", fake.seen.slice(seenQ).find((x) => x.stream)?.model, "special-model");
+  const ds = await (await providersRoute.POST(req("/api/providers", "POST", { name: "DS", kind: "deepseek", baseUrl: `http://127.0.0.1:${port}`, apiKey: "k" }))).json();
+  await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { providerId: ds.provider.id, model: "deepseek-chat" }), { params: Promise.resolve({ id: String(dot.id) }) });
+  fake.byAgent.Dot = [{ text: "ok" }];
+  const seenD = fake.seen.length;
+  await runAgentTurn({ userMessage: "hi", agentId: dot.id });
+  check("…and still go to DeepSeek", fake.seen.slice(seenD).find((x) => x.stream)?.thinking, true);
+  await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { providerId: null, model: null }), { params: Promise.resolve({ id: String(dot.id) }) });
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

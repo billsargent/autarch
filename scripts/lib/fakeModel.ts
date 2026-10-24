@@ -16,6 +16,8 @@ export interface SeenRequest {
   tools: string[];
   // The last user message's text (what a summary call was asked to summarize).
   lastUser: string;
+  // Whether DeepSeek's own "thinking" field was sent (#62).
+  thinking: boolean;
 }
 
 function chunk(delta: Record<string, unknown>, extra: Record<string, unknown> = {}) {
@@ -40,6 +42,7 @@ export function startFakeModel() {
         model: parsed.model,
         system: parsed.messages?.[0]?.role === "system" ? parsed.messages[0].content : "",
         tools: (parsed.tools ?? []).map((t: { function: { name: string } }) => t.function.name),
+        thinking: "thinking" in parsed,
         lastUser: [...(parsed.messages ?? [])].reverse().find((m: { role: string }) => m.role === "user")?.content ?? "",
       });
       const who = Object.keys(byAgent).find((n) => byAgent[n].length && seen[seen.length - 1].system.startsWith(`You are ${n}`));

@@ -29,7 +29,9 @@ type ChatMessageParam = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 //     pairing stays intact;
 //   - unanswered tool_call_ids get a synthesized placeholder response;
 //   - orphaned tool messages (no matching pending tool_calls) are dropped.
-export function historyToApiMessages(rows: HistoryRow[]): ChatMessageParam[] {
+// `passReasoning`: send reasoning back on tool-call turns (DeepSeek needs it;
+// other providers don't take it, #62).
+export function historyToApiMessages(rows: HistoryRow[], passReasoning = true): ChatMessageParam[] {
   const out: ChatMessageParam[] = [];
   let pendingIds = new Set<string>();
   const deferred: Array<() => void> = [];
@@ -79,7 +81,7 @@ export function historyToApiMessages(rows: HistoryRow[]): ChatMessageParam[] {
           // on tool-call turns (requests carrying `tools`), or the next request
           // returns a 400. For plain (non-tool) assistant turns it is ignored by
           // the API, so we deliberately omit it there to keep input tokens down.
-          ...(row.reasoning ? { reasoning_content: row.reasoning } : {}),
+          ...(row.reasoning && passReasoning ? { reasoning_content: row.reasoning } : {}),
         } as ChatMessageParam);
         pendingIds = new Set(toolCalls.map((c) => c.id));
       } else {

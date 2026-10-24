@@ -89,8 +89,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     patch.chatMode = body.chatMode;
   }
+  // This conversation's own provider and model (#64); null = its villager's.
+  if ("providerId" in body) patch.providerId = typeof body.providerId === "number" && body.providerId > 0 ? body.providerId : null;
+  if ("model" in body) patch.model = typeof body.model === "string" && body.model.trim() ? body.model.trim().slice(0, 200) : null;
   if (!Object.keys(patch).length) {
-    return NextResponse.json({ error: "title or chatMode is required" }, { status: 400 });
+    return NextResponse.json({ error: "title, chatMode, providerId or model is required" }, { status: 400 });
   }
   const updated = await db
     .update(conversations)

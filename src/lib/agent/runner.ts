@@ -10,7 +10,8 @@ import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, execute
 import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
 import { isChatMode, resolveToolAccess } from "./chatMode";
 import { HEARTBEAT_MS, TurnBusyError, claimTurn, heartbeat, isCancelRequested } from "./turnLock";
-import { BudgetError, actionsInLastHour, agentModel, budgetProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
+import { resolveRun, type RunSettings } from "./providers";
+import { BudgetError, actionsInLastHour, budgetProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
 
 export { BudgetError } from "./agents";
 
@@ -27,14 +28,13 @@ type DeepSeekRequestParams = OpenAI.Chat.Completions.ChatCompletionCreateParamsN
 // default to low effort and a bounded max_tokens. `thinking` is a DeepSeek-only
 // body field (not in the OpenAI SDK types); the SDK serializes it through.
 function modelRequestParams(
-  settings: AgentSettingsRow,
+  settings: RunSettings,
   base: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
 ): DeepSeekRequestParams {
-  const params: DeepSeekRequestParams = {
-    ...base,
-    max_tokens: settings.maxOutputTokens,
-    thinking: settings.thinkingEnabled ? { type: "enabled" } : { type: "disabled" },
-  };
+  const params: DeepSeekRequestParams = { ...base, max_tokens: settings.maxOutputTokens };
+  // Other providers get a plain OpenAI-style request (#62).
+  if (settings.providerKind !== "deepseek") return params;
+  params.thinking = settings.thinkingEnabled ? { type: "enabled" } : { type: "disabled" };
   if (settings.thinkingEnabled) {
     params.reasoning_effort = settings.reasoningEffort as "low" | "high" | "max";
   }
@@ -57,7 +57,7 @@ interface StreamedMessage {
 // abort the underlying request.
 async function streamChatCompletion(
   client: OpenAI,
-  settings: AgentSettingsRow,
+  settings: RunSettings,
   base: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
   isInterrupted: () => boolean,
   onDelta?: (content: string, reasoning: string) => void,
@@ -171,8 +171,10 @@ export async function ensureConversation(conversationId?: number | null, agentId
 
 // The town settings as one villager sees them: its own model, and its own
 // tools within the town's tool policy.
-function settingsFor(agent: AgentRow, town: AgentSettingsRow): AgentSettingsRow {
-  return { ...town, modelName: agentModel(agent, town), enabledTools: effectiveTools(agent, town) };
+// The settings a villager's turn runs with: their tools within the town's
+// policy, and their provider and model (or the conversation's own, #64).
+function settingsFor(agent: AgentRow, town: AgentSettingsRow, conversation?: { providerId?: number | null; model?: string | null } | null): RunSettings {
+  return { ...resolveRun(town, agent, conversation), enabledTools: effectiveTools(agent, town) };
 }
 
 async function insertMessage(row: typeof messages.$inferInsert) {
@@ -323,7 +325,7 @@ export async function runAgentTurn(opts: {
   // The turn runs as the conversation's villager (#56).
   const agent = await getAgent(conversation.agentId);
   if (agent.status === "dismissed") throw new Error(`${agent.name} has left the village, so they can't take part any more.`);
-  const settings = settingsFor(agent, await getSettings());
+  const settings = settingsFor(agent, await getSettings(), conversation);
   const villagerPaused = agent.status === "paused";
   // Over today's budget (the villager's or the town's): refuse before
   // anything is written (#60).
@@ -341,7 +343,7 @@ export async function runAgentTurn(opts: {
     maxDurationMinutes,
   });
   // Which model it runs on, for spending per model (#80).
-  await db.update(workSessions).set({ model: settings.modelName }).where(eq(workSessions.id, session.id));
+  await db.update(workSessions).set({ model: settings.providerName === "Town" ? settings.modelName : `${settings.providerName}/${settings.modelName}` }).where(eq(workSessions.id, session.id));
 
   // While the turn runs: a heartbeat shows its process is alive, and Stop
   // (cancel_requested, set by any process) aborts whatever is in flight.
@@ -566,7 +568,7 @@ export async function runAgentTurn(opts: {
               // DeepSeek requires the assistant's chain-of-thought to be sent back
               // on tool-call turns (for requests carrying `tools`), or it returns a
               // 400 on the next step/turn.
-              ...(rawMsg.reasoning_content ? { reasoning_content: rawMsg.reasoning_content } : {}),
+              ...(rawMsg.reasoning_content && settings.providerKind === "deepseek" ? { reasoning_content: rawMsg.reasoning_content } : {}),
             }
           : {}),
       } as ChatMessageParam);

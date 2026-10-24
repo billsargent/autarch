@@ -12,6 +12,7 @@ import {
 } from "../../data/useSettings";
 import { jobSchedule, useJobs } from "../../data/useJobs";
 import VillagersPage from "./VillagersPage";
+import ProvidersPage from "./ProvidersPage";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
 import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 
@@ -26,6 +27,7 @@ const PAGES = [
   { id: "freetime", label: "Free time" },
   { id: "overrides", label: "Overrides" },
   { id: "identity", label: "Identity & model" },
+  { id: "providers", label: "Providers" },
   { id: "prompts", label: "Prompts" },
   { id: "autonomy", label: "Autonomy" },
   { id: "limits", label: "Limits" },
@@ -229,6 +231,9 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
 
     case "freetime":
       return <FreeTimePage settings={settings} />;
+
+    case "providers":
+      return <ProvidersPage />;
 
     case "identity":
       return <IdentityPage s={s} settings={settings} />;

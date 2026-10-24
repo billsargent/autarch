@@ -100,9 +100,10 @@ export interface AgentInput {
   tier?: unknown;
   area?: unknown;
   managerId?: unknown;
+  providerId?: unknown;
 }
 
-type Clean = Partial<Pick<AgentRow, "name" | "role" | "persona" | "character" | "color" | "model" | "enabledTools" | "dailyBudgetUsd" | "maxActionsPerHour" | "status" | "tier" | "area" | "managerId">>;
+type Clean = Partial<Pick<AgentRow, "name" | "role" | "persona" | "character" | "color" | "model" | "enabledTools" | "dailyBudgetUsd" | "maxActionsPerHour" | "status" | "tier" | "area" | "managerId" | "providerId">>;
 
 // Checks a create/update body. Returns the clean fields, or the first problem
 // as "field: reason" (the same shape as settings errors, so forms can place it).
@@ -187,6 +188,12 @@ export function validateAgentInput(input: AgentInput, toolNames: readonly string
     const v = text("area", 60);
     if (isErr(v)) return { ok: false, error: v.error };
     out.area = v;
+  }
+  if (has("providerId")) {
+    const v = input.providerId;
+    if (v === null || v === "") out.providerId = null;
+    else if (typeof v !== "number" || !Number.isInteger(v) || v < 1) return { ok: false, error: "providerId: must be a provider." };
+    else out.providerId = v;
   }
   if (has("managerId")) {
     const v = input.managerId;
@@ -366,6 +373,7 @@ export async function createVillager(value: NewVillager): Promise<AgentRow> {
       tier: value.tier ?? "director",
       area: value.area ?? null,
       managerId: value.managerId ?? null,
+      providerId: value.providerId ?? null,
       home,
     })
     .returning();

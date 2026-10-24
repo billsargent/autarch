@@ -580,6 +580,7 @@ export function useChat(opts?: { initialConversationId?: number | null; agentId?
     activeId,
     setActiveId,
     runningByConvo,
+    reloadConversations: loadConversations,
     unreadByConvo,
     newConversation,
     deleteConversation,

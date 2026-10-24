@@ -50,6 +50,9 @@ export interface ConversationRow {
   running?: boolean;
   lastMessageId?: number;
   agentId: number | null;
+  // Its own provider and model, over the villager's (#64).
+  providerId?: number | null;
+  model?: string | null;
 }
 
 export interface SettingsRow {
@@ -206,6 +209,7 @@ export interface AgentRow {
   tier: "mayor" | "director" | "worker";
   area: string | null;
   managerId: number | null;
+  providerId?: number | null;
   inMeeting?: boolean;
   daydream?: boolean;
   dailyBudgetUsd: number | null;

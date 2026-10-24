@@ -1384,6 +1384,9 @@ async function queryDatabase(args: Record<string, unknown>) {
     return { output: "Diaries are private: query_database can't read journal_entries. Use your own journal tools.", summary: "query blocked (diaries)" };
   }
   // The calendar's private address is a secret like the key (#108).
+  if (/provider_?keys/i.test(raw)) {
+    return { output: "Queries that mention provider keys are not allowed.", summary: "query blocked (secret table)" };
+  }
   if (/calendar_?ics|ics_?url/i.test(raw)) {
     return { output: "Queries that mention the calendar address are not allowed.", summary: "query blocked (secret column)" };
   }
