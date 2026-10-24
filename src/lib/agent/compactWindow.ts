@@ -14,7 +14,8 @@ export function estimateTokens(text: string): number {
 }
 
 export function rowTokens(r: HistoryRow): number {
-  let n = estimateTokens(r.content ?? "");
+  // Reasoning is sent back to the API with tool calls, so it counts (#31).
+  let n = estimateTokens(r.content ?? "") + (r.role === "assistant" && Array.isArray(r.toolCalls) ? estimateTokens(r.reasoning ?? "") : 0);
   if (r.role === "assistant" && Array.isArray(r.toolCalls)) {
     try {
       n += estimateTokens(JSON.stringify(r.toolCalls));

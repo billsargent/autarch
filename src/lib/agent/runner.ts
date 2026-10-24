@@ -414,7 +414,15 @@ export async function runAgentTurn(opts: {
     });
 
     const historyRows = await loadHistory(conversationId);
-    const built = await buildPromptMessages({ conversationId, rows: historyRows, settings, client, signal: stop.signal });
+    const built = await buildPromptMessages({
+      conversationId,
+      rows: historyRows,
+      settings,
+      client,
+      signal: stop.signal,
+      // Summaries cost tokens too; they count toward this turn (#30).
+      onUsage: (u) => accumulateUsage(session, u, inputPrice, outputPrice, cacheHitPrice),
+    });
     const apiMessages: ChatMessageParam[] = [{ role: "system", content: systemPrompt }, ...built];
     onEvent?.({
       type: "session_start",

@@ -5,6 +5,7 @@ import {
   real,
 } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
+import { DEFAULT_ENABLED_TOOLS } from "../lib/agent/config";
 
 // The villagers (#55). Each is an agent with its own name, personality, look,
 // model, tools and home folder; the first one is the Mayor. Town-wide things
@@ -333,11 +334,10 @@ export const agentSettings = sqliteTable("agent_settings", {
   commandTimeoutSec: integer("command_timeout_sec").notNull().default(30),
   toolRetries: integer("tool_retries").notNull().default(1),
   workspaceDir: text("workspace_dir").notNull().default("/root/agent-workspace"),
+  // One list of default tools, config.ts (#34).
   enabledTools: text("enabled_tools", { mode: "json" })
     .notNull()
-    .default(
-      sql`('["run_shell_command","read_file","write_file","list_directory","delete_path","get_system_status","list_processes","manage_package","manage_service","fetch_url","update_journal","schedule_job","list_jobs","cancel_job","manage_goal","list_goals","notify_human","post_message","query_database","download_file","edit_file","take_screenshot"]')`,
-    ),
+    .$defaultFn(() => DEFAULT_ENABLED_TOOLS),
   extraProtectedPaths: text("extra_protected_paths", { mode: "json" }).notNull().default(sql`('[]')`),
   systemPromptExtra: text("system_prompt_extra"),
   staticCorePrompt: text("static_core_prompt"),

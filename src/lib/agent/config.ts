@@ -82,15 +82,13 @@ export const SYSTEM_SENSITIVE_DIRS: string[] = [
 ];
 
 // apt/dpkg packages that must never be removed — doing so would break the
-// machine's ability to run this very framework (Node runtime, Postgres, core
+// machine's ability to run this very framework (Node runtime, SQLite, core
 // OS tooling). apt-get remove/purge on any of these is fully BLOCKED.
 export const PROTECTED_PACKAGES: string[] = [
   "nodejs",
   "npm",
   "node",
-  "postgresql",
-  "postgresql-common",
-  "postgresql-client-common",
+  "libsqlite3-0",
   "sudo",
   "systemd",
   "systemd-sysv",
@@ -111,11 +109,9 @@ export const PROTECTED_PACKAGES: string[] = [
 ];
 
 // systemd services that can never be stopped/disabled/masked through the
-// agent because this app depends on them (Postgres) or the box depends on
+// agent because the box depends on
 // them to stay reachable/bootable.
 export const PROTECTED_SERVICES: string[] = [
-  "postgresql",
-  "postgresql@*",
   "systemd-journald",
   "systemd-logind",
   "dbus",
@@ -132,8 +128,6 @@ export const PROTECTED_SERVICES: string[] = [
 export const PROTECTED_PROCESS_NAMES: string[] = [
   "node",
   "next-server",
-  "postgres",
-  "postgresql",
   "npm",
 ];
 

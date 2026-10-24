@@ -3,6 +3,22 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Housekeeping
+
+- **Summaries cost what they cost (#30, #31).** When a long conversation is summarised, that
+  model call's tokens and cost now count toward the turn. Later summaries only read what's new
+  since the last one, plus the old summary, instead of everything again.
+- **Spending by local time (#32):** today, daily, weekly and monthly totals all use the
+  computer's own clock.
+- **Faster queries (#33):** database indexes for the busiest lookups.
+- **One list of default tools (#34):** shared by new installs and the database. Existing installs
+  are offered new tools once.
+- **No more Postgres leftovers (#47):** the app runs on SQLite.
+- **CI (#49):** typecheck, lint and every test suite run on each push and pull request. `npm test`
+  runs all the suites.
+- **The README (#46, #50)** shows the village instead of a missing screenshot, and explains the
+  `allowScripts` approvals.
+
 ## 2026-10-24 — Finishing touches
 
 - **Your home (#110):**

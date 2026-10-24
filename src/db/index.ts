@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import path from "node:path";
 import fs from "node:fs";
 import { DB_PATH } from "./path";
+import { DEFAULT_ENABLED_TOOLS } from "../lib/agent/config";
 
 // Self-contained SQLite database — no environment variables required.
 // The DB file and tables are created automatically on first run.
@@ -144,7 +145,7 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   command_timeout_sec INTEGER NOT NULL DEFAULT 30,
   tool_retries INTEGER NOT NULL DEFAULT 1,
   workspace_dir TEXT NOT NULL DEFAULT '/root/agent-workspace',
-  enabled_tools TEXT NOT NULL DEFAULT '["run_shell_command","read_file","write_file","list_directory","delete_path","get_system_status","list_processes","manage_package","manage_service","fetch_url","update_journal","schedule_job","list_jobs","cancel_job","manage_goal","list_goals","notify_human","query_database","download_file","edit_file","take_screenshot"]',
+  enabled_tools TEXT NOT NULL DEFAULT '${JSON.stringify(DEFAULT_ENABLED_TOOLS)}',
   extra_protected_paths TEXT NOT NULL DEFAULT '[]',
   system_prompt_extra TEXT,
   static_core_prompt TEXT,
@@ -394,6 +395,24 @@ if (!globalForDb.__agentLabSqlite) {
   }
   if (!existingCols("agent_settings").includes("town_daily_budget_usd")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN town_daily_budget_usd REAL");
+  }
+  // Indexes for the hot queries (#33).
+  for (const [name, on] of [
+    ["idx_messages_conversation", "messages(conversation_id, id)"],
+    ["idx_tool_exec_status", "tool_executions(status)"],
+    ["idx_tool_exec_conversation", "tool_executions(conversation_id)"],
+    ["idx_tool_exec_agent_requested", "tool_executions(agent_id, requested_at)"],
+    ["idx_sessions_status", "work_sessions(status)"],
+    ["idx_sessions_started", "work_sessions(started_at)"],
+    ["idx_sessions_agent_started", "work_sessions(agent_id, started_at)"],
+    ["idx_sessions_conversation", "work_sessions(conversation_id)"],
+    ["idx_sessions_job", "work_sessions(job_id)"],
+    ["idx_jobs_due", "jobs(enabled, next_run_at)"],
+    ["idx_notifications_read", "notifications(read)"],
+    ["idx_conversations_agent", "conversations(agent_id)"],
+    ["idx_journal_agent", "journal_entries(agent_id)"],
+  ] as const) {
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS ${name} ON ${on}`);
   }
   // Clean up stale FK references (conversations deleted without cascade).
   sqlite.exec("UPDATE jobs SET conversation_id = NULL WHERE conversation_id IS NOT NULL AND conversation_id NOT IN (SELECT id FROM conversations)");

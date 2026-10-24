@@ -22,6 +22,8 @@ export interface BuildOptions {
   client: OpenAI;
   // Aborts the summary call when the turn is stopped.
   signal?: AbortSignal;
+  // Told the tokens of every summary call, so the session counts them (#30).
+  onUsage?: (usage: OpenAI.Completions.CompletionUsage) => void;
 }
 
 // Build the model-facing messages for a turn. If the history fits within the
@@ -31,7 +33,7 @@ export interface BuildOptions {
 // conversation summary]" user message. No DB rows are deleted, so the UI's
 // scroll-back history is unaffected.
 export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessageParam[]> {
-  const { conversationId, rows, settings, client, signal } = opts;
+  const { conversationId, rows, settings, client, signal, onUsage } = opts;
   const full = historyToApiMessages(rows);
   if (!settings.autoCompact) return full;
 
@@ -53,9 +55,13 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
     return [{ role: "user", content: `[Earlier conversation summary]\n${convo.summary}` }, ...historyToApiMessages(keep)];
   }
 
+  // Only what the last summary didn't cover, merged with it (#31).
+  const previous = convo?.summary && convo.compactedThroughId ? convo.summary : null;
+  const fresh = previous ? toSummarize.filter((r) => r.id > (convo!.compactedThroughId ?? 0)) : toSummarize;
+
   let summary = "";
   try {
-    summary = await generateSummary(client, settings.modelName, toSummarize, signal);
+    summary = await generateSummary(client, settings.modelName, fresh, signal, previous, onUsage);
   } catch {
     // Safe fallback: hard window + truncation note rather than a giant prompt.
     return [
@@ -78,7 +84,14 @@ export async function buildPromptMessages(opts: BuildOptions): Promise<ChatMessa
 // Each summary call is time-boxed and stops with the turn.
 const SUMMARY_TIMEOUT_MS = 120_000;
 
-async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[], signal?: AbortSignal): Promise<string> {
+async function generateSummary(
+  client: OpenAI,
+  model: string,
+  rows: HistoryRow[],
+  signal?: AbortSignal,
+  previous?: string | null,
+  onUsage?: BuildOptions["onUsage"],
+): Promise<string> {
   // Cluster-aware chunking: never split between an assistant tool_calls message
   // and its tool result rows. A `tool` row always stays in the current chunk with
   // its preceding assistant, so chunk boundaries only ever land after non-tool rows.
@@ -126,6 +139,8 @@ async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]
         return `${r.role}: ${content}`;
       })
       .join("\n");
+    // The first batch carries the earlier summary, so the new one replaces it.
+    const input = previous && chunk === chunks[0] ? `[Summary of what came before]\n${previous}\n\n[What happened next]\n${text}` : text;
     const completion = await client.chat.completions.create({
       model,
       messages: [
@@ -134,7 +149,7 @@ async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]
           content:
             "You summarize a conversation excerpt into dense bullet points. Preserve: topics discussed, actions/tools run (including tool names and arguments) and their outcomes, decisions made, unresolved issues, pending approvals, and the current task state. Be concise but information-dense. No preamble.",
         },
-        { role: "user", content: text },
+        { role: "user", content: input },
       ],
       max_tokens: chunks.length > 1 ? 800 : 1000,
       // Summarization doesn't need high-effort chain-of-thought; pin it low so
@@ -144,6 +159,7 @@ async function generateSummary(client: OpenAI, model: string, rows: HistoryRow[]
     } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming & {
       thinking?: { type: "enabled" | "disabled" };
     }, { timeout: SUMMARY_TIMEOUT_MS, signal });
+    if (completion.usage) onUsage?.(completion.usage);
     const out = completion.choices[0]?.message?.content?.trim() ?? "";
     if (out) parts.push(out);
   }

@@ -9,12 +9,20 @@ web dashboard.
 > work windows, and pursue its own goals. Only run this on a machine you are OK with an
 > AI poking around.
 
-![Chat session screenshot](docs/chat-session.png)
+![The village: villagers going about their work, the buildings that hold every page, and you (bottom right)](docs/village.png)
 
 ## Updating
 When you pull new code from the repo, run `npm ci && npm run build` and restart the web server
 and worker. Behavior guarantees (e.g. the conversation-mode "no tools" rule) only apply to the
 latest build, not to older copied-over versions.
+
+Native packages (better-sqlite3, esbuild, sharp, unrs-resolver) need their install scripts, which
+newer npm versions only run when approved in the `allowScripts` block of `package.json`. Those
+entries pin exact versions, so after a dependency bump re-approve them with
+`npm install-scripts approve better-sqlite3 esbuild sharp unrs-resolver` and commit the change.
+
+Checks: `npm run typecheck`, `npm run lint` and `npm test` (every test suite). CI runs all
+three on each push and pull request.
 
 ## Stack
 
@@ -254,5 +262,5 @@ src/
     settingsStore.ts single-row settings store
     deepseekClient.ts DeepSeek client + /models helper
   worker/index.ts Standalone scheduler process
-  db/             Drizzle schema + Postgres pool
+  db/             Drizzle schema + SQLite (better-sqlite3)
 ```

@@ -66,7 +66,7 @@ function totals(sinceUnixSec?: number | null, prefixExpr?: string, prefixVal?: s
     params.push(Math.floor(sinceUnixSec));
   }
   if (prefixExpr) {
-    sql += ` AND strftime(${prefixExpr}, started_at, 'unixepoch') = ?`;
+    sql += ` AND strftime(${prefixExpr}, started_at, 'unixepoch', 'localtime') = ?`;
     params.push(prefixVal);
   }
   const r = sqlite.prepare(sql).get(...params) as Record<string, unknown>;
@@ -88,13 +88,15 @@ export async function GET() {
   todayStart.setHours(0, 0, 0, 0);
   const todayStartSec = Math.floor(todayStart.getTime() / 1000);
   const weekStartSec = Math.floor((now - 7 * DAY_MS) / 1000);
-  const month = new Date().toISOString().slice(0, 7);
+  // Local time throughout, like "today" (#32).
+  const d0 = new Date();
+  const month = `${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, "0")}`;
   const year = String(new Date().getFullYear());
 
-  const daily = bucketize("strftime('%Y-%m-%d', started_at, 'unixepoch')", 30);
-  const weekly = bucketize("strftime('%Y-W%W', started_at, 'unixepoch')", 12);
-  const monthly = bucketize("strftime('%Y-%m', started_at, 'unixepoch')", 12);
-  const yearly = bucketize("strftime('%Y', started_at, 'unixepoch')", 5);
+  const daily = bucketize("strftime('%Y-%m-%d', started_at, 'unixepoch', 'localtime')", 30);
+  const weekly = bucketize("strftime('%Y-W%W', started_at, 'unixepoch', 'localtime')", 12);
+  const monthly = bucketize("strftime('%Y-%m', started_at, 'unixepoch', 'localtime')", 12);
+  const yearly = bucketize("strftime('%Y', started_at, 'unixepoch', 'localtime')", 5);
 
   const periodTotals = {
     today: totals(todayStartSec),

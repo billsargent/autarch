@@ -741,6 +741,25 @@ async function main() {
   check("{name} in a custom prompt becomes the villager's name", fake.seen.filter((x) => x.system.startsWith("You are Cal")).pop()?.system.includes("Sign off as Cal."), true);
   await updateSettings({ systemPromptExtra: null });
 
+  // --- compaction: its cost counts, and it only re-reads what's new (#30, #31) -----------------
+  const [longChat] = await db.insert(conversations).values({ title: "long", agentId: cal.id }).returning();
+  const filler = (n: number, tag = "Line") => Array.from({ length: n }, (_, i) => ({ conversationId: longChat.id, role: (i % 2 ? "assistant" : "user") as "assistant" | "user", content: `${tag} ${i}: ${"words ".repeat(400)}` }));
+  await db.insert(messagesT).values(filler(12));
+  await updateSettings({ maxContextTokens: 4000, compactTargetTokens: 800, autoCompact: true });
+  fake.byAgent.Cal = [{ text: "ok" }, { text: "ok" }];
+  const seenAt = fake.seen.length;
+  await runAgentTurn({ conversationId: longChat.id, userMessage: "and now?" });
+  const summaryCall = fake.seen.slice(seenAt).find((x) => !x.stream);
+  check("a long conversation is summarised", Boolean(summaryCall), true);
+  const longSession = (await db.select().from(workSessions).where(eq(workSessions.conversationId, longChat.id)))[0];
+  check("…and the summary's tokens count toward the turn", longSession.totalTokens, 30);
+  await db.insert(messagesT).values(filler(12, "Later"));
+  const seenAt2 = fake.seen.length;
+  await runAgentTurn({ conversationId: longChat.id, userMessage: "and again?" });
+  const secondSummary = fake.seen.slice(seenAt2).find((x) => !x.stream);
+  check("the next summary starts from the last one, with only the new lines", [secondSummary?.lastUser.startsWith("[Summary of what came before]"), secondSummary?.lastUser.includes("Line 0:")], [true, false]);
+  await updateSettings({ maxContextTokens: 24000, compactTargetTokens: 9000 });
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

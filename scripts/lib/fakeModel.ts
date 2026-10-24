@@ -14,6 +14,8 @@ export interface SeenRequest {
   model: string;
   system: string;
   tools: string[];
+  // The last user message's text (what a summary call was asked to summarize).
+  lastUser: string;
 }
 
 function chunk(delta: Record<string, unknown>, extra: Record<string, unknown> = {}) {
@@ -38,6 +40,7 @@ export function startFakeModel() {
         model: parsed.model,
         system: parsed.messages?.[0]?.role === "system" ? parsed.messages[0].content : "",
         tools: (parsed.tools ?? []).map((t: { function: { name: string } }) => t.function.name),
+        lastUser: [...(parsed.messages ?? [])].reverse().find((m: { role: string }) => m.role === "user")?.content ?? "",
       });
       const who = Object.keys(byAgent).find((n) => byAgent[n].length && seen[seen.length - 1].system.startsWith(`You are ${n}`));
       const reply = (who ? byAgent[who].shift() : script.shift()) ?? { text: "ok" };
