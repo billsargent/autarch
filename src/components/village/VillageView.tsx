@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import "./village.css";
 import { villageFonts } from "./fonts";
-import { VILLAGE, spriteFor, type Place } from "./manifest";
+import { OWNER_SPRITE, VILLAGE, spriteFor, type Place } from "./manifest";
+import type { PlayerSpec } from "./SceneView";
 import { BUBBLE_MS, MOOD_BADGE, MOOD_PLACE, bubbleLine, moodLabel, nextHangout, standOffsets, villagerMood } from "./villagerState";
 import { snapshotOf, useVillageData } from "./useVillageData";
 import SceneView, { type VillagerSpec } from "./SceneView";
@@ -20,7 +21,15 @@ import { useVillageClock } from "./useVillageClock";
 // A new villager (#99) greets the village for their first hour.
 const NEWCOMER_MS = 60 * 60_000;
 
+// You walk the village too (#109): you start at your front door, or at the
+// door of the building you just left (?from=<place>).
+function startingDoor(): string {
+  const from = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("from");
+  return VILLAGE.places.find((p) => p.id === from)?.door ?? VILLAGE.places.find((p) => p.id === "home")?.door ?? VILLAGE.spawn;
+}
+
 export default function VillageView() {
+  const [player] = useState<PlayerSpec>(() => ({ name: "You", color: "#3b2716", sprite: OWNER_SPRITE, start: startingDoor() }));
   const router = useRouter();
   const { data, refresh, mayor } = useVillageData();
   const villagers = data.villagers;
@@ -185,6 +194,7 @@ export default function VillageView() {
 
       <SceneView
         scene={VILLAGE}
+        player={player}
         light={data.paused ? "frozen" : phase}
         labels="signs"
         onPlace={openPlace}

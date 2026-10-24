@@ -36,6 +36,8 @@ export interface SceneManifest {
   spawn: string;
   exit?: string;
   hangouts: string[];
+  // Where someone can stand, in scene px (the owner walks only here, #109).
+  walkable: Array<{ x: number; y: number; w: number; h: number }>;
 }
 
 export function sceneManifest(layout: SceneLayout): SceneManifest {
@@ -64,6 +66,7 @@ export function sceneManifest(layout: SceneLayout): SceneManifest {
     spawn: layout.spawn,
     exit: layout.exit,
     hangouts: layout.hangouts ?? [],
+    walkable: (layout.walkable ?? []).map((r) => ({ x: r.col * CELL, y: r.row * CELL, w: r.w * CELL, h: r.h * CELL })),
   };
 }
 
@@ -90,6 +93,10 @@ export const SPRITE = {
 export const CHARACTERS: Record<CharacterKey, string> = Object.fromEntries(
   CHARACTER_KEYS.map((k) => [k, `/village/characters/${k}.png`]),
 ) as Record<CharacterKey, string>;
+
+// The owner's own look when walking the village (#109): a character no
+// villager can pick.
+export const OWNER_SPRITE = "/village/characters/owner.png";
 
 export function spriteFor(character: string): string {
   return isCharacterKey(character) ? CHARACTERS[character] : CHARACTERS.villager;

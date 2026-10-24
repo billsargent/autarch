@@ -38,9 +38,20 @@ export interface VillagerSpec {
   onClick?: () => void;
 }
 
+// The owner, walking the scene (#109): arrow keys or WASD, a click on the
+// ground to walk there, and Space (or E) to use whatever is close by.
+export interface PlayerSpec {
+  name: string;
+  color: string;
+  sprite: string;
+  // Waypoint to start at (default: the scene's spawn).
+  start?: string;
+}
+
 interface SceneViewProps {
   scene: SceneManifest;
   villagers: VillagerSpec[];
+  player?: PlayerSpec;
   // The light: the time of day (#100), or "frozen" while everyone is paused.
   light?: SceneLight;
   // "signs": always-visible signs above places (the village);
@@ -158,6 +169,70 @@ function EditOverlay({ scene, cursor }: { scene: SceneManifest; cursor: { x: num
       )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// The owner's character: drawn like a villager, steered by SceneView.
+// ---------------------------------------------------------------------------
+
+const PLAYER_SPEED = 300; // scene px per second
+const USE_RANGE = 96; // how close (scene px) something must be to use it
+
+interface PlayerState {
+  x: number;
+  y: number;
+  facing: Facing;
+  walking: boolean;
+  frame: number;
+}
+
+function Avatar({ p, me, hint }: { p: PlayerSpec; me: PlayerState; hint: string | null }) {
+  return (
+    <div className="pointer-events-none absolute" style={{ left: me.x, top: me.y, transform: "translate(-50%, -100%)", zIndex: 5 }} data-player>
+      {hint && (
+        <div className="village-bubble absolute bottom-full left-1/2 mb-2 w-max max-w-[360px] -translate-x-1/2 px-2 py-1 text-[18px]">
+          <kbd className="font-bold">Space</kbd> {hint}
+        </div>
+      )}
+      <span
+        className="relative block"
+        style={{
+          width: SPRITE_PX,
+          height: SPRITE_PX,
+          backgroundImage: `url(${p.sprite})`,
+          backgroundSize: `${SPRITE.sheetWidth * SPRITE.scale}px ${SPRITE.sheetHeight * SPRITE.scale}px`,
+          backgroundPosition: `-${SPRITE.directions.indexOf(me.facing) * SPRITE_PX}px -${(me.walking ? me.frame % SPRITE.walkFrames : 0) * SPRITE_PX}px`,
+          imageRendering: "pixelated",
+        }}
+      />
+      <div className="absolute left-1/2 top-full mt-1 -translate-x-1/2">
+        <span className="village-pixel whitespace-nowrap rounded border-2 border-[#3b2716] px-2 text-[18px] text-white" style={{ background: p.color }}>
+          {p.name}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// What's within reach of a point: the nearest usable place or villager.
+type Reachable = { kind: "place"; place: Place; label: string } | { kind: "villager"; v: VillagerSpec; label: string };
+function nearestUsable(scene: SceneManifest, villagers: VillagerSpec[], x: number, y: number): Reachable | null {
+  let best: { d: number; r: Reachable } | null = null;
+  for (const place of scene.places) {
+    if (!(place.href || place.interior || place.action)) continue;
+    const cx = Math.max(place.rect.x, Math.min(x, place.rect.x + place.rect.w));
+    const cy = Math.max(place.rect.y, Math.min(y, place.rect.y + place.rect.h));
+    const d = Math.hypot(x - cx, y - cy);
+    if (d <= USE_RANGE && (!best || d < best.d)) best = { d, r: { kind: "place", place, label: place.label } };
+  }
+  for (const v of villagers) {
+    if (!v.onClick) continue;
+    const w = scene.waypoints.find((p) => p.id === v.target);
+    if (!w) continue;
+    const d = Math.hypot(x - (w.x + (v.offset ?? 0)), y - w.y);
+    if (d <= USE_RANGE && (!best || d < best.d)) best = { d, r: { kind: "villager", v, label: `Talk to ${v.name}` } };
+  }
+  return best?.r ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +370,7 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
 
 export type SceneLight = DayPhase | "frozen";
 
-export default function SceneView({ scene, villagers, light = "day", labels, onPlace, hints, children }: SceneViewProps) {
+export default function SceneView({ scene, villagers, player, light = "day", labels, onPlace, hints, children }: SceneViewProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(MIN_ZOOM);
@@ -361,9 +436,141 @@ export default function SceneView({ scene, villagers, light = "day", labels, onP
     return () => window.removeEventListener("keydown", onKey);
   }, [zoomBy, zoomToFit]);
 
+  // --- the owner's character (#109) ---
+  const startAt = scene.waypoints.find((w) => w.id === (player?.start ?? scene.spawn)) ?? scene.waypoints[0];
+  const [me, setMe] = useState<PlayerState>({ x: startAt.x, y: startAt.y, facing: "down", walking: false, frame: 0 });
+  const meRef = useRef(me);
+  const held = useRef(new Set<string>());
+  const route = useRef<Array<{ x: number; y: number }>>([]);
+  // The latest values the loop and the key handler need.
+  const live = useRef({ scale: 0, zoomed: false, villagers, onPlace });
+  useEffect(() => {
+    live.current = { scale: fit * zoom, zoomed: zoom > MIN_ZOOM, villagers, onPlace };
+  });
+
+  const standable = useCallback(
+    (x: number, y: number) => !scene.walkable.length || scene.walkable.some((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h),
+    [scene.walkable],
+  );
+
+  useEffect(() => {
+    if (!player) return;
+    const DIRS: Record<string, [number, number]> = {
+      ArrowUp: [0, -1], w: [0, -1], W: [0, -1],
+      ArrowDown: [0, 1], s: [0, 1], S: [0, 1],
+      ArrowLeft: [-1, 0], a: [-1, 0], A: [-1, 0],
+      ArrowRight: [1, 0], d: [1, 0], D: [1, 0],
+    };
+    const busyTarget = (t: EventTarget | null) => {
+      if (!(t instanceof HTMLElement)) return false;
+      return Boolean(t.closest("input, textarea, select, button, a, [role=dialog]") || t.isContentEditable);
+    };
+    const down = (e: KeyboardEvent) => {
+      if (busyTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (DIRS[e.key]) {
+        e.preventDefault();
+        held.current.add(e.key);
+        route.current = [];
+      } else if (e.key === " " || e.key === "e" || e.key === "E" || e.key === "Enter") {
+        const near = nearestUsable(scene, live.current.villagers, meRef.current.x, meRef.current.y);
+        if (!near) return;
+        e.preventDefault();
+        if (near.kind === "place") live.current.onPlace(near.place);
+        else near.v.onClick?.();
+      }
+    };
+    const up = (e: KeyboardEvent) => held.current.delete(e.key);
+    const blur = () => held.current.clear();
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", blur);
+
+    let raf = 0;
+    let last = performance.now();
+    let frameClock = 0;
+    const tick = (now: number) => {
+      const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
+      last = now;
+      const cur = meRef.current;
+      let dx = 0;
+      let dy = 0;
+      for (const k of held.current) {
+        dx += DIRS[k]?.[0] ?? 0;
+        dy += DIRS[k]?.[1] ?? 0;
+      }
+      let next = { x: cur.x, y: cur.y };
+      const stride = PLAYER_SPEED * dt;
+      if (dx || dy) {
+        const len = Math.hypot(dx, dy);
+        const tx = cur.x + (dx / len) * stride;
+        const ty = cur.y + (dy / len) * stride;
+        // Slide along edges: try both axes, then each alone.
+        if (standable(tx, ty)) next = { x: tx, y: ty };
+        else if (standable(tx, cur.y)) next = { x: tx, y: cur.y };
+        else if (standable(cur.x, ty)) next = { x: cur.x, y: ty };
+      } else if (route.current.length) {
+        const goal = route.current[0];
+        const gx = goal.x - cur.x;
+        const gy = goal.y - cur.y;
+        const dist = Math.hypot(gx, gy);
+        if (dist <= Math.max(stride, 0.5)) {
+          next = goal;
+          route.current.shift();
+        } else next = { x: cur.x + (gx / dist) * stride, y: cur.y + (gy / dist) * stride };
+        dx = gx;
+        dy = gy;
+      }
+      const moved = next.x !== cur.x || next.y !== cur.y;
+      if (moved || cur.walking) {
+        frameClock += dt;
+        const facing: Facing = !moved ? cur.facing : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up";
+        const state = {
+          x: next.x,
+          y: next.y,
+          facing,
+          walking: moved,
+          frame: frameClock > 0.125 ? (cur.frame + 1) % SPRITE.walkFrames : cur.frame,
+        };
+        if (frameClock > 0.125) frameClock = 0;
+        meRef.current = state;
+        setMe(state);
+        // Zoomed in, the view follows you.
+        if (moved && live.current.zoomed) {
+          const k = live.current.scale;
+          setPan({ x: (scene.width / 2 - next.x) * k, y: (scene.height / 2 - next.y) * k });
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", blur);
+    };
+  }, [player, scene, standable]);
+
+  // A click on open ground walks you there along the roads.
+  const pressAt = useRef<{ x: number; y: number } | null>(null);
+  function walkTo(clientX: number, clientY: number) {
+    const el = stageRef.current;
+    if (!player || !el || !scale) return;
+    const r = el.getBoundingClientRect();
+    const x = (clientX - r.left - originX) / scale;
+    const y = (clientY - r.top - originY) / scale;
+    const from = nearestWaypoint(scene.waypoints, meRef.current.x, meRef.current.y);
+    const to = nearestWaypoint(scene.waypoints, x, y);
+    const path = shortestPath(scene.waypoints, scene.edges, from.id, to.id) ?? [to.id];
+    const byId = new Map(scene.waypoints.map((w) => [w.id, w]));
+    route.current = [...path.map((id) => byId.get(id)!).filter(Boolean).map((w) => ({ x: w.x, y: w.y })), ...(standable(x, y) ? [{ x, y }] : [])];
+  }
+  const reach = player ? nearestUsable(scene, villagers, me.x, me.y) : null;
+
   // Pointer drag to pan, two fingers to pinch-zoom.
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     if ((e.target as HTMLElement).closest("[data-scene-overlay]")) return;
+    pressAt.current = { x: e.clientX, y: e.clientY };
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2) {
@@ -389,6 +596,12 @@ export default function SceneView({ scene, villagers, light = "day", labels, onP
     }
   }
   function onPointerUp(e: ReactPointerEvent<HTMLDivElement>) {
+    // A tap (not a drag) on the ground, not on a place or a villager.
+    const press = pressAt.current;
+    pressAt.current = null;
+    if (press && pointers.current.size === 1 && Math.hypot(e.clientX - press.x, e.clientY - press.y) < 6 && !(e.target as HTMLElement).closest("button, a")) {
+      walkTo(e.clientX, e.clientY);
+    }
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinchStart.current = null;
   }
@@ -429,6 +642,7 @@ export default function SceneView({ scene, villagers, light = "day", labels, onP
           {villagers.map((v) => (
             <WalkingVillager key={v.id} scene={scene} v={v} />
           ))}
+          {player && <Avatar p={player} me={me} hint={reach?.label ?? null} />}
           {editMode && <EditOverlay scene={scene} cursor={cursor} />}
         </div>
       )}

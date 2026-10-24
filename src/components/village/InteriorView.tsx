@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import "./village.css";
 import { villageFonts } from "./fonts";
-import { VILLAGE, interiorManifest, spriteFor } from "./manifest";
+import { OWNER_SPRITE, VILLAGE, interiorManifest, spriteFor } from "./manifest";
 import { MOOD_BADGE, MOOD_PLACE, moodLabel, standOffsets, villagerMood } from "./villagerState";
 import { snapshotOf, useVillageData } from "./useVillageData";
 import SceneView, { type VillagerSpec } from "./SceneView";
@@ -18,6 +18,9 @@ import { useVillageClock } from "./useVillageClock";
 // room's dialogs. Villagers are shown here only when what they're really doing
 // puts them in this building. A cottage belongs to one villager (`agentId`):
 // its dialogs are theirs, and it's where they relax.
+// You, standing in the doorway (#109).
+const OWNER = { name: "You", color: "#3b2716", sprite: OWNER_SPRITE, start: "door" };
+
 export default function InteriorView({ sceneId, startAction, agentId }: { sceneId: string; startAction?: string; agentId?: number | null }) {
   const scene = interiorManifest(sceneId)!;
   const Room = ROOMS[sceneId];
@@ -77,7 +80,7 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
   return (
     <div className={`${villageFonts} village-root flex h-full w-full flex-col`}>
       <div className="village-hud relative z-20 flex items-center gap-2 px-3 py-2">
-        <Link href="/" className="village-btn px-3 py-1.5 text-xs" aria-label="Leave and go back to the village">
+        <Link href={building ? `/?from=${building.id}` : "/"} className="village-btn px-3 py-1.5 text-xs" aria-label="Leave and go back to the village">
           ← Leave
         </Link>
         <h1 className="village-pixel min-w-0 flex-1 truncate text-sm text-[#fff6e0]">{title}</h1>
@@ -95,10 +98,11 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
 
       <SceneView
         scene={scene}
+        player={OWNER}
         light={data.paused ? "frozen" : phase}
         labels="hover"
         onPlace={(p) => open(p.action)}
-        hints={<span>click the furniture</span>}
+        hints={<span>click the furniture, or walk up and press <kbd className="font-bold">Space</kbd></span>}
         villagers={villagers}
       >
         <p className="pointer-events-none absolute left-3 top-3 z-10 max-w-[70%] rounded border-2 border-[#3b2716] bg-[#f4ead5]/90 px-2 py-1 text-xs">

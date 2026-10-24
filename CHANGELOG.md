@@ -3,6 +3,18 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Walk the village yourself
+
+- **You're in the village now (#109):** a character tagged "You".
+  - **Moving:** walk with the arrow keys or WASD, or click open ground to walk there along the
+    roads.
+  - **Using things:** walk up to a building, a piece of furniture or a villager, and press
+    **Space** (or E). The hint above your head says what it will do. Clicking still works
+    everywhere.
+- **Where you start:** at your front door, or at the door of the building you just left. Indoors
+  you start in the doorway. Zoomed in, the view follows you.
+- Furniture doesn't block you yet.
+
 ## 2026-10-24 — Your home
 
 - **You have a house in the village (#110):** the beige house at the bottom right, "Your home".
