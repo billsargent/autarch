@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
 import type { JournalEntryRow } from "@/lib/agent/clientTypes";
 
 // The agent's journal: what it has been exploring, building and thinking.
@@ -28,12 +29,14 @@ export function useJournal(agentId?: number | null) {
 
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, 20000);
+    const id = setInterval(reload, FALLBACK_MS);
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload]);
+  // Live: refresh when something it shows changes (#74).
+  useLive(["journal"], reload);
 
   // A note or task from the human for the agent to see.
   const addNote = useCallback(

@@ -804,6 +804,28 @@ async function main() {
   check("…and still go to DeepSeek", fake.seen.slice(seenD).find((x) => x.stream)?.thinking, true);
   await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { providerId: null, model: null }), { params: Promise.resolve({ id: String(dot.id) }) });
 
+  // --- the live event stream (#74) ---------------------------------------------------------
+  const { sqlite: rawDb } = await import("../src/db");
+  const eventsRoute = await import("../src/app/api/events/route");
+  const stopStream = new AbortController();
+  const streamRes = await eventsRoute.GET(new Request("http://test/api/events", { signal: stopStream.signal }));
+  const reader = streamRes.body!.getReader();
+  await reader.read(); // the "connected" comment
+  await db.insert(messagesT).values({ conversationId: calChat, role: "event", content: "live!" });
+  rawDb.prepare("UPDATE jobs SET name = name WHERE id = (SELECT MIN(id) FROM jobs)").run(); // as the worker would
+  const decoder = new TextDecoder();
+  let streamed = "";
+  for (let i = 0; i < 6 && !(streamed.includes('"kind":"message"') && streamed.includes('"kind":"job"')); i++) {
+    const next = await Promise.race([reader.read(), new Promise<{ value?: Uint8Array }>((r) => setTimeout(() => r({}), 1500))]);
+    if (next.value) streamed += decoder.decode(next.value);
+  }
+  check("changes from either process stream to the browser", [streamed.includes(`"kind":"message","ref"`), streamed.includes(`"conversationId":${calChat}`), streamed.includes('"kind":"job"')], [true, true, true]);
+  stopStream.abort();
+  const evCount = () => (rawDb.prepare("SELECT COUNT(*) AS n FROM events").get() as { n: number }).n;
+  const beforeBeat = evCount();
+  rawDb.prepare("UPDATE work_sessions SET heartbeat_at = unixepoch() WHERE id = (SELECT MIN(id) FROM work_sessions)").run();
+  check("…but a turn's heartbeat isn't news", evCount(), beforeBeat);
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

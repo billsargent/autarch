@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
 import type { ToolExecutionRow } from "@/lib/agent/clientTypes";
 
 // The activity log: every tool call the agent has attempted, plus today's
@@ -49,12 +50,14 @@ export function useActivity() {
 
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, 20000);
+    const id = setInterval(reload, FALLBACK_MS);
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload]);
+  // Live: refresh when something it shows changes (#74).
+  useLive(["tool", "session"], reload);
 
   return { rows, stats, loaded, reload };
 }

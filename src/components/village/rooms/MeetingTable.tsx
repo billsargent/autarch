@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FALLBACK_MS, useLive } from "../../data/useLive";
 import { useVillagers } from "../../data/useVillagers";
 import ParchmentDialog from "../ParchmentDialog";
 import VillagerPortrait from "../VillagerPortrait";
@@ -35,12 +36,13 @@ export default function MeetingTable({ onClose }: { onClose: () => void }) {
   }, []);
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, view?.busy ? 1500 : 4000);
+    const id = setInterval(reload, view?.busy ? 10_000 : FALLBACK_MS);
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload, view?.busy]);
+  useLive(["meeting", "message"], reload, { debounceMs: 300 });
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
   }, [view?.transcript?.length]);

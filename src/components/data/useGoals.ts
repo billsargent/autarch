@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
 import type { GoalRow } from "@/lib/agent/clientTypes";
 import { fetchConversationChoices, type ConversationChoice } from "./conversationChoices";
 
@@ -44,12 +45,14 @@ export function useGoals() {
 
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, 20000);
+    const id = setInterval(reload, FALLBACK_MS);
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload]);
+  // Live: refresh when something it shows changes (#74).
+  useLive(["goal"], reload);
 
   const create = useCallback(
     async (input: GoalInput) => {

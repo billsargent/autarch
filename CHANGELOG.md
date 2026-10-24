@@ -3,6 +3,15 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Live updates
+
+- **Pages update the moment something changes (#74).** One live stream replaces the polling:
+  chat, approvals, jobs, goals, the diary, notifications, villagers, the village itself,
+  meetings, ideas, buildings and spending.
+  - It includes changes made by the background worker, so a reply from a scheduled job shows up
+    straight away.
+  - If the stream drops, pages still refresh once a minute.
+
 ## 2026-10-24 — More than one model provider
 
 - **Providers (#61, #62).** Mayor's ledger → Providers. Add any OpenAI-compatible server

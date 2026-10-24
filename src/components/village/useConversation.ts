@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FALLBACK_MS, useLive } from "../data/useLive";
 import type { MessageRow } from "@/lib/agent/clientTypes";
 
 interface StreamEvent {
@@ -36,13 +37,14 @@ export function useConversation(conversationId: number | null, agentId?: number 
   useEffect(() => {
     if (!conversationId) return;
     const first = setTimeout(() => load(conversationId), 0);
-    // Light refresh so replies from scheduled work also show up.
-    const id = setInterval(() => load(conversationId), 4000);
+    // A slow fallback; live events do the real work (#74).
+    const id = setInterval(() => load(conversationId), FALLBACK_MS);
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [conversationId, load]);
+  useLive(["message", "tool", "session"], () => conversationId && void load(conversationId), { conversationId });
 
   const send = useCallback(
     async (text: string): Promise<number | null> => {

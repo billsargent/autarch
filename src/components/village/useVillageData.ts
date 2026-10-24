@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_MS, useLive } from "../data/useLive";
 import type { AgentRow, ToolExecutionRow } from "@/lib/agent/clientTypes";
 
 export interface VillageData {
@@ -71,12 +72,14 @@ export function useVillageData() {
 
   useEffect(() => {
     const first = setTimeout(refresh, 0);
-    const id = setInterval(refresh, POLL_MS);
+    const id = setInterval(refresh, Math.max(POLL_MS, FALLBACK_MS));
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [refresh]);
+  // Live: the village redraws when anything it shows changes (#74).
+  useLive(["agent", "session", "tool", "notification", "goal", "settings", "meeting", "message"], refresh, { debounceMs: 800 });
 
   const mayor = data.villagers.find((v) => v.isMayor) ?? data.villagers[0] ?? null;
   return { data, refresh, mayor };

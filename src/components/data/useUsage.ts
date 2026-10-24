@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
 
 // Token and cost totals by period. Shared by the Usage page and the vault.
 
@@ -79,12 +80,14 @@ export function useUsage() {
 
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, 30000);
+    const id = setInterval(reload, FALLBACK_MS);
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload]);
+  // Live: refresh when something it shows changes (#74).
+  useLive(["session"], reload);
 
   return { data, reload };
 }

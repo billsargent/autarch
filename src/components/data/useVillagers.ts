@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
 import type { AgentRow } from "@/lib/agent/clientTypes";
 
 // The villagers (#55) and what they're up to. Used by the village, the rooms
@@ -42,12 +43,14 @@ export function useVillagers(pollMs = 5000) {
 
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, pollMs);
+    const id = setInterval(reload, Math.max(FALLBACK_MS, pollMs));
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload, pollMs]);
+  // Live: refresh when something it shows changes (#74).
+  useLive(["agent", "session", "tool", "meeting", "job"], reload);
 
   const add = useCallback(
     async (input: VillagerInput) => {

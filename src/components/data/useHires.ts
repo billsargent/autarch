@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
 import type { HireRequestRow } from "@/lib/agent/clientTypes";
 
 // Hire requests (#99) for the clerk's desk: waiting ones first, then recent
@@ -21,12 +22,14 @@ export function useHires(pollMs = 10000) {
 
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, pollMs);
+    const id = setInterval(reload, Math.max(FALLBACK_MS, pollMs));
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload, pollMs]);
+  // Live: refresh when something it shows changes (#74).
+  useLive(["hire", "agent"], reload);
 
   const decide = useCallback(
     async (id: number, action: "approve" | "decline", draft?: Record<string, unknown>): Promise<{ ok: true } | { ok: false; error: string }> => {

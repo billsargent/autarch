@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
 import type { NotificationRow } from "@/lib/agent/clientTypes";
 
 // Notifications the agent sends the owner. Used by the village's mailbox.
@@ -19,12 +20,14 @@ export function useNotifications() {
 
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, 15000);
+    const id = setInterval(reload, FALLBACK_MS);
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload]);
+  // Live: refresh when something it shows changes (#74).
+  useLive(["notification"], reload);
 
   const markRead = useCallback(
     async (id: number, read = true) => {

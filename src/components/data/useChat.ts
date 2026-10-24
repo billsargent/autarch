@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
 import type { ConversationRow, MessageRow, ToolExecutionRow } from "@/lib/agent/clientTypes";
 import type { ChatMode } from "@/lib/agent/chatMode";
 
@@ -157,9 +158,11 @@ export function useChat(opts?: { initialConversationId?: number | null; agentId?
   // Periodically refresh the list so background work started by jobs (running
   // dots, unread badges, ordering) shows up even when you're not sending.
   useEffect(() => {
-    const id = setInterval(loadConversations, 15000);
+    const id = setInterval(loadConversations, FALLBACK_MS);
     return () => clearInterval(id);
   }, [loadConversations]);
+  // Live: running dots, unread badges and order follow the event stream (#74).
+  useLive(["conversation", "session", "message"], loadConversations, { debounceMs: 600 });
 
   // Periodically refresh today's cost for the header badge.
   useEffect(() => {
@@ -172,9 +175,14 @@ export function useChat(opts?: { initialConversationId?: number | null; agentId?
       }
     };
     fetchCost();
-    const id = setInterval(fetchCost, 30000);
-    return () => clearInterval(id);
+    const id = setInterval(fetchCost, FALLBACK_MS);
+    window.addEventListener("autarch:session", fetchCost);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("autarch:session", fetchCost);
+    };
   }, []);
+  useLive(["session"], () => window.dispatchEvent(new Event("autarch:session")), { debounceMs: 2000 });
 
   // Load messages with pagination:
   //  - initial / poll: latest chunk (`limit`) or only messages newer than the
@@ -293,16 +301,12 @@ export function useChat(opts?: { initialConversationId?: number | null; agentId?
   // While the active conversation is mid-turn, poll its detail so live tool
   // activity + messages keep updating even if you switched away and back.
   const activeRunning = activeId ? Boolean(runningByConvo[activeId]) : false;
+  // Live: new messages, tool activity and turn changes in the open
+  // conversation, from this tab, the worker or a neighbour (#37, #74).
+  useLive(["message", "tool", "session"], () => activeId && void loadMessages(activeId), { conversationId: activeId, debounceMs: 200 });
   useEffect(() => {
-    if (!activeId || !activeRunning) return;
-    const t = setInterval(() => loadMessages(activeId), 2000);
-    return () => clearInterval(t);
-  }, [activeId, activeRunning, loadMessages]);
-  // When it isn't running, still look for messages posted into it from
-  // elsewhere (post_message, notify_human, a neighbour's reply) (#37).
-  useEffect(() => {
-    if (!activeId || activeRunning) return;
-    const t = setInterval(() => loadMessages(activeId), 15000);
+    if (!activeId) return;
+    const t = setInterval(() => loadMessages(activeId), activeRunning ? 10_000 : FALLBACK_MS);
     return () => clearInterval(t);
   }, [activeId, activeRunning, loadMessages]);
 

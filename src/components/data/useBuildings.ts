@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
 
 // The village's plots and buildings (#105), its stores (#106), and how many
 // it has room for.
@@ -40,12 +41,14 @@ export function useBuildings(pollMs = 20000) {
   }, []);
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, pollMs);
+    const id = setInterval(reload, Math.max(FALLBACK_MS, pollMs));
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload, pollMs]);
+  // Live: refresh when something it shows changes (#74).
+  useLive(["building", "agent"], reload);
 
   const send = useCallback(
     async (url: string, method: string, body: unknown): Promise<{ ok: true } | { ok: false; error: string }> => {

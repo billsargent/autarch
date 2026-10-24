@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FALLBACK_MS, useLive } from "../../data/useLive";
 import { useVillagers } from "../../data/useVillagers";
 import ParchmentDialog from "../ParchmentDialog";
 import VillagerPortrait from "../VillagerPortrait";
@@ -53,12 +54,14 @@ export default function IdeasBoard({ onBack, onClose }: { onBack: () => void; on
   const anyVoting = list?.some((i) => i.voting) ?? false;
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, anyVoting ? 2000 : 10000);
+    const id = setInterval(reload, anyVoting ? 10_000 : FALLBACK_MS);
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload, anyVoting]);
+
+  useLive(["idea"], reload, { debounceMs: 400 });
 
   async function call(url: string, method: string, payload: unknown) {
     setError(null);

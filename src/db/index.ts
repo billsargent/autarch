@@ -423,6 +423,44 @@ if (!globalForDb.__agentLabSqlite) {
   if (!existingCols("agent_settings").includes("town_daily_budget_usd")) {
     sqlite.exec("ALTER TABLE agent_settings ADD COLUMN town_daily_budget_usd REAL");
   }
+  // The live event log (#74): triggers record every change pages show,
+  // whichever process makes it; /api/events streams new rows to browsers.
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    ref INTEGER,
+    conversation_id INTEGER,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+  for (const [table, kind, conv, ops] of [
+    ["messages", "message", "NEW.conversation_id", ["INSERT", "UPDATE"]],
+    ["conversations", "conversation", "NEW.id", ["INSERT", "UPDATE"]],
+    ["work_sessions", "session", "NEW.conversation_id", ["INSERT", "UPDATE OF status"]],
+    ["tool_executions", "tool", "NEW.conversation_id", ["INSERT", "UPDATE OF status"]],
+    ["notifications", "notification", "NULL", ["INSERT", "UPDATE"]],
+    ["agent_settings", "settings", "NULL", ["UPDATE"]],
+    ["jobs", "job", "NEW.conversation_id", ["INSERT", "UPDATE"]],
+    ["goals", "goal", "NEW.conversation_id", ["INSERT", "UPDATE"]],
+    ["journal_entries", "journal", "NULL", ["INSERT", "UPDATE"]],
+    ["agents", "agent", "NULL", ["INSERT", "UPDATE"]],
+    ["hire_requests", "hire", "NULL", ["INSERT", "UPDATE"]],
+    ["meetings", "meeting", "NEW.conversation_id", ["INSERT", "UPDATE"]],
+    ["ideas", "idea", "NULL", ["INSERT", "UPDATE"]],
+    ["votes", "idea", "NULL", ["INSERT"]],
+    ["buildings", "building", "NULL", ["INSERT", "UPDATE"]],
+    ["economy", "building", "NULL", ["UPDATE"]],
+    ["drafts", "draft", "NULL", ["INSERT", "UPDATE"]],
+  ] as const) {
+    for (const op of ops) {
+      const name = `ev_${table}_${op.split(" ")[0].toLowerCase()}`;
+      sqlite.exec(`CREATE TRIGGER IF NOT EXISTS ${name} AFTER ${op} ON ${table} BEGIN INSERT INTO events (kind, ref, conversation_id) VALUES ('${kind}', NEW.id, ${conv}); END`);
+    }
+  }
+  // Deletions matter for lists too.
+  for (const [table, kind] of [["conversations", "conversation"], ["jobs", "job"], ["goals", "goal"], ["journal_entries", "journal"], ["notifications", "notification"]] as const) {
+    sqlite.exec(`CREATE TRIGGER IF NOT EXISTS ev_${table}_delete AFTER DELETE ON ${table} BEGIN INSERT INTO events (kind, ref) VALUES ('${kind}', OLD.id); END`);
+  }
+
   // Indexes for the hot queries (#33).
   for (const [name, on] of [
     ["idx_messages_conversation", "messages(conversation_id, id)"],

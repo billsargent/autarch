@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FALLBACK_MS, useLive } from "./useLive";
 import type { ToolExecutionRow } from "@/lib/agent/clientTypes";
 
 // Actions waiting on the human, and recent decisions. Shared by the
@@ -31,12 +32,14 @@ export function useApprovals() {
 
   useEffect(() => {
     const first = setTimeout(reload, 0);
-    const id = setInterval(reload, 15000);
+    const id = setInterval(reload, FALLBACK_MS);
     return () => {
       clearTimeout(first);
       clearInterval(id);
     };
   }, [reload]);
+  // Live: refresh when something it shows changes (#74).
+  useLive(["tool"], reload);
 
   // Approve or deny one request. The note is shown to the agent.
   const decide = useCallback(
