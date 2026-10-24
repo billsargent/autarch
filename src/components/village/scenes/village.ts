@@ -49,12 +49,12 @@ export const VILLAGE_SCENE: SceneLayout = {
     { id: "mailbox", label: "Mailbox", role: "Letters from the agents — notifications", action: "mail.open", door: "bl", parts: [{ stamp: "svMailbox", col: 3, row: 19 }] },
     { id: "guardtower", label: "Guard tower", role: "The town watch — the activity log", interior: "guardtower", door: "gt", parts: [{ stamp: "lookout", col: 19, row: 18 }] },
     { id: "vault", label: "Vault", role: "Budget and spending", interior: "vault", door: "vlt", parts: [{ stamp: "stoneHouse", col: 25, row: 18 }] },
+    { id: "home", label: "Your home", role: "Your own house: your computer, your desk, books and a guitar", interior: "home", door: "br", parts: [{ stamp: "beigeHouse", col: 35, row: 19 }] },
   ],
   // Scenery with no hotspot.
   decor: [
     { stamp: "fishShop", col: 24, row: 4 },
     { stamp: "greenMarket", col: 9, row: 4 },
-    { stamp: "beigeHouse", col: 35, row: 19 },
     { stamp: "marketStall", col: 9, row: 12 },
     { stamp: "barrel", col: 12, row: 13 },
     { stamp: "produceCrate", col: 8, row: 13 },

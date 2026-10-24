@@ -28,6 +28,8 @@ export const TILESETS = {
   wall: { image: "village/tiles/ninja-wall.png", columns: 10, rows: 11 },
   camp: { image: "village/tiles/ninja-camp.png", columns: 23, rows: 9 },
   bed: { image: "village/tiles/ninja-bed.png", columns: 14, rows: 12 },
+  // Drawn for this project (scripts/build-custom-tiles.ts).
+  custom: { image: "village/tiles/autarch-custom.png", columns: 4, rows: 2 },
 } as const satisfies Record<string, Tileset>;
 
 export type TilesetId = keyof typeof TILESETS;
@@ -138,6 +140,10 @@ export const STAMPS = {
   // Ninja Adventure — beds
   bedRed: s("bed", 0, 3, 2, 3),
   bedBlueSingle: s("bed", 12, 3, 1, 2),
+  // Drawn for this project: the owner's home (#110)
+  computerDesk: s("custom", 0, 0, 2, 2),
+  guitar: s("custom", 2, 0, 1, 2),
+  wallCalendar: s("custom", 3, 0),
   plankFloor: s("floor", 17, 4),
   rimCornerBL: s("wall", 5, 4),
   rimCornerBR: s("wall", 9, 4),

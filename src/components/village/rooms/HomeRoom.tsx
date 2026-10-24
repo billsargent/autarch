@@ -1,0 +1,275 @@
+"use client";
+
+import Link from "next/link";
+import { useRef, useState } from "react";
+import type { AgentRow } from "@/lib/agent/clientTypes";
+import { useApprovals } from "../../data/useApprovals";
+import { useHires } from "../../data/useHires";
+import { jobSchedule, useJobs } from "../../data/useJobs";
+import { useNotifications } from "../../data/useNotifications";
+import { useSettings } from "../../data/useSettings";
+import { loadPercent, useSystemStatus } from "../../data/useSystemStatus";
+import { useVillagers } from "../../data/useVillagers";
+import ParchmentDialog from "../ParchmentDialog";
+import TalkDrawer from "../TalkDrawer";
+import VillagerPortrait from "../VillagerPortrait";
+import CottageRoom from "./CottageRoom";
+import MailboxDialog from "./MailboxDialog";
+import TownHallRoom from "./TownHallRoom";
+import type { RoomProps } from "./types";
+
+// The owner's home (#110): the computer (the Command Center and the
+// machine's vital signs), the desk (approvals, hire requests, letters), the
+// bookshelves (the villagers' diaries), the wall calendar (what's coming up),
+// the armchair (invite a villager over) and the guitar.
+
+export default function HomeRoom({ action, onClose }: RoomProps) {
+  switch (action) {
+    case "home.computer":
+      return <Computer onClose={onClose} />;
+    case "home.desk":
+      return <Desk onClose={onClose} />;
+    case "home.books":
+      return <Bookshelves onClose={onClose} />;
+    case "home.calendar":
+      return <Calendar onClose={onClose} />;
+    case "home.invite":
+      return <Invite onClose={onClose} />;
+    default:
+      return <Guitar onClose={onClose} />;
+  }
+}
+
+// --- the computer ---------------------------------------------------------------------
+
+function Computer({ onClose }: { onClose: () => void }) {
+  const { status } = useSystemStatus(true);
+  const go = [
+    { href: "/chat", label: "🖥 Command Center", note: "the classic pages" },
+    { href: "/village/observatory?open=monitor.charts", label: "📈 System monitor", note: "CPU, memory, disk and processes" },
+    { href: "/village/guardtower?open=activity.log", label: "📜 Activity log", note: "everything the villagers did" },
+    { href: "/village/vault?open=usage.ledger", label: "💰 Spending", note: "what the model calls cost" },
+  ];
+  return (
+    <ParchmentDialog kicker="Your home" title="Your computer" onClose={onClose} wide>
+      <pre className="rounded border-2 border-[#3b2716] bg-[#1b243e] p-3 font-mono text-[12px] leading-relaxed text-[#6edc8c]">
+        {status
+          ? [
+              `$ uptime        ${status.uptimePretty}`,
+              `$ load          ${Math.round(loadPercent(status))}% of ${status.cpuCount} cores`,
+              `$ memory        ${status.usedMemPercent}% used of ${Math.round(status.totalMemMB / 1024)} GB`,
+              `$ disk          ${diskLine(status.disk)}`,
+            ].join("\n")
+          : "$ booting…"}
+      </pre>
+      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+        {go.map((g) => (
+          <li key={g.href}>
+            <Link href={g.href} className="village-btn block px-3 py-2 text-xs">
+              {g.label}
+              <span className="block text-[11px] font-normal opacity-80">{g.note}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </ParchmentDialog>
+  );
+}
+
+// "175G free of 464G (63% used)", from df's line for the root filesystem (or
+// its first line, where there's no "/").
+function diskLine(df: string): string {
+  const rows = df
+    .split("\n")
+    .slice(1)
+    .map((l) => l.trim().split(/\s+/))
+    .filter((c) => c.length >= 6);
+  const root = rows.find((c) => c[c.length - 1] === "/") ?? rows[0];
+  return root ? `${root[3]} free of ${root[1]} (${root[4]} used)` : "—";
+}
+
+// --- the desk ------------------------------------------------------------------------
+
+function Desk({ onClose }: { onClose: () => void }) {
+  const { pending } = useApprovals();
+  const { waiting } = useHires();
+  const { unread } = useNotifications();
+  const [open, setOpen] = useState<"approvals" | "hires" | "letters" | null>(null);
+  if (open === "approvals") return <TownHallRoom action="approvals.pending" onClose={onClose} />;
+  if (open === "hires") return <TownHallRoom action="hires.open" onClose={onClose} />;
+  if (open === "letters") return <MailboxDialog onClose={onClose} />;
+  const papers = [
+    { id: "approvals" as const, label: "✋ Approvals", count: pending.length, note: "actions waiting for your yes or no" },
+    { id: "hires" as const, label: "📜 Hire requests", count: waiting.length, note: "new villagers, with the Mayor's interview" },
+    { id: "letters" as const, label: "✉ Letters", count: unread.length, note: "what the villagers wrote to you" },
+  ];
+  return (
+    <ParchmentDialog kicker="Your home" title="Your desk" onClose={onClose}>
+      <p className="mb-3 text-xs text-[#6b4a2e]">The papers waiting on you.</p>
+      <ul className="space-y-2">
+        {papers.map((p) => (
+          <li key={p.id}>
+            <button onClick={() => setOpen(p.id)} className={`village-btn w-full px-3 py-2 text-left text-xs ${p.count ? "village-btn-go" : ""}`}>
+              {p.label}
+              {p.count > 0 ? ` (${p.count})` : ""}
+              <span className="block text-[11px] font-normal opacity-80">{p.count ? p.note : "nothing waiting"}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </ParchmentDialog>
+  );
+}
+
+// --- choosing a villager -----------------------------------------------------------------
+
+function ChooseVillager({ title, intro, verb, onPick, onClose }: { title: string; intro: string; verb: (v: AgentRow) => string; onPick: (v: AgentRow) => void; onClose: () => void }) {
+  const { villagers, loaded } = useVillagers(15000);
+  return (
+    <ParchmentDialog kicker="Your home" title={title} onClose={onClose}>
+      <p className="mb-3 text-xs text-[#6b4a2e]">{intro}</p>
+      {!loaded && <p className="text-sm">Looking around…</p>}
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {villagers.map((v) => (
+          <li key={v.id}>
+            <button onClick={() => onPick(v)} className="village-btn flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs">
+              <VillagerPortrait character={v.character} color={v.color} size={28} />
+              <span>
+                {verb(v)}
+                <span className="block text-[11px] font-normal opacity-80">{v.isMayor ? "Mayor" : v.role}</span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </ParchmentDialog>
+  );
+}
+
+function Bookshelves({ onClose }: { onClose: () => void }) {
+  const [reading, setReading] = useState<AgentRow | null>(null);
+  if (reading) return <CottageRoom action="journal.open" agentId={reading.id} onClose={onClose} />;
+  return (
+    <ChooseVillager
+      title="Bookshelves"
+      intro="Every villager keeps a diary, and you can read any of them."
+      verb={(v) => `📔 ${v.name}'s diary`}
+      onPick={setReading}
+      onClose={onClose}
+    />
+  );
+}
+
+function Invite({ onClose }: { onClose: () => void }) {
+  const [guest, setGuest] = useState<AgentRow | null>(null);
+  if (guest) return <TalkDrawer villager={guest} onClose={onClose} />;
+  return (
+    <ChooseVillager
+      title="Invite someone over"
+      intro="Sit by the fire and talk with any villager."
+      verb={(v) => `Invite ${v.name}`}
+      onPick={setGuest}
+      onClose={onClose}
+    />
+  );
+}
+
+// --- the calendar --------------------------------------------------------------------------
+
+function Calendar({ onClose }: { onClose: () => void }) {
+  const { jobs, loaded } = useJobs();
+  const { settings } = useSettings();
+  const { villagers } = useVillagers(30000);
+  const upcoming = jobs
+    .filter((j) => j.enabled)
+    .sort((a, b) => Date.parse(a.nextRunAt) - Date.parse(b.nextRunAt))
+    .slice(0, 10);
+  const who = (id: number | null) => villagers.find((v) => v.id === id)?.name ?? "the Mayor";
+  const when = (iso: string) => new Date(iso).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+  return (
+    <ParchmentDialog kicker="Your home" title="The calendar" onClose={onClose}>
+      {settings && (
+        <p className="mb-3 text-xs text-[#6b4a2e]">
+          The village sleeps at <strong>{settings.bedtime}</strong> and wakes at <strong>{settings.wakeTime}</strong>. Work that
+          falls due at night waits until morning.
+        </p>
+      )}
+      <p className="text-xs font-semibold">Coming up</p>
+      {!loaded && <p className="text-sm">Turning the pages…</p>}
+      {loaded && upcoming.length === 0 && <p className="text-sm">Nothing on the calendar.</p>}
+      <ul className="mt-1 divide-y-2 divide-[#e6d6b0] rounded border-2 border-[#3b2716] bg-[#fffaf0]">
+        {upcoming.map((j) => (
+          <li key={j.id} className="flex flex-wrap items-baseline gap-x-2 px-3 py-1.5 text-xs">
+            <span className="font-semibold">{when(j.nextRunAt)}</span>
+            <span>{j.name}</span>
+            <span className="ml-auto text-[#6b4a2e]">
+              {who(j.agentId)} · {jobSchedule(j)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </ParchmentDialog>
+  );
+}
+
+// --- the guitar ----------------------------------------------------------------------------
+
+// Open chords, as MIDI notes from the low string up.
+const CHORDS: Record<string, number[]> = {
+  G: [43, 47, 50, 55, 59, 67],
+  C: [48, 52, 55, 60, 64],
+  D: [50, 57, 62, 66],
+  Em: [40, 47, 52, 55, 59, 64],
+  Am: [45, 52, 57, 60, 64],
+};
+
+// A plucked string (Karplus–Strong): a burst of noise through a delay line
+// that averages and fades, which rings like a string.
+function pluck(ctx: AudioContext, midi: number, when: number) {
+  const freq = 440 * 2 ** ((midi - 69) / 12);
+  const rate = ctx.sampleRate;
+  const length = Math.floor(rate * 2.4);
+  const buffer = ctx.createBuffer(1, length, rate);
+  const out = buffer.getChannelData(0);
+  const period = Math.max(2, Math.round(rate / freq));
+  const ring = new Float32Array(period).map(() => Math.random() * 2 - 1);
+  for (let i = 0, at = 0; i < length; i++) {
+    const next = (at + 1) % period;
+    out[i] = ring[at];
+    ring[at] = 0.4985 * (ring[at] + ring[next]);
+    at = next;
+  }
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.16;
+  source.connect(gain).connect(ctx.destination);
+  source.start(when);
+}
+
+function Guitar({ onClose }: { onClose: () => void }) {
+  const ctxRef = useRef<AudioContext | null>(null);
+  const [last, setLast] = useState<string | null>(null);
+  function strum(name: string) {
+    ctxRef.current ??= new AudioContext();
+    const ctx = ctxRef.current;
+    void ctx.resume();
+    CHORDS[name].forEach((note, i) => pluck(ctx, note, ctx.currentTime + i * 0.03));
+    setLast(name);
+  }
+  return (
+    <ParchmentDialog kicker="Your home" title="Your guitar" onClose={onClose}>
+      <p className="mb-3 text-xs text-[#6b4a2e]">An old acoustic, nicely in tune. Strum a chord.</p>
+      <div className="flex flex-wrap gap-2">
+        {Object.keys(CHORDS).map((c) => (
+          <button key={c} onClick={() => strum(c)} className="village-btn village-pixel px-4 py-2 text-sm">
+            {c}
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 h-5 text-sm" aria-live="polite">
+        {last ? `♪ ${last} ♫` : ""}
+      </p>
+    </ParchmentDialog>
+  );
+}

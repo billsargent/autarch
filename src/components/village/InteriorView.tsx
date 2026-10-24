@@ -70,7 +70,9 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
     ? here.map(({ v, mood }) => moodLabel(mood, v.name)).join(" · ")
     : away
       ? `${away.v.name} isn't home — ${awayWhere ? `they're at the ${awayWhere.label.toLowerCase()}` : "they're out"}.`
-      : "Nobody's here right now.";
+      : sceneId === "home"
+        ? "Home sweet home. It's quiet."
+        : "Nobody's here right now.";
 
   return (
     <div className={`${villageFonts} village-root flex h-full w-full flex-col`}>

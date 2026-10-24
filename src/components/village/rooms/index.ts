@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import CottageRoom from "./CottageRoom";
 import GuardTowerRoom from "./GuardTowerRoom";
+import HomeRoom from "./HomeRoom";
 import LibraryRoom from "./LibraryRoom";
 import ObservatoryRoom from "./ObservatoryRoom";
 import TownHallRoom from "./TownHallRoom";
@@ -21,4 +22,5 @@ export const ROOMS: Record<string, ComponentType<RoomProps>> = {
   vault: VaultRoom,
   townhall: TownHallRoom,
   cottage: CottageRoom,
+  home: HomeRoom,
 };

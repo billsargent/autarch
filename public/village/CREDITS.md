@@ -34,6 +34,13 @@ this repository; get the full packs from their authors.
   trees and the villagers outside; and inside, for the floors, wall rims, furniture, crates,
   barrels, chests, maps, lanterns, the hearth and the beds.
 
+## Drawn for this project
+
+- `tiles/autarch-custom.png`, made by `npm run village:custom-art` (`scripts/build-custom-tiles.ts`):
+  a computer with a keyboard, mouse and mug, an acoustic guitar and a wall calendar, drawn pixel
+  by pixel for this project. The computer sits on the Serene Village writing desk (LimeZu,
+  CC BY 4.0, above), copied in unmodified.
+
 ## Generated files
 
 Every scene's `scenes/<id>.png` and `scenes/<id>.tmj` (the village and each room) is composed

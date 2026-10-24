@@ -3,6 +3,23 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — Your home
+
+- **You have a house in the village (#110):** the beige house at the bottom right, "Your home".
+  Inside:
+  - **your computer** (a coder's desk with code on the screen): the machine's uptime, load,
+    memory and disk, and the way to the Command Center, the system monitor, the activity log and
+    spending;
+  - **your desk:** the papers waiting on you (approvals, hire requests and letters);
+  - **bookshelves:** read any villager's diary;
+  - **the wall calendar:** the jobs coming up, and when the village sleeps and wakes;
+  - **the armchair by the hearth:** invite any villager over to talk;
+  - **a guitar:** strum G, C, D, Em or Am;
+  - **a bed.**
+- The computer, the guitar and the calendar are new pixel art, drawn for this project in the
+  packs' style (`npm run village:custom-art`).
+- A few spots are kept free for improvements later.
+
 ## 2026-10-24 — Hiring: directors and workers
 
 - **Villagers have ranks (#99).** Besides the Mayor there are **directors**, who each run an area

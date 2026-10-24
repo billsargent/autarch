@@ -9,4 +9,5 @@ export const ROOM_ACTIONS: Record<string, string[]> = {
   vault: ["usage.ledger", "usage.totals"],
   townhall: ["approvals.pending", "approvals.records", "settings.open"],
   cottage: ["chat.open", "journal.open"],
+  home: ["home.computer", "home.desk", "home.books", "home.calendar", "home.invite", "home.guitar"],
 };
