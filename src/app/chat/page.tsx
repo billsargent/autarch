@@ -1,5 +1,6 @@
-import ChatView from "@/components/ChatView";
+import { redirect } from "next/navigation";
 
-export default function ChatPage() {
-  return <ChatView />;
+// The old Command Center page; its room in the village does everything it did.
+export default function Page() {
+  redirect("/village/cottage?open=chat.open");
 }

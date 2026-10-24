@@ -3,6 +3,14 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-24 — The old pages retire
+
+- **The village is the whole app now (#43, #76–#79).** The old Command Center pages are gone.
+  Their addresses still work and take you to the matching room: `/chat` the cottage, `/settings`
+  the Mayor's ledger, `/jobs` the workshop, `/goals` the notice board, and so on.
+- The village bar's "Command Center" button is gone. Your computer at home links to the Mayor's
+  ledger instead.
+
 ## 2026-10-24 — Clearer names for the dangerous switches
 
 - **"Allow all overrides" (#42)** is the new name of the switch that turns on every supervisor

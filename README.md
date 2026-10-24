@@ -44,7 +44,8 @@ npm run dev
 npm run worker
 ```
 
-Open http://localhost:3000. Everything is configured from the **Settings** tab and stored in
+Open http://localhost:3000. Everything is configured from the **Mayor's ledger** in the town hall
+(the **Settings** referred to below) and stored in
 the local SQLite file `data/app.db`.
 
 ### Signing in
@@ -211,7 +212,7 @@ responsible for anything the agent does in this mode.
 
 Home (`/`) is a small pixel-art town where the agent lives as a villager, walking between
 buildings according to what it's doing, with approvals popping up wherever you are. Every
-place works in-world, with the same features as its classic Command Center page:
+place works in-world:
 
 - **Library:** skills are books on the shelves; new ones are written at the desk.
 - **Workshop:** jobs are slips on the job board; new ones are set up at the workbench.
@@ -223,14 +224,16 @@ place works in-world, with the same features as its classic Command Center page:
   Mayor's ledger (every setting).
 - **Cottage:** the armchair by the hearth (the full chat) and the diary (the journal).
 - **Mailbox:** the agent's notifications.
+- **Your home:** your computer, your desk (approvals, hire requests, letters, the outbox), the
+  bookshelves (every diary), the wall calendar, the map table, the pantry and a guitar.
 
 **Villagers.** The village can have several agents. Each has their own name, personality, look,
 model, tools (within the town's tool policy), budget and cottage, and goes about their own work.
 Add and manage them in the Mayor's ledger → Villagers. Your original agent is the Mayor.
 
-The classic pages are still there: **Command Center** in the village bar opens them (the chat is
-at `/chat`). Clicking the villager (or pressing T) opens a quick chat drawer anywhere in the
-village. Every scene (the village and each room) is
+The old Command Center pages are retired; their addresses (`/chat`, `/settings`, `/jobs` …)
+redirect to the matching room. Clicking a villager (or pressing T) opens a quick chat drawer
+anywhere in the village, and you can walk around yourself with the arrow keys or WASD. Every scene (the village and each room) is
 described in `src/components/village/scenes/`, and `npm run village:map` builds its art.
 
 Village art: "Serene Village" by [LimeZu](https://limezu.itch.io/serenevillage) (CC BY 4.0) and

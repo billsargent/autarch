@@ -35,6 +35,14 @@ function startingDoor(): string {
 export default function VillageView() {
   const buildings = useBuildings();
   const [player] = useState<PlayerSpec>(() => ({ name: "You", color: "#3b2716", sprite: OWNER_SPRITE, start: startingDoor() }));
+  // ?open=<action> opens an outdoor dialog straight away (the notice board, the mailbox).
+  useEffect(() => {
+    const open = new URLSearchParams(window.location.search).get("open");
+    if (open && ["goals.board", "goals.new", "mail.open"].includes(open)) {
+      const t = setTimeout(() => openAction(open), 0);
+      return () => clearTimeout(t);
+    }
+  }, []);
   const router = useRouter();
   const { data, refresh, mayor } = useVillageData();
   const villagers = data.villagers;

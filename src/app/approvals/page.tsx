@@ -1,5 +1,6 @@
-import ApprovalsView from "@/components/ApprovalsView";
+import { redirect } from "next/navigation";
 
-export default function ApprovalsPage() {
-  return <ApprovalsView />;
+// The old Command Center page; its room in the village does everything it did.
+export default function Page() {
+  redirect("/village/townhall?open=approvals.pending");
 }

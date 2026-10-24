@@ -15,7 +15,7 @@ export interface Place {
   rect: { x: number; y: number; w: number; h: number };
   // Waypoint a villager walks to when visiting.
   door: string;
-  // Village buildings: the room they open, or a Command Center page.
+  // Village buildings: the room they open, or a page they link to.
   interior?: string;
   href?: string;
   // Room furniture: what clicking it does.

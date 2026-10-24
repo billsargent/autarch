@@ -21,7 +21,7 @@ import MailboxDialog from "./MailboxDialog";
 import TownHallRoom from "./TownHallRoom";
 import type { RoomProps } from "./types";
 
-// The owner's home (#110): the computer (the Command Center and the
+// The owner's home (#110): the computer (the machine's vital signs and the
 // machine's vital signs), the desk (approvals, hire requests, letters), the
 // bookshelves (the villagers' diaries), the wall calendar (what's coming up),
 // the armchair (invite a villager over) and the guitar.
@@ -54,7 +54,7 @@ export default function HomeRoom({ action, onClose }: RoomProps) {
 function Computer({ onClose }: { onClose: () => void }) {
   const { status } = useSystemStatus(true);
   const go = [
-    { href: "/chat", label: "🖥 Command Center", note: "the classic pages" },
+    { href: "/village/townhall?open=settings.open", label: "⚙ The Mayor's ledger", note: "every setting" },
     { href: "/village/observatory?open=monitor.charts", label: "📈 System monitor", note: "CPU, memory, disk and processes" },
     { href: "/village/guardtower?open=activity.log", label: "📜 Activity log", note: "everything the villagers did" },
     { href: "/village/vault?open=usage.ledger", label: "💰 Spending", note: "what the model calls cost" },

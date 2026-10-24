@@ -19,7 +19,7 @@ export const HOME_SCENE = interior({
     {
       id: "computer",
       label: "Your computer",
-      role: "The Command Center and the machine's vital signs",
+      role: "The machine's vital signs, and the way to every record",
       door: "computer",
       action: "home.computer",
       parts: [

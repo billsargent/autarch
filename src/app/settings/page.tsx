@@ -1,5 +1,6 @@
-import SettingsView from "@/components/SettingsView";
+import { redirect } from "next/navigation";
 
-export default function SettingsPage() {
-  return <SettingsView />;
+// The old Command Center page; its room in the village does everything it did.
+export default function Page() {
+  redirect("/village/townhall?open=settings.open");
 }

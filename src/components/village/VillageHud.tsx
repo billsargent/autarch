@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { signOut } from "@/lib/signOut";
 import type { DayPhase } from "@/lib/agent/daynight";
 
@@ -37,8 +36,8 @@ function Chip({ label, value, dot }: { label: string; value: string; dot: string
   );
 }
 
-// Top bar of the village: the vital signs at a glance, plus the way out to the
-// Command Center.
+// Top bar of the village: the vital signs at a glance, pause, meetings and
+// sign-out.
 export default function VillageHud(p: VillageHudProps) {
   return (
     <div className="village-hud relative z-20 flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center">
@@ -68,9 +67,7 @@ export default function VillageHud(p: VillageHudProps) {
         <button onClick={p.onMeeting} className={`village-btn px-3 py-1.5 text-xs ${p.meetingOn ? "village-btn-go" : ""}`} title="The long table in the town hall">
           {p.meetingOn ? "🏛 Meeting on" : "Call meeting"}
         </button>
-        <Link href="/chat" className="village-btn village-btn-primary px-3 py-1.5 text-xs" title="The classic pages">
-          Command Center
-        </Link>
+
         <button onClick={signOut} className="village-btn px-3 py-1.5 text-xs" title="Sign out of the dashboard">
           Sign out
         </button>

@@ -1,5 +1,6 @@
-import MonitorView from "@/components/MonitorView";
+import { redirect } from "next/navigation";
 
-export default function MonitorPage() {
-  return <MonitorView />;
+// The old Command Center page; its room in the village does everything it did.
+export default function Page() {
+  redirect("/village/observatory?open=monitor.charts");
 }

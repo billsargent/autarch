@@ -1,5 +1,6 @@
-import SkillsView from "@/components/SkillsView";
+import { redirect } from "next/navigation";
 
-export default function SkillsPage() {
-  return <SkillsView />;
+// The old Command Center page; its room in the village does everything it did.
+export default function Page() {
+  redirect("/village/library?open=skills.browse");
 }

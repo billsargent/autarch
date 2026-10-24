@@ -1,7 +1,6 @@
-import UsageView from "@/components/UsageView";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Usage" };
-
-export default function UsagePage() {
-  return <UsageView />;
+// The old Command Center page; its room in the village does everything it did.
+export default function Page() {
+  redirect("/village/vault?open=usage.ledger");
 }

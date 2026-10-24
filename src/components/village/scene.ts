@@ -180,7 +180,7 @@ export interface PlaceDef {
   door: string;
   parts: Placement[];
   // Village buildings: the room it opens (a scene id) or, until that room
-  // exists, the Command Center page it links to.
+  // exists, the page it links to.
   interior?: string;
   href?: string;
   // Room furniture: what clicking it does (handled by the room's view).
