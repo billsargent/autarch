@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { AgentRow, SettingsRow } from "@/lib/agent/clientTypes";
 import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
-import { CHARACTER_KEYS, CHARACTER_LABELS, VILLAGER_COLORS } from "@/lib/agent/villagerLooks";
+import { CHARACTER_GROUPS, CHARACTER_KEYS, CHARACTER_LABELS, VILLAGER_COLORS } from "@/lib/agent/villagerLooks";
 import { tierAllows, type Tier } from "@/lib/agent/mayorTools";
 import { useVillagers, type VillagerInput } from "../../data/useVillagers";
 import { useProviders } from "./ProvidersPage";
@@ -294,20 +294,31 @@ function VillagerEditor({
       </label>
       <fieldset>
         <legend className="text-xs font-semibold">Look</legend>
-        <div className="mt-1 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Look">
-          {CHARACTER_KEYS.map((k) => (
-            <button
-              key={k}
-              type="button"
-              role="radio"
-              aria-checked={character === k}
-              aria-label={CHARACTER_LABELS[k]}
-              title={CHARACTER_LABELS[k]}
-              onClick={() => setCharacter(k)}
-              className={`rounded p-1 ${character === k ? "bg-[#e3b04b]" : "hover:bg-[#ead9b4]"}`}
-            >
-              <VillagerPortrait character={k} color={character === k ? color : undefined} size={32} />
-            </button>
+        <div className="mt-1 flex items-center gap-3 rounded border-2 border-[#d8c49a] bg-[#fffaf0] p-2">
+          <VillagerPortrait character={character} color={color} size={48} walking />
+          <span className="text-xs">{CHARACTER_LABELS[character as keyof typeof CHARACTER_LABELS] ?? character}</span>
+        </div>
+        <div className="mt-1 max-h-56 space-y-1.5 overflow-y-auto pr-1" role="radiogroup" aria-label="Look">
+          {CHARACTER_GROUPS.map((g) => (
+            <div key={g.label}>
+              <p className="text-[11px] font-semibold text-[#6b4a2e]">{g.label}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {g.keys.map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={character === k}
+                    aria-label={CHARACTER_LABELS[k]}
+                    title={CHARACTER_LABELS[k]}
+                    onClick={() => setCharacter(k)}
+                    className={`rounded p-1 ${character === k ? "bg-[#e3b04b]" : "hover:bg-[#ead9b4]"}`}
+                  >
+                    <VillagerPortrait character={k} color={character === k ? color : undefined} size={32} />
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </fieldset>

@@ -1,8 +1,20 @@
 import { SPRITE, spriteFor } from "./manifest";
 
 // A villager's face: the first frame of their sprite (facing the viewer),
-// framed in their colour.
-export default function VillagerPortrait({ character, color, size = 32, title }: { character: string; color?: string; size?: number; title?: string }) {
+// framed in their colour. `walking` plays the walk cycle on the spot.
+export default function VillagerPortrait({
+  character,
+  color,
+  size = 32,
+  title,
+  walking = false,
+}: {
+  character: string;
+  color?: string;
+  size?: number;
+  title?: string;
+  walking?: boolean;
+}) {
   const scale = size / SPRITE.frame;
   return (
     <span
@@ -19,8 +31,9 @@ export default function VillagerPortrait({ character, color, size = 32, title }:
       }}
     >
       <span
-        className="block"
+        className={`block ${walking ? "village-portrait-walk" : ""}`}
         style={{
+          ["--walk" as string]: `${SPRITE.frame * SPRITE.walkFrames * scale}px`,
           width: size,
           height: size,
           backgroundImage: `url(${spriteFor(character)})`,

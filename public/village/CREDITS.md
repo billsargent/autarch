@@ -29,7 +29,12 @@ this repository; get the full packs from their authors.
   - `tiles/ninja-wall.png` (`Backgrounds/Tilesets/Interior/TilesetWallSimple.png`)
   - `tiles/ninja-camp.png` (`Backgrounds/Tilesets/tileset_camp.png`)
   - `tiles/ninja-bed.png` (`Backgrounds/Tilesets/tileset_bed.png`)
-  - `characters/*.png` (`Actor/Character/<Name>/SpriteSheet.png`)
+  - `characters/*.png` (`Actor/Character/<Name>/SpriteSheet.png`), copied by
+    `npm run village:characters` (`scripts/import-characters.ts`)
+  - `animals/*.png` (`Actor/Animal/<Name>/SpriteSheet*.png`)
+- Changed by this project: `characters/villager-*.png` and `characters/woman-*.png` are the
+  Villager and Woman sheets with their clothing recoloured, and `characters/oldwoman.png` repeats
+  the OldWoman sheet's two rows to fill the walk cycle.
 - Used for the town hall, workshop, market, shops, observatory, guard tower, vault, lamps, some
   trees and the villagers outside; and inside, for the floors, wall rims, furniture, crates,
   barrels, chests, maps, lanterns, the hearth and the beds.

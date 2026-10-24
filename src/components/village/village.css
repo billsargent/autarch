@@ -142,6 +142,30 @@
     animation: village-float 1.6s ease-in-out infinite;
   }
 
+  /* A portrait walking on the spot (the look picker's preview, #138): the
+     four walk frames run down the sheet; --walk is four frames' height. */
+  @keyframes village-portrait-walk {
+    to {
+      background-position-y: calc(var(--walk) * -1);
+    }
+  }
+  .village-portrait-walk {
+    animation: village-portrait-walk 0.6s steps(4) infinite;
+  }
+
+  /* Animals (#138): a two-frame idle across the sheet, and a slow amble. */
+  @keyframes village-animal-idle {
+    to {
+      background-position-x: -96px;
+    }
+  }
+  .village-animal {
+    animation: village-animal-idle 0.9s steps(2) infinite;
+    transition:
+      left 3s linear,
+      top 3s linear;
+  }
+
   /* The light over a scene: time of day (#100), or frozen while paused. */
   .village-light-dawn {
     background: linear-gradient(#f2a3a0, #ffd9a8);
@@ -176,7 +200,9 @@
 
   @media (prefers-reduced-motion: reduce) {
     .village-walking,
-    .village-badge {
+    .village-badge,
+    .village-portrait-walk,
+    .village-animal {
       animation: none;
     }
   }

@@ -25,7 +25,8 @@
     "test": "npm run test:sanitizer && npm run test:compact && npm run test:chatmode && npm run test:village && npm run test:safety && npm run test:jobs && npm run test:turns && npm run test:villagers",
     "pixelate": "tsx scripts/pixelate.ts",
     "village:map": "tsx scripts/build-village-map.ts",
-    "village:custom-art": "tsx scripts/build-custom-tiles.ts"
+    "village:custom-art": "tsx scripts/build-custom-tiles.ts",
+    "village:characters": "tsx scripts/import-characters.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",

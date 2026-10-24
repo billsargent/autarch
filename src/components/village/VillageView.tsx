@@ -12,6 +12,7 @@ import { VILLAGE_LEVELS } from "./scenes";
 import { useBuildings } from "../data/useBuildings";
 import { useVillageSound } from "./useVillageSound";
 import WelcomeDialog from "./WelcomeDialog";
+import Animals, { type AnimalSpec } from "./Animals";
 import { BUBBLE_MS, MOOD_BADGE, MOOD_PLACE, bubbleLine, moodLabel, nextHangout, standOffsets, villagerMood } from "./villagerState";
 import { snapshotOf, useVillageData } from "./useVillageData";
 import SceneView, { type VillagerSpec } from "./SceneView";
@@ -260,6 +261,7 @@ export default function VillageView() {
         overlays={
           <>
             <PlotBuildings scene={scene} state={buildings.state} onOpen={(id) => openAction(`building.${id}`)} />
+            <Animals animals={villageAnimals(scene, buildings.state)} />
             {(phase === "dusk" || phase === "night") && !data.paused && <LitWindows level={level} scene={scene} plots={buildings.state} />}
           </>
         }
@@ -328,6 +330,33 @@ export default function VillageView() {
 
 // What stands on the village's plots (#105): finished buildings (click one to
 // open it), and scaffolding where one is going up.
+// Who lives where (#138): chickens and a cow on every farm, a cat by the
+// bakery (or the cottages), a dog by your door, and a horse by the west road.
+function villageAnimals(scene: SceneManifest, state: ReturnType<typeof useBuildings>["state"]): AnimalSpec[] {
+  const out: AnimalSpec[] = [];
+  const built = (state?.buildings ?? []).filter((b) => b.status === "built");
+  const plotOf = (id: string) => scene.plots.find((p) => p.id === id);
+  for (const b of built.filter((x) => x.kind === "farm")) {
+    const p = plotOf(b.plotId);
+    if (!p) continue;
+    out.push(
+      { id: `chicken-a-${b.id}`, kind: "chicken-white", area: p.rect },
+      { id: `chicken-b-${b.id}`, kind: "chicken-brown", area: p.rect },
+      { id: `cow-${b.id}`, kind: "cow", area: p.rect },
+    );
+  }
+  const bakery = built.find((x) => x.kind === "bakery");
+  const bakeryPlot = bakery && plotOf(bakery.plotId);
+  const cottages = scene.places.find((p) => p.id === "cottages")?.rect;
+  const catArea = bakeryPlot ? { ...bakeryPlot.rect, y: bakeryPlot.rect.y + bakeryPlot.rect.h - CELL, h: CELL } : cottages && { x: cottages.x, y: cottages.y + cottages.h, w: cottages.w, h: CELL };
+  if (catArea) out.push({ id: "cat", kind: "cat", area: catArea });
+  const home = scene.places.find((p) => p.id === "home")?.rect;
+  if (home) out.push({ id: "dog", kind: "dog", area: { x: home.x - CELL * 2, y: home.y + home.h - CELL, w: CELL * 2, h: CELL } });
+  const westRoad = scene.waypoints.find((w) => w.id === "wrt");
+  if (westRoad) out.push({ id: "horse", kind: "horse", area: { x: CELL * 0.5, y: westRoad.y - CELL * 1.6, w: CELL * 3, h: CELL } });
+  return out;
+}
+
 // The stamps and labels come with the buildings (src/lib/agent/buildings.ts).
 function PlotBuildings({ scene, state, onOpen }: { scene: SceneManifest; state: ReturnType<typeof useBuildings>["state"]; onOpen: (id: number) => void }) {
   if (!state) return null;
