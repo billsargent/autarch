@@ -14,8 +14,17 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 - **Fixed: "reasoning_content must be passed back" errors with DeepSeek.** A message a villager
   posted to you in the middle of a tool call broke every later turn in that conversation. Those
   messages are now sent back correctly, and in their right place.
-- **Fixed: commands failed on Windows** because the command tool always used `/bin/bash`. It now
-  uses Git Bash when it's installed, or PowerShell, and tells the villager which.
+- **Villagers know what computer they're on.** Every villager is told the system and shell in
+  one line: on Windows, that commands run in Git Bash (or PowerShell when Git isn't installed),
+  what doesn't exist there (apt, systemctl, sudo), and where the workspace really is. Commands
+  used to fail on Windows because the command tool always used `/bin/bash`.
+- **Windows commands are risk-checked like Linux ones.** Stopping processes or services,
+  registry and firewall changes, user accounts, scheduled tasks, running as administrator and
+  piping a download into `iex` need your approval; wiping a drive is blocked; `winget install`
+  is treated like `apt install`. The framework's own files are protected however their path is
+  written (`D:\…`, `D:/…` or `/d/…`).
+- **Linux-only tools step aside elsewhere.** The package, service and screenshot tools (apt,
+  systemctl, scrot) are hidden on Windows, and the process list and disk status use PowerShell.
 
 ## 2026-10-25 — Meetings lead to work, and the worker starts with the app
 

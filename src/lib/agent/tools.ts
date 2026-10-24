@@ -11,6 +11,7 @@ import { db, sqlite } from "@/db";
 import { DB_PATH } from "@/db/path";
 import { agents, journalEntries, jobs, goals, notifications, conversations, messages } from "@/db/schema";
 import { VILLAGE_TOOLS } from "./villageTools";
+import { IS_WINDOWS, SHELL, SHELL_NAME, notOnThisSystem, toolWorksHere } from "./host";
 import { eq, asc, desc, and, or, isNull, ne, sql as dsql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
@@ -49,25 +50,13 @@ function truncate(text: string, max = MAX_OUTPUT_CHARS): string {
 // Tool schema (OpenAI / DeepSeek function-calling format)
 // ---------------------------------------------------------------------------
 
-// The shell commands run in: bash on Linux and macOS. On Windows, Git Bash
-// when it's installed (so the usual commands work), otherwise PowerShell.
-const SHELL: { path: string; name: string } = (() => {
-  if (process.platform !== "win32") return { path: "/bin/bash", name: "bash" };
-  const roots = [process.env.ProgramFiles, process.env["ProgramFiles(x86)"], process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs")];
-  for (const root of roots) {
-    const bash = root && path.join(root, "Git", "bin", "bash.exe");
-    if (bash && fssync.existsSync(bash)) return { path: bash, name: "bash (Git Bash on Windows)" };
-  }
-  return { path: "powershell.exe", name: "Windows PowerShell" };
-})();
-
 const CORE_TOOL_DEFINITIONS = [
   {
     type: "function" as const,
     function: {
       name: "run_shell_command",
       description:
-        `Run a shell command on the host system (in ${SHELL.name}) as the agent's user. Use for exploring the system, installing tools, checking status, or automating tasks. Risky commands may be blocked or queued for human approval instead of executing immediately.`,
+        `Run a shell command on the host system (in ${SHELL_NAME}) as the agent's user. Use for exploring the system, installing tools, checking status, or automating tasks. Risky commands may be blocked or queued for human approval instead of executing immediately.`,
       parameters: {
         type: "object",
         properties: {
@@ -413,8 +402,9 @@ const CORE_TOOL_DEFINITIONS = [
 // The core tools, then the village's (villageTools.ts).
 export const ALL_TOOL_DEFINITIONS = [...CORE_TOOL_DEFINITIONS, ...Object.values(VILLAGE_TOOLS).map((t) => t.definition)];
 
+// Linux-only tools (apt, systemctl, scrot) are left out on other systems.
 export function getEnabledToolDefinitions(enabledTools: string[]) {
-  return ALL_TOOL_DEFINITIONS.filter((t) => enabledTools.includes(t.function.name));
+  return ALL_TOOL_DEFINITIONS.filter((t) => enabledTools.includes(t.function.name) && toolWorksHere(t.function.name));
 }
 
 // ---------------------------------------------------------------------------
@@ -712,12 +702,14 @@ async function getSystemStatus() {
   let df = "";
   let uptimeStr = "";
   try {
-    df = (await execAsync("df -h --output=source,size,used,avail,pcent,target -x tmpfs -x devtmpfs")).stdout;
+    df = IS_WINDOWS
+      ? (await execFileAsync("powershell.exe", ["-NoProfile", "-Command", "Get-PSDrive -PSProvider FileSystem | Format-Table Name,@{n='UsedGB';e={[math]::Round($_.Used/1GB,1)}},@{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}},Root -AutoSize | Out-String -Width 200"])).stdout
+      : (await execAsync("df -h --output=source,size,used,avail,pcent,target -x tmpfs -x devtmpfs")).stdout;
   } catch {
     /* ignore */
   }
   try {
-    uptimeStr = (await execAsync("uptime -p")).stdout.trim();
+    if (!IS_WINDOWS) uptimeStr = (await execAsync("uptime -p")).stdout.trim();
   } catch {
     /* ignore */
   }
@@ -762,6 +754,12 @@ async function runFile(file: string, args: string[], timeoutSec: number, maxLine
 
 async function listProcesses(sortBy: "cpu" | "mem", limit: number) {
   const rows = Math.min(200, Math.max(1, Math.floor(limit) || 20));
+  if (IS_WINDOWS) {
+    const key = sortBy === "mem" ? "WorkingSet64" : "CPU";
+    const ps = `Get-Process | Sort-Object ${key} -Descending | Select-Object -First ${rows} Id,ProcessName,@{n='CPUs';e={[math]::Round($_.CPU,1)}},@{n='MemMB';e={[int]($_.WorkingSet64/1MB)}} | Format-Table -AutoSize | Out-String -Width 200`;
+    const res = await runFile("powershell.exe", ["-NoProfile", "-Command", ps], 20);
+    return { output: res.output, summary: `top processes by ${sortBy}` };
+  }
   const sortFlag = sortBy === "mem" ? "-%mem" : "-%cpu";
   const res = await runFile("ps", ["axo", "pid,ppid,%cpu,%mem,etime,comm", `--sort=${sortFlag}`], 15, rows + 1);
   return { output: res.output, summary: `top processes by ${sortBy}` };
@@ -773,6 +771,7 @@ async function managePackage(
   dryRun: boolean,
   timeoutSec: number,
 ) {
+  if (!toolWorksHere("manage_package")) return { output: notOnThisSystem("manage_package"), summary: "manage_package refused" };
   // Same check the risk gate uses; refuse here too in case anything bypasses it.
   const invalid = invalidPackageArgs(action, packages);
   if (invalid) return { output: `Refused: ${invalid}`, summary: "manage_package refused" };
@@ -795,6 +794,7 @@ async function managePackage(
 }
 
 async function manageService(action: string, service: string) {
+  if (!toolWorksHere("manage_service")) return { output: notOnThisSystem("manage_service"), summary: "manage_service refused" };
   if (!UNIT_NAME.test(service)) return { output: `Refused: invalid service name "${service}".`, summary: "manage_service refused" };
   if (!["start", "stop", "restart", "enable", "disable", "status"].includes(action)) {
     return { output: `Refused: unknown action "${action}".`, summary: "manage_service refused" };
@@ -1293,6 +1293,7 @@ async function webSearch(args: Record<string, unknown>) {
 }
 
 async function takeScreenshot(args: Record<string, unknown>, workspaceDir: string) {
+  if (!toolWorksHere("take_screenshot")) return { output: notOnThisSystem("take_screenshot"), summary: "screenshot refused" };
   const dir = path.join(workspaceDir, "screenshots");
   await fs.mkdir(dir, { recursive: true });
   const dest = args.path ? resolvePathSafe(String(args.path), workspaceDir) : path.join(dir, `shot-${Date.now()}.png`);
