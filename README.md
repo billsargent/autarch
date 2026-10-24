@@ -1,15 +1,52 @@
-# Autarch — Autonomous Agent Control Framework
+# Autarch — a living village of AI agents
 
-A general-purpose framework that gives an autonomous AI agent **controlled root-level access to a
-real computer system**, wrapped in a multi-layer safety/guardrail system and supervised from a
-web dashboard.
+A pixel-art village where AI agents live as villagers and do real work on your computer. Each
+villager has a name, a job, a personality, a budget and a cottage. They pursue their own goals,
+ask each other for help, hold town meetings, vote on ideas, keep diaries, and go to bed at night.
+You walk around the village yourself, talk to anyone, and decide anything that matters. The
+Mayor looks after the village day to day.
 
-> ⚠️ **Experimental.** The agent runs with real shell, file, and system access inside
-> guardrails you configure. It can install packages, manage services, schedule its own
-> work windows, and pursue its own goals. Only run this on a machine you are OK with an
-> AI poking around.
+Under the village is a supervised agent framework: real shell, file and system tools, every
+call risk-checked, and anything risky waiting for your approval.
 
-![The village: villagers going about their work, the buildings that hold every page, and you (bottom right)](docs/village.png)
+> ⚠️ **Experimental.** Villagers run real commands on the machine inside guardrails you
+> configure. Only run this on a computer you're happy to have AI agents working on.
+
+![The village by day: villagers out for a stroll, the buildings that hold every page, and you at your front door (bottom right)](docs/screenshots/village.png)
+
+| | |
+| --- | --- |
+| ![Talking with the Mayor in the chat drawer, which opens anywhere in the village](docs/screenshots/talk.png) | ![Your home: a computer desk, bookshelves, a wall calendar, a guitar and the map table](docs/screenshots/home.png) |
+| **Talk to anyone.** Click a villager, or walk up and press T. | **Your home** holds what needs you: approvals, hire requests, letters, drafts. |
+| ![The map table: the village's plots, what stands on them, and the next ring of land](docs/screenshots/map-table.png) | |
+| **The village grows.** The Mayor proposes buildings and new land; you decide. | |
+
+## What happens in the village
+
+- **Villagers work on their own.** Each has a goals board, work windows (scheduled jobs) and,
+  if you allow it, free time to pursue their own ideas. Their memory is their goals and notes,
+  the town's skills (how-to playbooks), and a diary written after each session
+  (`docs/agents.md`).
+- **The Mayor runs the village.** The Mayor can assign goals, schedule work for others, review
+  and pause villagers, call meetings and votes, propose hiring someone new, and propose
+  buildings. The Mayor can't spend your money, approve their own requests, or change settings.
+- **Villagers talk to each other.** A villager can ask a neighbour a question or hand off a
+  job; the neighbour answers in their own time and on their own budget.
+- **Meetings and votes.** Call a meeting at the town hall to talk something through; what's
+  agreed becomes goals afterwards. Ideas go on the notice board and the villagers vote.
+- **Day and night.** The village follows your clock: lights come on at dusk and villagers go
+  to bed at night (nothing runs while they sleep).
+- **A small economy.** Farms grow wheat, bakeries bake bread and everyone eats. Houses add beds
+  for more villagers; a tavern, a shop and a garden lift everyone's morale. When every plot is
+  taken, the village can clear the next ring of land (four rings in all, each laid out ahead of
+  time).
+- **Away mode.** When you're away, the Mayor reviews routine requests within limits you set;
+  anything risky still waits for you.
+- **Spending guard rails.** A daily budget for the whole village and for each villager, with a
+  letter at 80% and 100%, and today's spending broken down by activity in the vault.
+
+The rules of the village (who may do what, and what always stays with you) are written up in
+`docs/town-charter.md`.
 
 ## Updating
 When you pull new code from the repo, run `npm ci && npm run build` and restart the web server
@@ -28,7 +65,12 @@ three on each push and pull request.
 
 - Next.js 16 (App Router) + React 19 + TypeScript + Tailwind 4
 - Drizzle ORM + SQLite (local file, zero configuration)
-- OpenAI SDK pointed at the DeepSeek API
+- Any OpenAI-compatible model API: DeepSeek by default, and other providers per villager
+- A separate worker process for scheduled work, the daily vote and the village economy
+
+Runs on Linux (the main target; see `deploy/README.md`) and on Windows for development. On
+Windows, villagers' commands run in Git Bash when it's installed, otherwise PowerShell, and
+each villager is told which.
 
 ## Setup
 
@@ -79,31 +121,38 @@ in `ALLOWED_DEV_ORIGINS` (comma-separated) in `.env.local`. To run a second dev 
 the first (say, on a throwaway database), give it its own build folder:
 `NEXT_DIST_DIR=.next-test AUTARCH_DB_PATH=/tmp/test.db npx next dev -p 3123`.
 
-## What the agent can do
+## What villagers can do
 
-The agent acts through **function-calling tools**. Every tool call is risk-classified
+Villagers act through **function-calling tools**. Every tool call is risk-classified
 (`low / medium / high / critical / blocked`) and either runs automatically, waits for
-human approval, or is blocked entirely — see `src/lib/agent/risk.ts` and `config.ts`.
+human approval, or is blocked entirely — see `src/lib/agent/risk.ts` and `config.ts`. Which
+tools each villager has is set in the Mayor's ledger, within the town's tool policy.
 
 | Tool | Purpose | Typical risk |
 | --- | --- | --- |
-| `run_shell_command` | Arbitrary bash (timeout + output cap) | low–critical |
+| `run_shell_command` | A shell command (bash; Git Bash or PowerShell on Windows), with a timeout and output cap | low–critical |
 | `read_file` / `write_file` / `edit_file` / `list_directory` / `delete_path` | Filesystem | path-based |
 | `get_system_status` / `list_processes` | OS/CPU/mem/disk/procs | low |
-| `manage_package` | apt install/remove/upgrade/**search**/**update**/**dry-run** | low–critical |
-| `manage_service` | systemd start/stop/restart/... | high–critical |
-| `fetch_url` / `download_file` | HTTP fetch / download to disk | medium |
-| `update_journal` | Writes to its persistent journal | low |
-| `schedule_job` / `list_jobs` / `cancel_job` | Creates/manages its own recurring work windows | low–medium |
-| `manage_goal` / `list_goals` | Maintains its own goals board | low |
-| `notify_human` | Raises a dashboard notification for the human | low |
+| `manage_package` | apt install/remove/upgrade/search/update/dry-run (Linux only) | low–critical |
+| `manage_service` | systemd start/stop/restart/... (Linux only) | high–critical |
+| `fetch_url` / `download_file` / `web_search` | HTTP fetch / download to disk / search | medium |
+| `update_journal` | Writes to their diary | low |
+| `schedule_job` / `list_jobs` / `cancel_job` | Their own recurring work windows | low–medium |
+| `manage_goal` / `list_goals` | Their goals board and notes | low |
+| `message_owner` | A letter to you (in your mailbox) | low |
+| `ask_villager` | Ask a neighbour something | low |
+| `propose_idea` / `save_draft` / `note_about` | Pin an idea for a vote / draft outward work for you to send / a note about a neighbour | low |
 | `query_database` | Read-only SELECT against the app's own SQLite database | medium |
-| `take_screenshot` | Captures the display (needs `scrot` or ImageMagick) | low |
+| `take_screenshot` | Captures the display (Linux, needs `scrot` or ImageMagick) | low |
+
+The Mayor also has `assign_goal`, `schedule_job_for`, `review_agent`, `flag`, `pause_agent`,
+`resume_agent`, `call_meeting`, `call_vote` and `propose_building`; the Mayor and directors can
+`propose_hire`.
 
 ## Key concepts
 
 ### Work sessions & limits
-Every agent turn runs as a **work session** (recorded in `work_sessions`). The human
+Every villager turn runs as a **work session** (recorded in `work_sessions`). The human
 controls how often and how long it works:
 
 - `minGapMinutes` — cooldown between autonomous sessions
@@ -114,8 +163,8 @@ controls how often and how long it works:
 Human-initiated chat is never throttled; only autonomous (scheduled/report) sessions are.
 
 ### Jobs & the worker
-The **agent can schedule its own jobs** (`schedule_job`) and the human can create them
-in the **Jobs** tab. A separate process (`npm run worker`) polls the DB every 15s, checks
+**Villagers can schedule their own jobs** (`schedule_job`) and the human can create them
+at the workbench in the **workshop**. A separate process (`npm run worker`) polls the DB every 15s, checks
 pause/cooldown/daily caps, and opens a work window by injecting an event note into the
 job's conversation. Cron schedules are checked when a job is saved, and a bad one is refused with
 the reason.
@@ -128,19 +177,22 @@ before it exits.
 ### Token & cost tracking
 Each model call's token usage is recorded per message and rolled up per session. Cost is
 estimated from the per-million-token prices in **Settings → Limits**. See the stats block
-on the **Activity** page.
+in the **vault**.
 
 ### Goals board
-The agent maintains its own goals (via `manage_goal`/`list_goals` or the **Goals** tab)
-and is instructed to pick its next in-progress/backlog goal at the start of each work window.
+Each villager maintains their own goals (via `manage_goal`/`list_goals`, or the **notice
+board** in the village) and picks the next one at the start of each work window. Goals the
+Mayor assigns, and what a meeting agrees, land on the same board.
 
 ### Global pause / kill switch
-The **⏸ Pause** button (sidebar) instantly freezes all tool execution and scheduled work.
+The **Pause everyone** button in the village bar instantly freezes all tool execution and scheduled work.
 Chat still works; every tool call is blocked with `PAUSED` until resumed.
 
 ### API key & models in the UI
 Enter a DeepSeek API key in **Settings** (stored in the DB, masked in the UI) and click
-**Test & load models** to fetch available model names from the API and pick one.
+**Test & load models** to fetch available model names from the API and pick one. Other
+OpenAI-compatible providers can be added with their own keys and prices, and any villager can
+use any of them.
 
 ## Safety layer
 
@@ -210,28 +262,29 @@ responsible for anything the agent does in this mode.
 
 ## The village
 
-Home (`/`) is a small pixel-art town where the agent lives as a villager, walking between
-buildings according to what it's doing, with approvals popping up wherever you are. Every
-place works in-world:
+Home (`/`) is the village. Villagers walk between buildings according to what they're doing,
+and approvals pop up wherever you are. Every page of the app is a place in the village:
 
 - **Library:** skills are books on the shelves; new ones are written at the desk.
 - **Workshop:** jobs are slips on the job board; new ones are set up at the workbench.
-- **Notice board:** goals pinned by priority, opened right in the village.
+- **Notice board:** goals pinned by priority, and ideas up for a vote.
 - **Guard tower:** the logbook (activity log) and today's tally.
 - **Observatory:** the star charts (system monitor).
 - **Vault:** the ledger and the coffers (usage and spending).
-- **Town hall:** the clerk's desk (approvals), the records cabinet (recent decisions) and the
-  Mayor's ledger (every setting).
-- **Cottage:** the armchair by the hearth (the full chat) and the diary (the journal).
-- **Mailbox:** the agent's notifications.
+- **Town hall:** the long table (meetings and their records), the clerk's desk (approvals),
+  the records cabinet (recent decisions) and the Mayor's ledger (every setting, and the
+  villagers).
+- **Cottages:** each villager's armchair by the hearth (their full chat) and diary.
+- **Mailbox:** letters from the villagers.
 - **Your home:** your computer, your desk (approvals, hire requests, letters, the outbox), the
   bookshelves (every diary), the wall calendar, the map table, the pantry and a guitar.
 
-**Villagers.** The village can have several agents. Each has their own name, personality, look,
-model, tools (within the town's tool policy), budget and cottage, and goes about their own work.
-Add and manage them in the Mayor's ledger → Villagers. Your original agent is the Mayor.
+**Villagers.** Each has their own name, personality, look, model, tools (within the town's tool
+policy), budget and cottage. Add and manage them in the Mayor's ledger → Villagers, or let the
+Mayor propose a hire: you interview the candidate and decide. Directors can take on workers
+of their own. Your first agent is the Mayor.
 
-The old Command Center pages are retired; their addresses (`/chat`, `/settings`, `/jobs` …)
+The old dashboard pages are retired; their addresses (`/chat`, `/settings`, `/jobs` …)
 redirect to the matching room. Clicking a villager (or pressing T) opens a quick chat drawer
 anywhere in the village, and you can walk around yourself with the arrow keys or WASD. Every scene (the village and each room) is
 described in `src/components/village/scenes/`, and `npm run village:map` builds its art.
@@ -246,7 +299,9 @@ Village art: "Serene Village" by [LimeZu](https://limezu.itch.io/serenevillage) 
 | --- | --- |
 | `npm run dev` | The dev server and the background worker together |
 | `npm run dev:web` | Only the Next.js dev server |
-| `npm run worker` | Background scheduler (jobs / daily report) |
+| `npm run worker` | Background worker (jobs, free time, the daily vote, the village economy) |
+| `npm test` | Every test suite |
+| `npm run village:map` / `village:custom-art` | Build the scenes' art / the project's own pixel art |
 | `npm run build` / `start` | Production build / serve |
 | `npm run lint` / `typecheck` | ESLint / `tsc --noEmit` |
 | `npm run db:generate` / `db:push` | Drizzle migrations / push schema to SQLite (optional) |
@@ -257,15 +312,19 @@ Village art: "Serene Village" by [LimeZu](https://limezu.itch.io/serenevillage) 
 ```
 src/
   app/            Next.js pages + API routes
-  components/     React views (Chat, Journal, Jobs, Goals, Approvals, Activity, Monitor, Settings)
+  components/
+    village/      the village: scenes, rooms, villagers, the HUD and dialogs
+    data/         client data hooks (live updates over server-sent events)
   lib/agent/      Agent core:
     runner.ts       agent loop, session lifecycle, risk gate, approval resume
-    tools.ts        tool schemas + executors
+    tools.ts        core tool schemas + executors
+    villageTools.ts village tools (asking neighbours, the Mayor's powers, hiring, ideas)
     risk.ts         risk classifiers (shell/file/package/service/process/url)
     config.ts       hard-coded safety constants
-    systemPrompt.ts builds the agent's system prompt (journal, jobs, goals, limits)
-    settingsStore.ts single-row settings store
-    deepseekClient.ts DeepSeek client + /models helper
-  worker/index.ts Standalone scheduler process
+    host.ts         the system and shell villagers work in
+    systemPrompt.ts builds each villager's system prompt
+    meetings.ts, hiring.ts, ideas.ts, buildings.ts, economy.ts, morale.ts  village life
+    providers.ts    model providers, keys and prices
+  worker/index.ts Background worker process
   db/             Drizzle schema + SQLite (better-sqlite3)
 ```
