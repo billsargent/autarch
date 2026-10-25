@@ -22,6 +22,11 @@ framework that gives an autonomous AI agent supervised control of a computer sys
   in the servers and link to how to make an app password. (Signing in with Microsoft and Google
   calendars come next.)
 - The Village life button's hover text now describes village life.
+- **Notices on the board.** Villagers can pin a plain notice (news, agreed terms, a reminder) with
+  `pin_notice`; it isn't put to a vote, and you can take it down.
+- **Fixed: the Mayor couldn't pin anything.** Ideas a meeting's write-up pinned were counted as the
+  Mayor's own and used up his three a day; they're now the meeting's. The limit also counts the
+  calendar day, as its message says.
 
 ## 2026-10-25 — Village life, part 2: love, coins and trade with other towns
 

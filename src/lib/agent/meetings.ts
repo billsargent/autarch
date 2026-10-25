@@ -211,10 +211,12 @@ export async function summarizeMeeting(id: number): Promise<{ summary: string; i
   const pinned: string[] = [];
   for (const title of ideas) {
     try {
-      await proposeIdea(title, `Raised at town meeting #${id}${m.topic ? ` (${m.topic})` : ""}.`, mayor.id);
+      // The meeting's ideas are the meeting's, not the Mayor's: they don't
+      // count against anyone's daily allowance (#147).
+      await proposeIdea(title, `Raised at town meeting #${id}${m.topic ? ` (${m.topic})` : ""}.`, null);
       pinned.push(title);
     } catch {
-      /* the board is full, or the Mayor has pinned enough today */
+      /* the board is full */
     }
   }
   // What was agreed becomes goals: on the villager's board if we know them,

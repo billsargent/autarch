@@ -417,6 +417,15 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`);
   sqlite.exec("CREATE INDEX IF NOT EXISTS idx_life_events_agent ON life_events(agent_id, id)");
+  // Plain notices on the notice board (#147): no vote, just news.
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS notices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    body TEXT,
+    agent_id INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    removed_at INTEGER
+  )`);
   // Every email says who wrote it and why, and what was sent is kept (#143).
   if (!existingCols("drafts").includes("why")) sqlite.exec("ALTER TABLE drafts ADD COLUMN why TEXT");
   if (!existingCols("drafts").includes("sent_at")) sqlite.exec("ALTER TABLE drafts ADD COLUMN sent_at INTEGER");
@@ -472,6 +481,8 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     decided_at INTEGER
   )`);
+  // Ideas a meeting's write-up pinned were once recorded as the Mayor's (#147).
+  sqlite.exec("UPDATE ideas SET proposed_by = NULL WHERE body LIKE 'Raised at town meeting%' AND proposed_by IS NOT NULL");
   sqlite.exec(`CREATE TABLE IF NOT EXISTS votes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     idea_id INTEGER NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,

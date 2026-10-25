@@ -233,6 +233,27 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
     risk: { risk: "low", reason: "The Mayor proposing a building; the owner approves it." },
     run: mayor("propose_building"),
   },
+  // A plain notice on the board (#147): news and agreements, no vote.
+  pin_notice: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "pin_notice",
+        description:
+          "Pin a notice on the village notice board for everyone to read: news, agreed terms, a reminder. It isn't put to a vote (for a proposal the village should vote on, use propose_idea). A few a day.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "A short headline." },
+            text: { type: "string", description: "The notice itself, plainly." },
+          },
+          required: ["title", "text"],
+        },
+      },
+    },
+    risk: { risk: "low", reason: "Pins a notice on the village board; nothing leaves the village." },
+    run: async (args, ctx) => (await import("./notices")).pinNoticeTool(args, ctx),
+  },
   // Orders from other towns (#136): the Mayor takes them on for the village.
   accept_order: {
     definition: {

@@ -48,7 +48,8 @@ export async function proposeIdea(title: string, body: string | null, proposedBy
   const open = (sqlite.prepare("SELECT COUNT(*) AS n FROM ideas WHERE status IN ('open', 'voting')").get() as { n: number }).n;
   if (open >= OPEN_IDEAS_MAX) throw new IdeaError(`The notice board already has ${OPEN_IDEAS_MAX} open ideas. Vote on some first.`);
   if (proposedBy) {
-    const since = Math.floor(Date.now() / 1000) - 86400;
+    // Since midnight, as "today" says (#147).
+    const since = Math.floor(new Date(new Date().setHours(0, 0, 0, 0)).getTime() / 1000);
     const mine = (sqlite.prepare("SELECT COUNT(*) AS n FROM ideas WHERE proposed_by = ? AND created_at >= ?").get(proposedBy, since) as { n: number }).n;
     if (mine >= IDEAS_PER_DAY) throw new IdeaError(`you've proposed ${IDEAS_PER_DAY} ideas today. Let the village catch up.`);
   }

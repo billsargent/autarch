@@ -37,7 +37,7 @@ function migrateSkillsDirOnce(workspaceDir: string) {
 // stays off.
 export const DEFAULT_TOWN_BUDGET_USD = 2;
 
-const NEW_TOOLS_TO_OFFER = ["message_owner", "ask_villager", ...MAYOR_TOOLS, ...HIRING_TOOLS, "note_about", "propose_idea", "save_draft"];
+const NEW_TOOLS_TO_OFFER = ["message_owner", "ask_villager", ...MAYOR_TOOLS, ...HIRING_TOOLS, "note_about", "propose_idea", "save_draft", "pin_notice"];
 
 async function ensureMessagingEnabled(row: AgentSettingsRow): Promise<AgentSettingsRow> {
   if (messagingEnabled) return row;

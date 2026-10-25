@@ -1005,7 +1005,21 @@ async function main() {
   check("…turns what was agreed into goals, on the villager's own board", (await db.select().from(goals).where(eq(goals.title, "Fix the bridge rail")))[0]?.agentId, cal.id);
   check("…or the town's, if nobody by that name lives here", (await db.select().from(goals).where(eq(goals.title, "Count the lanterns")))[0]?.agentId, null);
   check("…and keeps those lines out of the summary", written.summary?.includes("ACTION"), false);
-  check("…and pins the ideas it raised", (await ideasLib.listIdeas()).some((i) => i.title === "Paint the bridge red" && i.proposedBy === mayor.id), true);
+  check("…and pins the ideas it raised, as the meeting's, not the Mayor's (#147)", (await ideasLib.listIdeas()).some((i) => i.title === "Paint the bridge red" && i.proposedBy === null && i.body?.startsWith("Raised at town meeting")), true);
+  const { sqlite: ideaDb } = await import("../src/db");
+  ideaDb.prepare("UPDATE ideas SET created_at = created_at - 86400 * 2 WHERE proposed_by = ?").run(mayor.id);
+  const mine = ideaDb.prepare("SELECT COUNT(*) AS n FROM ideas WHERE proposed_by = ? AND created_at >= ?").get(mayor.id, Math.floor(new Date(new Date().setHours(0, 0, 0, 0)).getTime() / 1000)) as { n: number };
+  check("…so the Mayor still has his own ideas to pin today", [mine.n, (await executeTool("propose_idea", { title: "A tavern ledger", body: "x" }, town, ctxMayor)).output.startsWith("Pinned idea #")], [0, true]);
+
+  // Notices (#147): news and agreed terms, no vote.
+  const noticesRoute = await import("../src/app/api/notices/route");
+  check("a villager pins a notice", (await executeTool("pin_notice", { title: "Tavern terms", text: "Start small; books, not barrels." }, town, ctxMayor)).output.startsWith("Pinned notice #"), true);
+  const posted = (await (await noticesRoute.GET()).json()).notices as Array<{ id: number; title: string }>;
+  check("…it's on the board", posted[0]?.title, "Tavern terms");
+  for (let i = 0; i < 2; i++) await executeTool("pin_notice", { title: `More ${i}`, text: "x" }, town, ctxMayor);
+  check("…a few a day", (await executeTool("pin_notice", { title: "One too many", text: "x" }, town, ctxMayor)).output, "Refused: you've pinned 3 notices today. Tomorrow.");
+  await noticesRoute.DELETE(new Request(`http://x/api/notices?id=${posted[0].id}`, { method: "DELETE" }));
+  check("the owner can take one down", ((await (await noticesRoute.GET()).json()).notices as Array<{ id: number }>).some((n) => n.id === posted[0].id), false);
   check("past meetings show at the long table", (await (await meetingsRoute.GET()).json()).past.some((p: { summary: string | null }) => p.summary === "We all agreed, briefly."), true);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
 

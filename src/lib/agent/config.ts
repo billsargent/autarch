@@ -179,6 +179,7 @@ export const DEFAULT_ENABLED_TOOLS = [
   "propose_building",
   // Ideas (#98): anyone may propose.
   "propose_idea",
+  "pin_notice",
   // The outbox (#107).
   "save_draft",
   "note_about",
