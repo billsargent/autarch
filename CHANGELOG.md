@@ -3,6 +3,26 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-25 — The storehouse, the post office, signs, and why every email is written
+
+- **The two empty buildings found a use.**
+  - The green-roofed one beside the workshop is the **storehouse**: the village's stores, the
+    cart with orders from other towns, and a ledger of what came in and went out.
+  - The shop-front beside the town hall is the **post office**: drafts waiting for you, every email
+    sent (who wrote it, why, to whom), your inbox, and the calendar desk.
+  - The pantry at home opens the same stores.
+- **Signs do something.** The two signposts give directions: every place, what it's for, who's out
+  and about, and a way to go there. A sign on a free plot says what could be built there and opens
+  the map table; it disappears once something is built.
+- **Every email says why.** A villager's draft must say why it was written; the outbox shows the
+  writer, the why and their conversations, and flags addresses never emailed before.
+- **How mail goes out**, on the Email page: a From name, an optional "written by … sent by …" line,
+  a daily cap (10 by default), and "only people I've emailed before".
+- **Mail provider presets:** Gmail, Outlook, iCloud, Yahoo, Fastmail and Proton Mail Bridge fill
+  in the servers and link to how to make an app password. (Signing in with Microsoft and Google
+  calendars come next.)
+- The Village life button's hover text now describes village life.
+
 ## 2026-10-25 — Village life, part 2: love, coins and trade with other towns
 
 - **Friendship and romance.** Villagers grow closer through time together, visits and gifts. Close

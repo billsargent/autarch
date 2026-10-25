@@ -16,7 +16,12 @@ export interface DraftRow {
   status: "draft" | "approved" | "sent" | "discarded" | "failed";
   sendResult: string | null;
   agentId: number | null;
+  conversationId: number | null;
   createdAt: string;
+  // Why the villager wrote it, and any addresses never emailed before (#143).
+  why: string | null;
+  newRecipients?: string[];
+  sentAt?: string | null;
 }
 
 const ICON: Record<DraftRow["kind"], string> = { email: "✉", post: "📣", listing: "🏷", message: "💬", other: "📄" };
@@ -47,7 +52,7 @@ export function useDrafts() {
   return { list, reload, waiting: list?.filter((d) => d.status === "draft") ?? [] };
 }
 
-export default function Outbox({ onClose }: { onClose: () => void }) {
+export default function Outbox({ onClose, kicker = "Your home" }: { onClose: () => void; kicker?: string }) {
   const { list, reload } = useDrafts();
   const { byId } = useVillagers(30000);
   const [edits, setEdits] = useState<Record<number, string>>({});
@@ -66,11 +71,11 @@ export default function Outbox({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <ParchmentDialog kicker="Your home" title="The outbox" onClose={onClose} wide>
+    <ParchmentDialog kicker={kicker} title="The outbox" onClose={onClose} wide>
       <p className="mb-3 text-xs text-[#6b4a2e]">
-        Emails, posts, listings and messages the villagers wrote for the outside world. Nothing is ever sent without you: read
-        it, change it if you like, then approve or discard it. Until a connector is set up for that kind, approving just marks
-        it ready, and you copy it and send it yourself.
+        Emails, posts, listings and messages the villagers wrote for the outside world, each with who wrote it and why. Nothing
+        is ever sent without you: read it, change it if you like, then approve or discard it. Approved emails go from your own
+        account (Mayor&apos;s ledger → Email); anything else is marked ready, and you copy it and send it yourself.
       </p>
       {error && <p role="alert" className="mb-2 text-xs text-[#b3261e]">{error}</p>}
       {!list && <p className="text-sm">Sorting the post…</p>}
@@ -91,6 +96,22 @@ export default function Outbox({ onClose }: { onClose: () => void }) {
                 From {who?.name ?? "a villager"}
                 {d.target && ` · to ${d.target}`} · {new Date(d.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
               </p>
+              {d.why && (
+                <p className="mt-1 rounded bg-[#f4ead5] px-2 py-1 text-[11px]">
+                  💭 <strong>Why:</strong> {d.why}
+                  {d.agentId != null && (
+                    <>
+                      {" "}
+                      <a href={`/village/cottage?agent=${d.agentId}&open=chat.open`} className="underline">
+                        See {who?.name ?? "their"}&apos;s conversations
+                      </a>
+                    </>
+                  )}
+                </p>
+              )}
+              {(d.newRecipients?.length ?? 0) > 0 && (
+                <p className="mt-1 text-[11px] font-semibold text-[#8a5a2b]">⚠ Never emailed before: {d.newRecipients!.join(", ")}</p>
+              )}
               {d.status === "draft" ? (
                 <textarea
                   name={`draft-${d.id}`}

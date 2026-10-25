@@ -62,7 +62,10 @@ manual mode.
 **Drafts.** Nothing leaves the machine on a villager's say-so.
 
 - Emails, posts, shop listings and messages to people are only ever saved as **drafts**
-  (`save_draft`) in the owner's outbox.
+  (`save_draft`) in the owner's outbox, and every draft says **why** it was written.
+- Approved emails go from the owner's own account, under the owner's From name, within a daily cap
+  the owner sets; addresses never emailed before are flagged, and the owner can allow only those.
+  Every sent email is kept at the post office: who wrote it, why, to whom and when.
 - The owner reads each one, may edit it, and approves or discards it.
 - An approved draft is sent by the connector for its kind. Where there is none, it's marked ready
   and the owner sends it themselves.

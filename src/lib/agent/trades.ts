@@ -29,7 +29,7 @@ export const TRADES = {
   gardener: { label: "Gardener", doing: "tending the flowers", icon: "🌷", building: "garden", spot: "bc", goods: "flowers" },
   shopkeeper: { label: "Shopkeeper", doing: "minding the shop", icon: "🛍️", building: "shop", spot: "tc", goods: null },
   carpenter: { label: "Carpenter", doing: "at the workbench", icon: "🪚", building: "workshop", spot: "ws", goods: "crafts" },
-  trader: { label: "Trader", doing: "seeing to the carts", icon: "🐴", building: null, spot: "wg", goods: null },
+  trader: { label: "Trader", doing: "seeing to the carts at the storehouse", icon: "🐴", building: null, spot: "sh", goods: null },
   scholar: { label: "Scholar", doing: "reading in the library", icon: "📚", building: null, spot: "lib", goods: null },
   watchman: { label: "Watchman", doing: "keeping watch", icon: "🛡️", building: null, spot: "gt", goods: null },
   mayor: { label: "Mayor", doing: "seeing to the village", icon: "🎩", building: null, spot: "c", goods: null },

@@ -73,7 +73,7 @@ export default function VillageView() {
   // ?open=<action> opens an outdoor dialog straight away (the notice board, the mailbox).
   useEffect(() => {
     const open = new URLSearchParams(window.location.search).get("open");
-    if (open && ["goals.board", "goals.new", "mail.open"].includes(open)) {
+    if (open && ["goals.board", "goals.new", "mail.open", "trade.post", "signs.directions"].includes(open)) {
       const t = setTimeout(() => openAction(open), 0);
       return () => clearTimeout(t);
     }
@@ -275,6 +275,7 @@ export default function VillageView() {
           <>
             <PlotBuildings scene={scene} state={buildings.state} onOpen={(id) => openAction(`building.${id}`)} />
             <Animals animals={villageAnimals(scene, buildings.state)} />
+            <PlotSigns scene={scene} state={buildings.state} onOpen={(id) => openAction(`plot.${id}`)} />
             {(phase === "dusk" || phase === "night") && !data.paused && <LitWindows level={level} scene={scene} plots={buildings.state} />}
           </>
         }
@@ -410,6 +411,38 @@ function villageAnimals(scene: SceneManifest, state: ReturnType<typeof useBuildi
   const westRoad = scene.waypoints.find((w) => w.id === "wrt");
   if (westRoad) out.push({ id: "horse", kind: "horse", area: { x: CELL * 0.5, y: westRoad.y - CELL * 1.6, w: CELL * 3, h: CELL } });
   return out;
+}
+
+// A sign on every free plot (#146): click it to see what could go there.
+function PlotSigns({ scene, state, onOpen }: { scene: SceneManifest; state: ReturnType<typeof useBuildings>["state"]; onOpen: (id: string) => void }) {
+  if (!state) return null;
+  const taken = new Set(state.buildings.filter((b) => b.kind !== "land").map((b) => b.plotId));
+  return (
+    <>
+      {scene.plots
+        .filter((p) => !taken.has(p.id))
+        .map((p) => {
+          const x = (p.col + 3) * CELL;
+          const y = (p.row + 3) * CELL;
+          return (
+            <div key={p.id}>
+              <StampSprite stamp="svSign" x={x} y={y} />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpen(p.id);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                aria-label={`Plot ${p.id}: free`}
+                title="A free plot: what could go here?"
+                className="absolute rounded outline-none hover:bg-white/20 focus-visible:outline-4 focus-visible:outline-[#e3b04b]"
+                style={{ left: x, top: y, width: CELL, height: CELL }}
+              />
+            </div>
+          );
+        })}
+    </>
+  );
 }
 
 // The stamps and labels come with the buildings (src/lib/agent/buildings.ts).

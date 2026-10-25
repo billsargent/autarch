@@ -277,7 +277,7 @@ function Invite({ onClose }: { onClose: () => void }) {
 
 // --- the calendar --------------------------------------------------------------------------
 
-function Calendar({ onClose }: { onClose: () => void }) {
+export function Calendar({ onClose }: { onClose: () => void }) {
   const { jobs, loaded } = useJobs();
   const { settings } = useSettings();
   const { villagers } = useVillagers(30000);

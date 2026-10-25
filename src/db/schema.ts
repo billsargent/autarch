@@ -292,6 +292,9 @@ export const drafts = sqliteTable("drafts", {
   content: text("content").notNull(),
   status: text("status", { enum: ["draft", "approved", "sent", "discarded", "failed"] }).notNull().default("draft"),
   sendResult: text("send_result"),
+  // Why the villager wrote it, in a sentence (#143), and when it went.
+  why: text("why"),
+  sentAt: integer("sent_at", { mode: "timestamp" }),
   agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
   conversationId: integer("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
@@ -316,6 +319,14 @@ export const mailSettings = sqliteTable("mail_settings", {
   imapMailbox: text("imap_mailbox").notNull().default("INBOX"),
   // The villagers the owner lets read the inbox (read_email), by id.
   readers: text("readers", { mode: "json" }).notNull().default(sql`'[]'`),
+  // How mail goes out (#143): the From name, an optional "written by" footer,
+  // a daily cap, and whether only addresses mailed before may be sent to.
+  fromName: text("from_name"),
+  footer: integer("footer", { mode: "boolean" }).notNull().default(false),
+  dailyCap: integer("daily_cap").notNull().default(10),
+  knownOnly: integer("known_only", { mode: "boolean" }).notNull().default(false),
+  // The provider preset chosen (#141), e.g. "gmail".
+  preset: text("preset"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 

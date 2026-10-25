@@ -124,7 +124,7 @@ export default function VillagersPage({ settings, tools }: { settings: SettingsR
                       setError(res.ok ? null : res.error);
                     }}
                     aria-pressed={Boolean(v.daydream)}
-                    title="A few minutes every four hours, on their own budget, to explore and pin an idea for the village"
+                    title="Village life: their own day in the village is always simulated, free. On = also a short life window each day, with village tools only, on their own budget."
                     className={`village-btn px-2 py-1 text-[11px] ${v.daydream ? "village-btn-go" : ""}`}
                   >
                     🌻 Village life {v.daydream ? "on" : "off"}

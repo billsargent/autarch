@@ -720,7 +720,8 @@ async function main() {
   // --- the outbox (#107) and the owner's calendar (#108) ---------------------------------
   const { drafts: draftsT } = await import("../src/db/schema");
   const draftRoute = await import("../src/app/api/drafts/[id]/route");
-  const drafted = await executeTool("save_draft", { kind: "email", to: "shop@example.com", subject: "Order", content: "Two sacks of flour, please." }, town, ctxCal);
+  check("a draft must say why (#143)", (await executeTool("save_draft", { kind: "email", to: "shop@example.com", content: "Hi" }, town, ctxCal)).output.startsWith("Refused: say `why`"), true);
+  const drafted = await executeTool("save_draft", { kind: "email", to: "shop@example.com", subject: "Order", content: "Two sacks of flour, please.", why: "The owner asked me to order flour." }, town, ctxCal);
   check("a villager saves outward work as a draft", drafted.output.startsWith("Saved draft #") && drafted.output.includes("Nothing has been sent"), true);
   const draftId = Number(/#(\d+)/.exec(drafted.output)?.[1]);
   const draftRow = async () => (await db.select().from(draftsT).where(eq(draftsT.id, draftId)))[0];
@@ -729,7 +730,7 @@ async function main() {
   await decideD(draftId, { action: "approve", edits: { content: "Three sacks of flour, please." } });
   check("the owner approves it, with their edits (no connector yet: ready to send by hand)", [(await draftRow()).status, (await draftRow()).content], ["approved", "Three sacks of flour, please."]);
   check("a decided draft stays decided", (await decideD(draftId, { action: "discard" })).status, 409);
-  const second = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "post", content: "Hello world" }, town, ctxCal)).output)?.[1]);
+  const second = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "post", content: "Hello world", why: "To say hello." }, town, ctxCal)).output)?.[1]);
   await decideD(second, { action: "discard" });
   check("…or discards it", (await db.select().from(draftsT).where(eq(draftsT.id, second)))[0].status, "discarded");
   check("no tool sends or approves anything", ALL_TOOL_DEFINITIONS.map((t) => t.function.name).filter((n) => /send|publish|approve_draft/i.test(n)), []);
@@ -774,14 +775,31 @@ async function main() {
   check("the passwords never come back from the API", [JSON.stringify(savedMail).includes("imap-secret-123"), savedMail.imapPasswordSet, savedMail.smtpReady], [false, true, true]);
   check("…nor through query_database", (await executeTool("query_database", { sql: "select * from mail_settings" }, town, ctxCal)).output.includes("not allowed"), true);
 
-  const mailDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "Shop <shop@example.com>", subject: "Flour", content: "Two sacks, please." }, town, ctxCal)).output)?.[1]);
+  const mailDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "Shop <shop@example.com>", subject: "Flour", content: "Two sacks, please.", why: "The pantry is low." }, town, ctxCal)).output)?.[1]);
   await decideD(mailDraft, { action: "approve" });
   const sentRow = (await db.select().from(draftsT).where(eq(draftsT.id, mailDraft)))[0];
   check("an approved email draft is sent over SMTP", [sentRow.status, sentRow.sendResult], ["sent", "Sent to shop@example.com."]);
   check("…with its words, from the owner's address", [received.some((l) => l === "Two sacks, please."), received.some((l) => /^From: owner@example.com/i.test(l)), received.some((l) => /^Subject: Flour/i.test(l))], [true, true, true]);
-  const badDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "nobody", content: "x" }, town, ctxCal)).output)?.[1]);
+  const badDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "nobody", content: "x", why: "A test." }, town, ctxCal)).output)?.[1]);
   await decideD(badDraft, { action: "approve" });
   check("a draft to a bad address fails, saying why", (await db.select().from(draftsT).where(eq(draftsT.id, badDraft)))[0].sendResult, '"nobody" isn\'t an email address.');
+
+  // Who wrote it, why, and how it goes out (#143).
+  check("the sent log keeps who wrote it, why and when", [sentRow.agentId, sentRow.why, sentRow.sentAt instanceof Date], [cal.id, "The pantry is low.", true]);
+  const drafts2 = await import("../src/lib/agent/drafts");
+  const fresh = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "new@example.com, shop@example.com", subject: "Hi", content: "Hello there.", why: "A first hello." }, town, ctxCal)).output)?.[1]);
+  check("an address never emailed before is flagged", (await drafts2.listDrafts()).find((d) => d.id === fresh)?.newRecipients, ["new@example.com"]);
+  await putMail({ knownOnly: true });
+  check("…and with 'only people I've emailed before' on, it waits", (await decideD(fresh, { action: "approve" })).status, 409);
+  await putMail({ knownOnly: false, fromName: "Owner's village", footer: true });
+  received.length = 0;
+  await decideD(fresh, { action: "approve" });
+  check("the From name and the 'written by' footer", [received.some((l) => /^From: .*Owner's village/i.test(l)), received.some((l) => l === "Written by Cal, sent by Owner's village.")], [true, true]);
+  await putMail({ dailyCap: 1, footer: false });
+  const tooMany = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "shop@example.com", content: "Again.", why: "A test." }, town, ctxCal)).output)?.[1]);
+  const cappedRes = await decideD(tooMany, { action: "approve" });
+  check("the daily cap holds the rest until tomorrow", [cappedRes.status, (await cappedRes.json()).error.startsWith("Today's limit of 1 email")], [409, true]);
+  await putMail({ dailyCap: 10, fromName: "" });
   smtp.close();
 
   const calRow2 = await rowOf(cal.id);

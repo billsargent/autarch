@@ -22,7 +22,7 @@ const WHAT: Record<BuildingKind, string> = {
 const ICON: Record<BuildingKind, string> = { house: "🏠", farm: "🌾", bakery: "🍞", workshop: "🔧", tavern: "🍺", shop: "🛍️", garden: "🌷" };
 // "north-3" → "North road, left (second ring)": two plots per road per ring.
 const RING = ["first", "second", "third", "fourth"];
-function plotLabel(plot: string) {
+export function plotLabel(plot: string) {
   const m = /^(north|west)-(\d+)$/.exec(plot);
   if (!m) return plot;
   const n = Number(m[2]) - 1;
@@ -205,12 +205,14 @@ export function MapTable({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function Pantry({ onClose }: { onClose: () => void }) {
+// The village stores (#106, #145): kept at the storehouse; the pantry at home
+// opens the same.
+export function Pantry({ onClose, kicker = "Your home" }: { onClose: () => void; kicker?: string }) {
   const { state } = useBuildings();
   const farms = state?.buildings.filter((b) => b.kind === "farm" && b.status === "built").length ?? 0;
   const bakeries = state?.buildings.filter((b) => b.kind === "bakery" && b.status === "built").length ?? 0;
   return (
-    <ParchmentDialog kicker="Your home" title="The pantry" onClose={onClose}>
+    <ParchmentDialog kicker={kicker} title="The village stores" onClose={onClose}>
       {!state && <p className="text-sm">Opening the cupboard…</p>}
       {state && (
         <>
