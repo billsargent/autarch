@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
+import { ensureLife } from "@/lib/agent/life";
+import { db, sqlite } from "@/db";
 import { agents, conversations, jobs } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { setDaydream, validateAgentInput } from "@/lib/agent/agents";
@@ -30,8 +31,13 @@ export async function PATCH(req: Request, { params }: Params) {
     })
     .where(eq(agents.id, agent.id))
     .returning();
-  // Free time on or off (#59).
+  // Village life on or off (#59, #133).
   if (typeof body.daydream === "boolean") await setDaydream(updated, body.daydream);
+  // Open to romance (#134): the owner's say.
+  if (typeof body.romanceOpen === "boolean") {
+    ensureLife(agent.id);
+    sqlite.prepare("UPDATE villager_life SET romance_open = ? WHERE agent_id = ?").run(body.romanceOpen ? 1 : 0, agent.id);
+  }
   // Pausing stops what they're doing now, too.
   if (checked.value.status === "paused") {
     const theirs = await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.agentId, agent.id));

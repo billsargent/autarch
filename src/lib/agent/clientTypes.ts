@@ -257,6 +257,8 @@ export interface VillagerLife {
   mood: string[];
   friends: Array<{ id: number; name: string; status: string; affinity: number }>;
   recent: string[];
+  decor: string[];
+  romanceOpen: boolean;
 }
 
 // A hire request (#99): a drafted villager, the Mayor's interview, and what

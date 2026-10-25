@@ -260,7 +260,18 @@ keeping a building makes them its trade.
   share. Each villager can have their own. Anything the owner asks for always runs.
 - **Food.** Villagers eat when they're hungry. A farm or bakery nobody works still makes a little
   each day. If someone goes hungry, everyone's morale dips. Food never stops anyone working.
-- Coins are the village's own and never real money.
+- **Coins** are the village's own and never real money. Villagers earn a coin a working stint
+  and spend them at the tavern and the market. Now and then one buys decor for their cottage, which
+  shows in their room. In their life window they can `buy` and `gift`.
+- **Friendship and romance.** Gifts and visits bring villagers closer. Close friends who are both
+  open to romance (the owner's toggle, per villager) may start courting and become sweethearts.
+  When sweethearts ask to marry, the owner blesses the wedding or says "not yet". Partners prefer
+  each other's company.
+- **Orders from other towns.** Each morning a neighbouring town may ask for goods. The Mayor
+  (`accept_order`), a trader or the owner takes an order on. When the stores have enough, the cart
+  goes, the treasury is paid and the village's good name grows. A missed order lowers it.
+- **The treasury pays for the Mayor's buildings** (a house 40 coins, land 120 …): the Mayor can't
+  propose what it can't cover. What the owner builds themselves is free.
 
 ## 10. Changing this charter
 

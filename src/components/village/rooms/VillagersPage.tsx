@@ -185,6 +185,7 @@ function VillagerEditor({
   const [trade, setTrade] = useState<string>(villager?.trade ?? "");
   const [split, setSplit] = useState<string>(villager?.lifeBalance ?? "");
   const [share, setShare] = useState(villager?.workShare != null ? String(villager.workShare) : "");
+  const [romance, setRomance] = useState(villager?.life?.romanceOpen ?? true);
   // Starts with the default personality written out, ready to edit.
   const [persona, setPersona] = useState(villager?.persona ?? DEFAULT_PERSONA);
   const [character, setCharacter] = useState(villager?.character ?? CHARACTER_KEYS.find((c) => c !== "master") ?? "villager");
@@ -224,6 +225,7 @@ function VillagerEditor({
       trade: trade || null,
       lifeBalance: (split || null) as "idle" | "hours" | "balanced" | null,
       workShare: split === "balanced" && share.trim() !== "" ? Number(share) : null,
+      romanceOpen: romance,
     });
     if (!res.ok) {
       const m = /^(\w+): (.*)$/.exec(res.error);
@@ -277,6 +279,15 @@ function VillagerEditor({
             <option value="balanced">Balanced</option>
           </select>
           {fieldError("lifeBalance")}
+        </label>
+        <label className="flex items-start gap-2 text-xs font-semibold sm:col-span-3">
+          <input type="checkbox" name="romanceOpen" checked={romance} onChange={(e) => setRomance(e.target.checked)} className="mt-0.5" />
+          <span>
+            Open to romance
+            <span className="block font-normal text-[11px] text-[#6b4a2e]">
+              Close friends who are both open to it may start courting, then become sweethearts; a wedding needs your blessing.
+            </span>
+          </span>
         </label>
         {split === "balanced" && (
           <label className="block text-xs font-semibold">

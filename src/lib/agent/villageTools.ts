@@ -218,7 +218,7 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
       function: {
         name: "propose_building",
         description:
-          "Mayor only. Propose a new building on one of the empty plots north and west of town: a house (beds for two more villagers), a farm, a bakery, a workshop, a tavern, a shop or a garden (the last three cheer everyone up). The owner approves it; then it takes about half a day to build. When every plot is taken, propose `land` instead: it clears the next ring of land around the village, with four new plots, and takes a day.",
+          "Mayor only. Propose a new building on one of the empty plots north and west of town: a house (beds for two more villagers), a farm, a bakery, a workshop, a tavern, a shop or a garden (the last three cheer everyone up). The owner approves it and the village treasury pays (house 40 coins, farm 30, bakery 40, workshop 40, tavern 60, shop 50, garden 25); then it takes about half a day to build. When every plot is taken, propose `land` instead (120 coins): it clears the next ring of land around the village, with four new plots, and takes a day. Orders from other towns (accept_order) fill the treasury.",
         parameters: {
           type: "object",
           properties: {
@@ -232,6 +232,20 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
     },
     risk: { risk: "low", reason: "The Mayor proposing a building; the owner approves it." },
     run: mayor("propose_building"),
+  },
+  // Orders from other towns (#136): the Mayor takes them on for the village.
+  accept_order: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "accept_order",
+        description:
+          "Mayor only. Take on an order from a neighbouring town: the village sends the goods when it has them, and the treasury is paid. Without `order`, lists the open ones. Only take on what the village can make in time; a missed order costs the village's good name.",
+        parameters: { type: "object", properties: { order: { type: "number", description: "The order's number." } } },
+      },
+    },
+    risk: { risk: "low", reason: "Village bookkeeping; nothing on the computer." },
+    run: async (args, ctx) => (await import("./orders")).acceptOrderTool(args, ctx),
   },
   // Hiring (#99): the Mayor and directors.
   propose_hire: {

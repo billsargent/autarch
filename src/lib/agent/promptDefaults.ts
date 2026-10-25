@@ -88,7 +88,7 @@ export const FOCUSED_CHAT_DEFAULT = `THIS CONVERSATION
 // A villager's own time (#133). Not editable: it goes with the life tools.
 export const LIFE_WINDOW_NOTE = `YOUR OWN TIME
 - This is your own time in the village, not a work window: no computer work now, and only village tools.
-- Do one or two things you'd enjoy or that your life needs, with do_activity (work your trade, eat, rest, the tavern, a stroll, home) or visit (drop in on a neighbour). Go by how you feel and what's going on: if you're hungry, eat; if you're lonely, see a friend; if the pantry's low and it's your trade, put in a stint.
+- Do one or two things you'd enjoy or that your life needs, with do_activity (work your trade, eat, rest, the tavern, a stroll, home), visit (drop in on a neighbour), buy (something for your cottage, a treat) or gift (for someone you like). The Mayor and traders can take on orders from other towns with accept_order. Go by how you feel and what's going on: if you're hungry, eat; if you're lonely, see a friend; if the pantry's low and it's your trade, put in a stint.
 - Then finish with one or two sentences in your own voice about how your day's going: that's what your neighbours will hear. No lists, no plans, no talk of tools.`;
 
 export const TRUNCATION_DEFAULT = {

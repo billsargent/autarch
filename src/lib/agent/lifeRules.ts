@@ -26,6 +26,8 @@ export interface TickInput {
   stock: Partial<Record<Good, number>>;
   tavern: boolean;
   friend: { id: number; name: string } | null;
+  // Something they'd like from the shop, if they can spare the coins (#135).
+  wish?: { key: string; label: string; price: number } | null;
   rng: () => number;
 }
 
@@ -35,13 +37,14 @@ export interface TickResult {
   used: Partial<Record<Good, number>>;
   hungry: boolean;
   spent: number;
+  bought: string | null;
 }
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 
 // One villager, ten minutes. Pure: same inputs, same answer.
 export function lifeTick(s: LifeState, i: TickInput): TickResult {
-  const out: TickResult = { state: { ...s }, produced: {}, used: {}, hungry: false, spent: 0 };
+  const out: TickResult = { state: { ...s }, produced: {}, used: {}, hungry: false, spent: 0, bought: null };
   const st = out.state;
   const set = (place: string, activity: string, withId: number | null = null) => Object.assign(st, { place, activity, withId });
   if (i.busy) {
@@ -100,6 +103,15 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
     }
     if (n && t.goods) out.produced[t.goods] = n;
     set("work", t.doing);
+    return out;
+  }
+  // Now and then, coins to spare go on something for the cottage.
+  if (evening && i.wish && st.coins >= i.wish.price + 5 && i.rng() < 0.15) {
+    st.coins -= i.wish.price;
+    out.spent = i.wish.price;
+    out.bought = i.wish.key;
+    st.company = clamp(st.company + 3);
+    set("plaza", `buying ${i.wish.label} at the market`);
     return out;
   }
   if (evening && (st.company < 60 || i.rng() < 0.4)) {
@@ -193,3 +205,46 @@ export const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1
 export const FRIEND_AT = 30;
 export const CLOSE_AT = 60;
 export const statusFor = (affinity: number) => (affinity >= CLOSE_AT ? "close friend" : affinity >= FRIEND_AT ? "friend" : "acquaintance");
+
+// --- romance (#134) --------------------------------------------------------------------
+// Only between close friends who are both open to it (the owner's toggle). Time
+// together at the tavern or a visit can turn into courting, then sweethearts;
+// a wedding is the owner's to bless (`readyToWed`).
+export const SWEETHEART_AT = 30;
+export const WED_AT = 80;
+
+export interface Bond {
+  affinity: number;
+  romance: number;
+  status: string;
+}
+
+export function romanceStep(b: Bond, bothOpen: boolean, by: number, rng: () => number): { romance: number; status: string; event: "courting" | "sweethearts" | "ready" | null } {
+  const friendly = statusFor(b.affinity);
+  if (b.status === "partner") return { romance: Math.min(100, b.romance + by), status: "partner", event: null };
+  if (!bothOpen || b.affinity < CLOSE_AT || rng() >= 0.35) {
+    return { romance: b.romance, status: b.status === "sweetheart" ? "sweetheart" : friendly, event: null };
+  }
+  const romance = Math.min(100, b.romance + by);
+  const status = romance >= SWEETHEART_AT ? "sweetheart" : friendly;
+  const event = b.romance === 0 ? "courting" : b.romance < SWEETHEART_AT && romance >= SWEETHEART_AT ? "sweethearts" : b.romance < WED_AT && romance >= WED_AT ? "ready" : null;
+  return { romance, status, event };
+}
+
+export const readyToWed = (b: Bond) => b.status === "sweetheart" && b.romance >= WED_AT;
+
+// --- orders from other towns (#136) ----------------------------------------------------
+export const TOWNS = ["Millbrook", "Stonehaven", "Riverbend", "Ashford"];
+// What a unit of each good fetches, in coins.
+export const GOOD_PRICE: Record<Good, number> = { wheat: 2, bread: 3, fish: 3, flowers: 2, crafts: 5, ale: 3 };
+const ORDER_GOODS: Good[] = ["wheat", "bread", "fish", "flowers", "crafts", "ale"];
+export const ORDER_DAYS = 3;
+
+// A new order: bigger and better paid as the village's name grows.
+export function makeOrder(reputation: number, rng: () => number): { town: string; good: Good; qty: number; reward: number; days: number } {
+  const good = ORDER_GOODS[Math.floor(rng() * ORDER_GOODS.length)];
+  const rep = Math.max(0, Math.min(20, reputation));
+  const qty = Math.min(40, 4 + Math.floor(rng() * 5) + rep);
+  const reward = Math.round(qty * GOOD_PRICE[good] * (1.2 + rep * 0.05));
+  return { town: TOWNS[Math.floor(rng() * TOWNS.length)], good, qty, reward, days: ORDER_DAYS };
+}

@@ -337,6 +337,23 @@ export const economy = sqliteTable("economy", {
   reputation: integer("reputation").notNull().default(0),
   // When the life simulation last ran, in unix seconds (#132).
   lastLifeTick: integer("last_life_tick"),
+  // The treasury's first purse was given (#136); the day the last order came in.
+  seeded: integer("seeded").notNull().default(0),
+  lastOrderDay: text("last_order_day"),
+});
+
+// Orders from the neighbouring towns (#136): goods wanted by a day, for coins.
+export const tradeOrders = sqliteTable("trade_orders", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  town: text("town").notNull(),
+  good: text("good").notNull(),
+  qty: integer("qty").notNull(),
+  reward: integer("reward").notNull(),
+  status: text("status", { enum: ["open", "accepted", "delivered", "expired"] }).notNull().default("open"),
+  acceptedBy: integer("accepted_by").references(() => agents.id, { onDelete: "set null" }),
+  dueAt: integer("due_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+  doneAt: integer("done_at", { mode: "timestamp" }),
 });
 
 // Each villager's life (#132): their trade's experience, needs (0-100), game

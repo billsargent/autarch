@@ -30,7 +30,8 @@ export function economyTick(stock: Stock, farms: boolean[], bakeries: boolean[],
 export async function getEconomy() {
   const [row] = await db.select().from(economy).where(eq(economy.id, 1));
   if (row) return row;
-  const [made] = await db.insert(economy).values({ id: 1 }).returning();
+  // A new village starts with a small purse in the treasury (#136).
+  const [made] = await db.insert(economy).values({ id: 1, treasury: 100, seeded: 1 }).returning();
   return made;
 }
 

@@ -12,14 +12,16 @@ import { MAX_VILLAGE_LEVEL, ringPlotIds } from "@/components/village/scenes/vill
 // Every house adds beds, and beds make room for more villagers.
 
 // `morale`: what a finished one adds to everyone's morale (morale.ts).
+// `cost`: coins from the village treasury when the Mayor's proposal is
+// approved (#136); the owner's own builds are theirs to pay for.
 export const BUILDING_KINDS = {
-  house: { label: "House", beds: 2, stamp: "svHouseBlue", morale: 0 },
-  farm: { label: "Farm", beds: 0, stamp: "wheatField", morale: 0 },
-  bakery: { label: "Bakery", beds: 0, stamp: "fishShop", morale: 0 },
-  workshop: { label: "Workshop", beds: 0, stamp: "stoneHouse", morale: 0 },
-  tavern: { label: "Tavern", beds: 0, stamp: "greenMarket", morale: 5 },
-  shop: { label: "Shop", beds: 0, stamp: "marketStall", morale: 3 },
-  garden: { label: "Garden", beds: 0, stamp: "garden", morale: 3 },
+  house: { label: "House", beds: 2, stamp: "svHouseBlue", morale: 0, cost: 40 },
+  farm: { label: "Farm", beds: 0, stamp: "wheatField", morale: 0, cost: 30 },
+  bakery: { label: "Bakery", beds: 0, stamp: "fishShop", morale: 0, cost: 40 },
+  workshop: { label: "Workshop", beds: 0, stamp: "stoneHouse", morale: 0, cost: 40 },
+  tavern: { label: "Tavern", beds: 0, stamp: "greenMarket", morale: 5, cost: 60 },
+  shop: { label: "Shop", beds: 0, stamp: "marketStall", morale: 3, cost: 50 },
+  garden: { label: "Garden", beds: 0, stamp: "garden", morale: 3, cost: 25 },
 } as const;
 export type BuildingKind = keyof typeof BUILDING_KINDS;
 export const isBuildingKind = (k: unknown): k is BuildingKind => typeof k === "string" && k in BUILDING_KINDS;
@@ -27,6 +29,15 @@ export const isBuildingKind = (k: unknown): k is BuildingKind => typeof k === "s
 export const BUILD_HOURS = 12;
 // Clearing a ring of new land (a "land" row, plot "ring-<n>") takes longer.
 export const LAND_HOURS = 24;
+export const LAND_COST = 120;
+
+const treasury = () => (sqlite.prepare("SELECT treasury FROM economy WHERE id = 1").get() as { treasury: number } | undefined)?.treasury ?? 0;
+const costOf = (kind: string) => (kind === "land" ? LAND_COST : isBuildingKind(kind) ? BUILDING_KINDS[kind].cost : 0);
+const cantAfford = (kind: string) => {
+  const cost = costOf(kind);
+  const has = treasury();
+  return has < cost ? `The treasury has ${has} coins and this needs ${cost}. Orders from the neighbouring towns bring coins in.` : null;
+};
 export { MAX_VILLAGE_LEVEL };
 
 // How far the village has grown: 0 is the first ring of land, and every
@@ -93,7 +104,7 @@ export async function proposeLand(by: number | null): Promise<BuildingRow> {
   finishDue();
   return sqlite
     .transaction(() => {
-      const problem = landProblemNow();
+      const problem = landProblemNow() ?? (by !== null ? cantAfford("land") : null);
       if (problem) throw new BuildingError(problem);
       const plotId = `ring-${villageLevel() + 1}`;
       return db
@@ -126,6 +137,8 @@ export async function proposeBuilding(kind: BuildingKind, plotId: string | null,
       const plots = plotsForLevel(villageLevel());
       if (!plots.includes(plot)) throw new BuildingError(`There's no plot called "${plot}". Plots: ${plots.join(", ")}.`, 400);
       if (!free.includes(plot)) throw new BuildingError(`The ${plot} plot is taken. Free: ${free.join(", ")}.`);
+      const short = by !== null ? cantAfford(kind) : null;
+      if (short) throw new BuildingError(short);
       // The owner builds straight away; the Mayor's proposals wait for the owner.
       return db
         .insert(buildings)
@@ -144,6 +157,10 @@ export async function approveBuilding(id: number): Promise<BuildingRow> {
   const [b] = await db.select().from(buildings).where(eq(buildings.id, id));
   if (!b) throw new BuildingError("No such building.", 404);
   if (b.status !== "proposed") throw new BuildingError(`That building is already ${b.status}.`);
+  // The Mayor's proposals are paid from the treasury (#136).
+  const short = cantAfford(b.kind);
+  if (short) throw new BuildingError(short);
+  sqlite.prepare("UPDATE economy SET treasury = treasury - ? WHERE id = 1").run(costOf(b.kind));
   const [row] = await db
     .update(buildings)
     .set({ status: "building", readyAt: new Date(Date.now() + (b.kind === "land" ? LAND_HOURS : BUILD_HOURS) * 3600_000) })
