@@ -23,6 +23,7 @@ import {
   classifyProcessTarget,
   classifyFetchUrl,
   resolvePathSafe,
+  isReallyWithin,
   buildOverrides,
   invalidPackageArgs,
   UNIT_NAME,
@@ -31,6 +32,7 @@ import {
   type SuperviseOverrides,
 } from "./risk";
 import { MAX_OUTPUT_CHARS, MAX_FETCH_BYTES, MAX_DOWNLOAD_BYTES, workspaceSkillsDir } from "./config";
+import { SKILL_PROMPT_CHARS } from "./limits";
 import { cronProblem, nextCronRun } from "./cron";
 
 const execAsync = promisify(exec);
@@ -547,7 +549,7 @@ export async function executeTool(
     case "read_file":
       return readFile(String(args.path || ""), settings.workspaceDir);
     case "write_file":
-      return writeFile(String(args.path || ""), String(args.content ?? ""), Boolean(args.append), settings.workspaceDir);
+      return skillSizeNote(await writeFile(String(args.path || ""), String(args.content ?? ""), Boolean(args.append), settings.workspaceDir), String(args.path || ""), settings.workspaceDir);
     case "delete_path":
       return deletePath(String(args.path || ""), settings.workspaceDir);
     case "list_directory":
@@ -594,7 +596,7 @@ export async function executeTool(
     case "download_file":
       return downloadFile(args, settings.workspaceDir);
     case "edit_file":
-      return editFile(args, settings.workspaceDir);
+      return skillSizeNote(await editFile(args, settings.workspaceDir), String(args.path || ""), settings.workspaceDir);
     case "web_search":
       return webSearch(args);
     case "take_screenshot":
@@ -664,6 +666,23 @@ async function readFile(p: string, workspaceDir: string) {
   const resolved = resolvePathSafe(p, workspaceDir);
   const content = await fs.readFile(resolved, "utf-8");
   return { output: truncate(content), summary: `read ${resolved}` };
+}
+
+// A town skill longer than SKILL_PROMPT_CHARS is cut in everyone's prompt, so
+// whoever just made it that long is told, with how to fix it.
+async function skillSizeNote(result: { output: string; summary: string }, p: string, workspaceDir: string) {
+  try {
+    const resolved = resolvePathSafe(p, workspaceDir);
+    if (!resolved.endsWith(".md") || !isReallyWithin(workspaceSkillsDir(workspaceDir), resolved)) return result;
+    const size = (await fs.readFile(resolved, "utf-8")).length;
+    if (size <= SKILL_PROMPT_CHARS) return result;
+    return {
+      ...result,
+      output: `${result.output}\nNote: this skill is now ${size} characters, but only the first ${SKILL_PROMPT_CHARS} reach anyone's prompt; the rest is never seen. Trim it, or move a section into a skill file of its own.`,
+    };
+  } catch {
+    return result;
+  }
 }
 
 async function writeFile(p: string, content: string, append: boolean, workspaceDir: string) {

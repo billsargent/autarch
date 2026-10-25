@@ -112,7 +112,13 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
     if (files.length) {
       const parts: string[] = [];
       for (const f of files) {
-        const content = (await fs.readFile(path.join(skillsDir, f), "utf-8")).slice(0, SKILL_PROMPT_CHARS);
+        const full = await fs.readFile(path.join(skillsDir, f), "utf-8");
+        // A skill that's too long says so where it's cut, so the next villager
+        // to edit it trims it or splits it.
+        const content =
+          full.length > SKILL_PROMPT_CHARS
+            ? `${full.slice(0, SKILL_PROMPT_CHARS)}\n[…cut: this skill is ${full.length} characters and only ${SKILL_PROMPT_CHARS} are shown. Whoever edits it next: trim it, or move a section into its own skill file.]`
+            : full;
         parts.push(`### ${f.replace(/\.md$/, "")}\n${content}`);
       }
       skillsBlock = parts.join("\n\n");
@@ -191,7 +197,7 @@ ${isWorkTurn
 ${goalsBlock}
 
 REUSABLE SKILLS
-- You maintain a library of markdown playbooks in ${skillsDir}, injected into your context every session. When you figure out a reusable technique (tool usage, recon methodology, CVE triage, etc.), write it there as a markdown file (low risk) so you don't re-derive it next session. Keep them concise and practical.
+- You maintain a library of markdown playbooks in ${skillsDir}, injected into your context every session. When you figure out a reusable technique (tool usage, recon methodology, CVE triage, etc.), write it there as a markdown file (low risk) so you don't re-derive it next session. Keep them concise and practical: each is shown up to ${SKILL_PROMPT_CHARS} characters, so give a new topic its own file rather than growing an old one.
 - Installed skills:
 ${skillsBlock}
 

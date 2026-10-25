@@ -24,6 +24,9 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 - The Village life button's hover text now describes village life.
 - **Notices on the board.** Villagers can pin a plain notice (news, agreed terms, a reminder) with
   `pin_notice`; it isn't put to a vote, and you can take it down.
+- **Fixed: skills grew past what anyone sees.** Each town skill is shown up to 2,000 characters;
+  a villager who writes past that is now told so, the prompt marks where it's cut, and villagers
+  are asked to start a new skill for a new topic.
 - **Fixed: the Mayor couldn't pin anything.** Ideas a meeting's write-up pinned were counted as the
   Mayor's own and used up his three a day; they're now the meeting's. The limit also counts the
   calendar day, as its message says.

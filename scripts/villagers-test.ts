@@ -1085,6 +1085,15 @@ async function main() {
   await agentRoute.PATCH(req(`/api/agents/${cal.id}`, "PATCH", { trade: "baker" }), { params: Promise.resolve({ id: String(cal.id) }) });
   check("…and the owner can change it", life.lifeSummary(cal.id)!.trade, "baker");
 
+  // A skill too long for the prompt says so, to its writer and where it's cut.
+  const longSkill = await executeTool("write_file", { path: "skills/zz-long.md", content: `# Long\n${"x".repeat(2100)}` }, town, ctxCal);
+  check("writing a skill past the limit warns the writer", longSkill.output.includes("only the first 2000 reach anyone's prompt"), true);
+  const { buildSystemPrompt: promptFor } = await import("../src/lib/agent/systemPrompt");
+  check("…and the prompt marks where it's cut", (await promptFor(await getSettings(), { agent: await rowOf(cal.id) })).includes("[…cut: this skill is"), true);
+  await executeTool("delete_path", { path: "skills/zz-long.md" }, town, ctxCal);
+  check("a short skill gets no warning", (await executeTool("write_file", { path: "skills/zz-short.md", content: "# Short\nFine." }, town, ctxCal)).output.includes("Note:"), false);
+  await executeTool("delete_path", { path: "skills/zz-short.md" }, town, ctxCal);
+
   // --- orders from other towns (#136), the shop (#135), friendship and romance (#134) ----
   const orders = await import("../src/lib/agent/orders");
   const ordersRoute = await import("../src/app/api/life/orders/route");
