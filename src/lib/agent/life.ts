@@ -3,6 +3,7 @@ import { lifeEvents, villagerLife } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { isNight } from "./daynight";
 import { getSettings } from "./settingsStore";
+import { ABANDONED_AFTER_MS } from "./turnLock";
 import { GOODS, TRADES, levelOf, titleOf, tradeOf, type Good } from "./trades";
 import { FRIEND_AT, TICK_MINUTES, dayKey, hm, lifeTick, nextWindowFor, socialise, statusFor, type Balance } from "./lifeRules";
 
@@ -96,7 +97,13 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
     status: string;
   }>;
   const busy = new Set(
-    (sqlite.prepare("SELECT DISTINCT c.agent_id AS id FROM work_sessions s JOIN conversations c ON c.id = s.conversation_id WHERE s.status = 'running'").all() as Array<{ id: number | null }>).map((r) => r.id),
+    // A running turn whose heartbeat went quiet belonged to a process that
+    // died: that villager isn't busy (the same test the village uses).
+    (
+      sqlite
+        .prepare("SELECT DISTINCT agent_id AS id FROM work_sessions WHERE status = 'running' AND COALESCE(heartbeat_at, started_at) >= ?")
+        .all(Math.floor((now.getTime() - ABANDONED_AFTER_MS) / 1000)) as Array<{ id: number | null }>
+    ).map((r) => r.id),
   );
   const built = new Set((sqlite.prepare("SELECT DISTINCT kind FROM buildings WHERE status = 'built'").all() as Array<{ kind: string }>).map((r) => r.kind));
   const asleep = isNight(now, settings.bedtime, settings.wakeTime);

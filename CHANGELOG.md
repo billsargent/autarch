@@ -3,6 +3,30 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-25 — Village life: trades, a day of their own, and new faces
+
+- **Villagers have lives.** Each has a village trade (farmer, baker, fisher, innkeeper, gardener
+  and more), guessed from their role or chosen by you. Every ten minutes, at no cost, their day
+  moves on: they work their trade and make goods for the village, eat when hungry, rest when
+  tired, go to the tavern or a friend's in the evening, and sleep at night. Friendships grow from
+  time spent together, and the notice board has a village chronicle of what happened.
+- **They talk like villagers.** Their instructions no longer say their trade is looking after the
+  computer: they're neighbours with a life, who are handy with the computer when asked. Every turn
+  tells them how their own day is going.
+- **A life window instead of free time.** Switch on village life for a villager and once a day
+  they get a short turn of their own with village tools only. Computer tools can't be used there,
+  even in Unrestricted mode. It has its own small daily budget.
+- **You choose how their day splits** between computer jobs and village life (Mayor's ledger →
+  Work & life): village life when idle, work hours then village life, or a balanced share; each
+  villager can have their own.
+- **The map shows it,** with idle villagers at their workplace, the tavern or the plaza, and one
+  bubble per group ("🍺 6 at the tavern"). Talking to someone shows a card with their trade, level,
+  needs, coins and friends.
+- **38 new looks and some animals.** 29 more characters from the art pack and 8 clothing colours,
+  grouped in the look picker with a walking preview, plus chickens and a cow on the farm, a cat,
+  a dog by your door and a horse by the west road.
+- **Fixed:** the old woman vanished on every other step (her sprite sheet was short).
+
 ## 2026-10-25 — Email, and the built-in prompts on show
 
 - **Your email, over SMTP and IMAP.** The Mayor's ledger has a new Email page for your mail

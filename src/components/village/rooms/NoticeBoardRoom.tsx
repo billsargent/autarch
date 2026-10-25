@@ -9,13 +9,14 @@ import { useVillagers } from "../../data/useVillagers";
 import type { AgentRow } from "@/lib/agent/clientTypes";
 import IdeasBoard from "./IdeasBoard";
 import MoraleBoard from "./MoraleBoard";
+import Chronicle from "./Chronicle";
 import type { RoomProps } from "./types";
 
 // The notice board in the village square: goals are notes pinned to it.
 // Same data and actions as the Goals page (useGoals). Ideas and votes join
 // the board with #98.
 
-type View = { kind: "board" } | { kind: "note"; id: number } | { kind: "pin" } | { kind: "morale" } | { kind: "ideas" };
+type View = { kind: "board" } | { kind: "note"; id: number } | { kind: "pin" } | { kind: "morale" } | { kind: "ideas" } | { kind: "chronicle" };
 
 const field = "mt-1 w-full rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 py-1.5 text-sm font-normal outline-none";
 
@@ -38,6 +39,7 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
 
   if (view.kind === "morale") return <MoraleBoard onBack={toBoard} onClose={onClose} />;
   if (view.kind === "ideas") return <IdeasBoard onBack={toBoard} onClose={onClose} />;
+  if (view.kind === "chronicle") return <Chronicle onBack={toBoard} onClose={onClose} />;
 
   if (view.kind === "pin") {
     return (
@@ -104,7 +106,10 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
           <button onClick={() => setView({ kind: "pin" })} className="village-btn village-btn-primary px-3 py-2 text-xs">
             📌 Pin a new goal
           </button>
-          <button onClick={() => setView({ kind: "ideas" })} className="village-btn ml-auto px-3 py-2 text-xs">
+          <button onClick={() => setView({ kind: "chronicle" })} className="village-btn ml-auto px-3 py-2 text-xs">
+            📰 Chronicle
+          </button>
+          <button onClick={() => setView({ kind: "ideas" })} className="village-btn px-3 py-2 text-xs">
             💡 Ideas
           </button>
           <button onClick={() => setView({ kind: "morale" })} className="village-btn px-3 py-2 text-xs">

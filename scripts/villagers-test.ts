@@ -233,8 +233,15 @@ async function main() {
   };
   // Make it daytime whatever the real clock says: nobody can be asked at night.
   const hm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  // A time on today's clock face, `min` minutes from now. Clock arithmetic,
+  // not real time, so it holds on the night the clocks change.
+  const clockIn = (min: number) => {
+    const n = new Date();
+    const t = (((n.getHours() * 60 + n.getMinutes() + min) % 1440) + 1440) % 1440;
+    return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+  };
   const hmNow = new Date();
-  await updateSettings({ bedtime: hm(new Date(hmNow.getTime() + 2 * 3600_000)), wakeTime: hm(new Date(hmNow.getTime() + 3 * 3600_000)) });
+  await updateSettings({ bedtime: clockIn(120), wakeTime: clockIn(180) });
   fake.script.length = 0;
   fake.byAgent.Cal = [{ tools: [{ name: "ask_villager", args: { to: "dot", message: "Where are the nets?" } }] }, { text: "I've asked Dot." }];
   fake.byAgent.Dot = [{ text: "In the shed by the pond." }];
@@ -279,7 +286,7 @@ async function main() {
   check("not yourself", (await askVillager({ to: "Cal", message: "hi" }, ctxCal)).output, "Refused: that's you.");
   await agentRoute.PATCH(req(`/api/agents/${ann.id}`, "PATCH", { status: "paused" }), { params: Promise.resolve({ id: String(ann.id) }) });
   check("not someone who's paused", (await askVillager({ to: "Ann", message: "hi" }, ctxCal)).output.includes("resting"), true);
-  await updateSettings({ bedtime: hm(new Date(hmNow.getTime() - 3600_000)), wakeTime: hm(new Date(hmNow.getTime() + 3600_000)) });
+  await updateSettings({ bedtime: clockIn(-60), wakeTime: clockIn(60) });
   check("not at night", (await askVillager({ to: "Bea", message: "hi" }, ctxCal)).output.includes("is asleep"), true);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
 
@@ -415,7 +422,7 @@ async function main() {
   const meetingsRoute = await import("../src/app/api/meetings/route");
   const meetingRoute = await import("../src/app/api/meetings/[id]/route");
   const { meetings: meetingsT } = await import("../src/db/schema");
-  const daytime = () => updateSettings({ bedtime: hm(new Date(Date.now() + 2 * 3600_000)), wakeTime: hm(new Date(Date.now() + 3 * 3600_000)) });
+  const daytime = () => updateSettings({ bedtime: clockIn(120), wakeTime: clockIn(180) });
   await daytime();
   const view = async (id: number) => (await meetingRoute.GET(req(`/api/meetings/${id}`, "GET"), { params: Promise.resolve({ id: String(id) }) })).json();
   const patchMeeting = (id: number, body: unknown) => meetingRoute.PATCH(req(`/api/meetings/${id}`, "PATCH", body), { params: Promise.resolve({ id: String(id) }) });
@@ -481,7 +488,7 @@ async function main() {
   await settleTurns(mid);
   check("an ended meeting takes no more questions", (await patchMeeting(mid, { action: "ask", message: "Hello?" })).status, 409);
   check("…and everyone goes back to work", villagers.villagerStates([gus.id]).get(gus.id)?.inMeeting, false);
-  await updateSettings({ bedtime: hm(new Date(Date.now() - 3600_000)), wakeTime: hm(new Date(Date.now() + 3600_000)) });
+  await updateSettings({ bedtime: clockIn(-60), wakeTime: clockIn(60) });
   check("no meetings at night", (await meetingsRoute.POST(req("/api/meetings", "POST", {}))).status, 409);
   await daytime();
 
@@ -527,7 +534,7 @@ async function main() {
   check("never his own requests", await away.considerWhileAway(await pend(mayor.id, "low")), "skipped");
   await updateSettings({ awaySpendCapUsd: 0 });
   check("nothing once the away budget is spent", await away.considerWhileAway(await pend(cal.id, "low")), "skipped");
-  await updateSettings({ awaySpendCapUsd: 5, bedtime: hm(new Date(Date.now() - 3600_000)), wakeTime: hm(new Date(Date.now() + 3600_000)) });
+  await updateSettings({ awaySpendCapUsd: 5, bedtime: clockIn(-60), wakeTime: clockIn(60) });
   check("nothing at night", await away.considerWhileAway(await pend(cal.id, "low")), "skipped");
   await daytime();
 
@@ -636,7 +643,7 @@ async function main() {
   check("the Mayor can", (await power("call_vote", { ideaId: threeId })).startsWith(`The vote on idea #${threeId}`), true);
   check("…and it's adopted", (await settleIdea(threeId)).status, "adopted");
   check("one daily vote at most", await ideasLib.dailyVote(), null);
-  await updateSettings({ bedtime: hm(new Date(Date.now() - 3600_000)), wakeTime: hm(new Date(Date.now() + 3600_000)) });
+  await updateSettings({ bedtime: clockIn(-60), wakeTime: clockIn(60) });
   const nightIdea = (await (await ideasRoute.POST(req("/api/ideas", "POST", { title: "Night idea" }))).json()).idea;
   check("no votes at night", (await ideaPatch(nightIdea.id, "vote")).status, 409);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });

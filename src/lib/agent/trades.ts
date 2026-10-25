@@ -67,6 +67,7 @@ export const tradeOf = (v: { trade?: string | null; role?: string | null; isMayo
 // Skill: a level from experience, and a title for it.
 export const levelOf = (xp: number) => Math.min(10, Math.floor(Math.sqrt(Math.max(0, xp) / 20)) + 1);
 export function titleOf(trade: TradeKey, level: number): string {
+  if (trade === "mayor") return "Mayor"; // not a trade you rise in
   const prefix = level >= 8 ? "Master" : level >= 5 ? "Skilled" : level <= 1 ? "Apprentice" : "";
   return prefix ? `${prefix} ${TRADES[trade].label.toLowerCase()}` : TRADES[trade].label;
 }

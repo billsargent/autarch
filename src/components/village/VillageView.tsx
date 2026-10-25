@@ -194,6 +194,16 @@ export default function VillageView() {
     }
   }
   const offsets = standOffsets(plans.map((p) => p.target));
+  // Villagers out and about together share one bubble ("🍺 6 at the tavern"),
+  // shown over the first of them (#132).
+  const lifeLine = (i: number): string | null => {
+    const { v, mood, target } = plans[i];
+    if (mood !== "idle" || !v.life || v.life.place === "home") return null;
+    const group = plans.filter((p) => p.mood === "idle" && p.target === target && p.v.life && p.v.life.place === v.life!.place);
+    if (group[0].v.id !== v.id) return null;
+    const icon = PLACE_ICON[v.life.place] ?? v.life.icon;
+    return group.length > 1 ? `${icon} ${group.length} ${PLACE_GROUP[v.life.place] ?? `together: ${v.life.activity}`}` : `${icon} ${v.life.activity}`;
+  };
   const specs: VillagerSpec[] = plans.map(({ v, mood, target, strolling }, i) => ({
     id: `agent-${v.id}`,
     name: v.name,
@@ -211,9 +221,7 @@ export default function VillageView() {
           ? bubbleLine(v.lastSaid)
           : mood !== "asleep" && clock - Date.parse(v.createdAt) < NEWCOMER_MS
             ? `👋 Hello! I'm ${v.name}, new in town.`
-            : mood === "idle" && v.life && v.life.place !== "home"
-              ? `${PLACE_ICON[v.life.place] ?? v.life.icon} ${v.life.activity}`
-              : null,
+            : lifeLine(i),
     asleep: mood === "asleep",
     hint:
       v.id === talkKeyTarget ? (
@@ -236,7 +244,7 @@ export default function VillageView() {
             .filter((p) => p.mood !== "idle" || p.strolling)
             .slice(0, 2)
             .map((p) => moodLabel(p.mood, p.v.name, p.strolling))
-            .join(" · ") || `${plans.length} villagers relaxing at home`;
+            .join(" · ") || lifeSummaryLine(plans.map((p) => p.v)) || `${plans.length} villagers relaxing at home`;
 
   return (
     <div className={`${villageFonts} village-root flex h-full w-full flex-col`}>
@@ -337,6 +345,25 @@ export default function VillageView() {
 // open it), and scaffolding where one is going up.
 // Where a villager's life has them (#132), as a waypoint of the scene.
 const PLACE_ICON: Record<string, string> = { tavern: "🍺", plaza: "🚶", visit: "🫖" };
+const PLACE_GROUP: Record<string, string> = { tavern: "at the tavern", plaza: "out in the plaza", visit: "having a natter", work: "at work" };
+
+// The village at a glance, from everyone's life: "6 at the tavern · Gus working the fields".
+function lifeSummaryLine(vs: Array<{ name: string; life?: VillagerLife | null }>): string {
+  const groups = new Map<string, string[]>();
+  for (const v of vs) {
+    if (!v.life || v.life.place === "home") continue;
+    const k = v.life.place === "work" ? `work:${v.life.activity}` : v.life.place;
+    groups.set(k, [...(groups.get(k) ?? []), v.name]);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 2)
+    .map(([k, names]) => {
+      const place = k.startsWith("work:") ? k.slice(5) : (PLACE_GROUP[k] ?? k);
+      return names.length > 1 ? `${names.length} ${place}` : `${names[0]} ${place}`;
+    })
+    .join(" · ");
+}
 function lifeSpot(life: VillagerLife, scene: SceneManifest, state: ReturnType<typeof useBuildings>["state"]): string | null {
   const has = (w: string) => scene.waypoints.some((p) => p.id === w);
   const doorOf = (kind: string | null) => {
