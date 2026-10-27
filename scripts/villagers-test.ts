@@ -1083,7 +1083,7 @@ async function main() {
   fake.byAgent.Cal = [{ tools: [{ name: "run_shell_command", args: { command: "ls" } }, { name: "do_activity", args: { what: "rest" } }] }, { text: "A quiet afternoon; I put my feet up." }];
   const lifeTurn = await runAgentTurn({ agentId: cal.id, trigger: "life", eventNote: "[VILLAGE LIFE] Your own time." });
   const lifeSaw = [...fake.seen].reverse().find((s) => s.system.startsWith("You are Cal") && s.system.includes("YOUR OWN TIME"))!;
-  check("a life window offers only village life and the diary", [...lifeSaw.tools].sort(), ["accept_order", "buy", "do_activity", "gift", "update_journal", "visit"]);
+  check("a life window offers only village life, letters and the diary", [...lifeSaw.tools].sort(), ["accept_order", "buy", "do_activity", "gift", "read_letters", "update_journal", "visit", "write_letter"]);
   const lifeMsgs = await msgsOf(lifeTurn.conversationId);
   check("…the computer is off-limits there, whatever the mode", lifeMsgs.find((m) => m.role === "tool" && m.toolName === "run_shell_command")?.content?.startsWith("BLOCKED: This is your own time"), true);
   check("…and village tools change their life", life.lifeSummary(cal.id)!.activity, "having a rest");
@@ -1310,6 +1310,62 @@ async function main() {
   check("switching it off brings the limits back", [settled.noLimits, settled.spendCeilingUsd, (await checkWorkAllowed(settled, cal.id)).allowed], [false, null, false]);
   check("…the village's budget among them", (await ceilingErr({ userMessage: "hello", agentId: bea.id })).startsWith("The village has spent today's budget"), true);
   await settingsRoute.PUT(req("/api/settings", "PUT", { townDailyBudgetUsd: "", maxAgentSteps: 16 }));
+
+  // Letters between villagers (#172).
+  const letters = await import("../src/lib/agent/letters");
+  const lettersRoute = await import("../src/app/api/letters/route");
+  const { LIFE_TOOL_NAMES } = await import("../src/lib/agent/lifeTools");
+  const as = (a: { id: number; name: string }) => ({ agentId: a.id, agentName: a.name }) as Parameters<typeof letters.writeLetterTool>[1];
+  const sessionsBefore = (await db.select().from(workSessions)).length;
+  fake.script.length = 0;
+  fake.script.push({ tools: [{ name: "write_letter", args: { to: "Dot", subject: "The fence", body: "Could you look at the garden fence this week?" } }] }, { text: "Sent." });
+  await runAgentTurn({ userMessage: "write to Dot about the fence", agentId: cal.id });
+  const firstLetter = letters.unreadLetters(dot.id)[0];
+  check("a villager writes a letter in their turn", [firstLetter?.fromId, firstLetter?.subject], [cal.id, "The fence"]);
+  check("…which starts no turn for the neighbour", (await db.select().from(workSessions)).length - sessionsBefore, 1);
+  fake.script.push({ text: "Hello." });
+  await runAgentTurn({ userMessage: "morning", agentId: dot.id });
+  check("the neighbour sees it waiting in their mailbox", fake.lastStep()!.system.includes(`#${firstLetter.id} from Cal: "The fence"`), true);
+  const ownerView = (await (await lettersRoute.GET(req("/api/letters", "GET"))).json()).threads as Array<{ subject: string; letters: unknown[] }>;
+  check("the owner reads every letter at the post office", ownerView.map((t) => [t.subject, t.letters.length]), [["The fence", 1]]);
+  check("…without marking it read for the villager", letters.unreadLetters(dot.id).length, 1);
+  check("reading the mailbox shows the letter…", letters.readLetters(dot.id).includes("Could you look at the garden fence"), true);
+  check("…and marks it read", letters.unreadLetters(dot.id).length, 0);
+  const answered = await letters.writeLetterTool({ reply_to: firstLetter.id, body: "Yes, Thursday." }, as(dot));
+  const replyLetter = letters.unreadLetters(cal.id)[0];
+  check("a reply joins the thread and goes back to the writer", [answered.summary, replyLetter?.threadId, replyLetter?.subject], ["letter to Cal", firstLetter.threadId, "Re: The fence"]);
+  check("…and the thread reads in order", letters.readLetters(cal.id, replyLetter.id).indexOf("garden fence") < letters.readLetters(cal.id, replyLetter.id).indexOf("Yes, Thursday."), true);
+  check("the owner's view keeps it as one thread", ((await (await lettersRoute.GET(req(`/api/letters?agent=${cal.id}`, "GET"))).json()).threads as unknown[]).length, 1);
+  const refusedLetter = async (args: Record<string, unknown>, who = cal) => (await letters.writeLetterTool(args, as(who))).output;
+  check("no letters to yourself", await refusedLetter({ to: "Cal", subject: "x", body: "hi" }), "Refused: that's you.");
+  check("…or to someone who doesn't live here", (await refusedLetter({ to: "Zed", subject: "x", body: "hi" })).startsWith('Refused: nobody called "Zed"'), true);
+  check("…or without a subject", await refusedLetter({ to: "Dot", body: "hi" }), "Refused: give it a subject (`subject`).");
+  check("…or too long", (await refusedLetter({ to: "Dot", subject: "x", body: "a".repeat(letters.MAX_LETTER_CHARS + 1) })).startsWith("Refused: keep it under"), true);
+  check("nobody can answer a letter that wasn't theirs", await refusedLetter({ reply_to: firstLetter.id, body: "me too" }, ann), `Refused: there's no letter #${firstLetter.id} in your mailbox.`);
+  check("…or read it", letters.readLetters(ann.id, firstLetter.id), `There's no letter #${firstLetter.id} in your mailbox.`);
+  for (let i = 0; i < letters.LETTERS_PER_DAY - 1; i++) await refusedLetter({ to: "Dot", subject: `Note ${i}`, body: "hi" });
+  check("a villager writes at most so many letters a day", (await refusedLetter({ to: "Dot", subject: "one more", body: "hi" })).startsWith(`Refused: you've written ${letters.LETTERS_PER_DAY} letters today`), true);
+  await updateSettings({ noLimits: true });
+  check("…unless No limits is on", (await refusedLetter({ to: "Dot", subject: "one more", body: "hi" })).startsWith("Letter #"), true);
+  await updateSettings({ noLimits: false });
+  check("the mailbox line lists a few and counts the rest", letters.mailboxLine(dot.id).includes("unread letters") && letters.mailboxLine(dot.id).includes("more)"), true);
+  const eve = (await add({ name: "Eve", maxActionsPerHour: 1 })).agent;
+  fake.script.push(
+    {
+      tools: [
+        { name: "write_letter", args: { to: "Dot", subject: "One", body: "hi" } },
+        { name: "write_letter", args: { to: "Dot", subject: "Two", body: "hi" } },
+      ],
+    },
+    { text: "ok" },
+  );
+  const { conversationId: eveChat } = await runAgentTurn({ userMessage: "write twice", agentId: eve.id });
+  check("letters count towards a villager's hourly actions", (await db.select().from(toolExecutions).where(eq(toolExecutions.conversationId, eveChat))).map((e) => e.status), ["success", "rate_limited"]);
+  check("villagers can read and write letters in their own time too", ["write_letter", "read_letters"].every((t) => LIFE_TOOL_NAMES.includes(t)), true);
+  const fay = (await add({ name: "Fay", enabledTools: ["read_file", "ask_villager"] })).agent;
+  const { offerToEveryVillager } = await import("../src/lib/agent/settingsStore");
+  offerToEveryVillager(["write_letter", "read_letters", "propose_hire"]);
+  check("a villager with a tool list of their own is offered the letters once, and nothing else", (await villagers.getAgent(fay.id))!.enabledTools, ["read_file", "ask_villager", "write_letter", "read_letters"]);
 
   fake.close();
   try {

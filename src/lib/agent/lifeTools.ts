@@ -213,6 +213,41 @@ export const LIFE_TOOLS: Record<string, LifeTool> = {
       return { output: doActivity(ctx.agentId, ctx.agentName, what), summary: `life: ${what}` };
     },
   },
+  // Letters (#172): the mailbox is a good use of a quiet moment.
+  write_letter: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "write_letter",
+        description:
+          "Write a letter to a neighbour. It waits in their mailbox and they answer in their own time; the answer comes to your mailbox (read_letters). Use it for things that can wait: news, plans, thanks, a request. To answer a letter, give reply_to and leave out to and subject.",
+        parameters: {
+          type: "object",
+          properties: {
+            to: { type: "string", description: "The neighbour's name." },
+            subject: { type: "string", description: "A few words." },
+            body: { type: "string", description: "The letter, plainly. A few sentences is plenty." },
+            reply_to: { type: "number", description: "The number of the letter you're answering." },
+          },
+          required: ["body"],
+        },
+      },
+    },
+    risk: SAFE,
+    run: async (args, ctx) => (await import("./letters")).writeLetterTool(args, ctx),
+  },
+  read_letters: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "read_letters",
+        description: "Open your mailbox: new letters (marked read once you've seen them) and the latest ones. With `letter`, read that letter's whole thread.",
+        parameters: { type: "object", properties: { letter: { type: "number", description: "A letter's number." } } },
+      },
+    },
+    risk: SAFE,
+    run: async (args, ctx) => (await import("./letters")).readLettersTool(args, ctx),
+  },
   visit: {
     definition: {
       type: "function" as const,

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useVillagers } from "../../data/useVillagers";
 import ParchmentDialog from "../ParchmentDialog";
 import { Calendar } from "./HomeRoom";
+import LetterRack from "./LetterRack";
 import Outbox, { useDrafts } from "./Outbox";
 import type { RoomProps } from "./types";
 
@@ -15,6 +16,7 @@ export default function PostOfficeRoom({ action, onClose }: RoomProps) {
   if (action === "post.sent") return <SentLog onClose={onClose} />;
   if (action === "post.inbox") return <Mailbag onClose={onClose} />;
   if (action === "post.calendar") return <Calendar onClose={onClose} />;
+  if (action === "post.letters") return <LetterRack kicker="The post office" onClose={onClose} />;
   return <Outbox onClose={onClose} kicker="The post office" />;
 }
 

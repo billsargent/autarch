@@ -41,6 +41,41 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
     risk: { risk: "low", reason: "Asks another villager something; they answer on their own budget. No system access." },
     run: async (args, ctx) => (await import("./messaging")).askVillager(args, ctx),
   },
+  // Letters between villagers (#172): they wait in the neighbour's mailbox.
+  write_letter: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "write_letter",
+        description:
+          "Write a letter to a neighbour. It waits in their mailbox and they answer in their own time; the answer comes to your mailbox (read_letters). Use it for things that can wait: news, plans, thanks, a request. To answer a letter, give reply_to and leave out to and subject.",
+        parameters: {
+          type: "object",
+          properties: {
+            to: { type: "string", description: "The neighbour's name." },
+            subject: { type: "string", description: "A few words." },
+            body: { type: "string", description: "The letter, plainly. A few sentences is plenty." },
+            reply_to: { type: "number", description: "The number of the letter you're answering." },
+          },
+          required: ["body"],
+        },
+      },
+    },
+    risk: { risk: "low", reason: "A letter to a neighbour, kept in the village. No system access." },
+    run: async (args, ctx) => (await import("./letters")).writeLetterTool(args, ctx),
+  },
+  read_letters: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "read_letters",
+        description: "Open your mailbox: new letters (marked read once you've seen them) and the latest ones. With `letter`, read that letter's whole thread.",
+        parameters: { type: "object", properties: { letter: { type: "number", description: "A letter's number." } } },
+      },
+    },
+    risk: { risk: "low", reason: "Reads the villager's own mailbox. No system access." },
+    run: async (args, ctx) => (await import("./letters")).readLettersTool(args, ctx),
+  },
   // The owner's inbox (#124): only for the villagers the owner picks
   // (Mayor's ledger → Email); effectiveTools adds it for them alone.
   read_email: {

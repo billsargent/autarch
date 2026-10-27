@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { db, sqlite } from "@/db";
 import { agentSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import fs from "node:fs";
@@ -38,13 +38,32 @@ function migrateSkillsDirOnce(workspaceDir: string) {
 // stays off.
 export const DEFAULT_TOWN_BUDGET_USD = 2;
 
-const NEW_TOOLS_TO_OFFER = ["message_owner", "ask_villager", ...MAYOR_TOOLS, ...HIRING_TOOLS, "note_about", "propose_idea", "save_draft", "pin_notice"];
+const NEW_TOOLS_TO_OFFER = ["message_owner", "ask_villager", ...MAYOR_TOOLS, ...HIRING_TOOLS, "note_about", "propose_idea", "save_draft", "pin_notice", "write_letter", "read_letters"];
+// Village tools every villager should have, even one with a tool list of
+// their own: added to those lists once (done_once), so a tool the owner later
+// takes off a villager stays off.
+const OFFERED_TO_EVERY_VILLAGER = ["write_letter", "read_letters"];
+
+export function offerToEveryVillager(tools: string[]) {
+  const everyone = tools.filter((t) => OFFERED_TO_EVERY_VILLAGER.includes(t));
+  if (!everyone.length) return;
+  const own = sqlite.prepare("SELECT id, enabled_tools AS tools FROM agents WHERE enabled_tools IS NOT NULL").all() as Array<{ id: number; tools: string }>;
+  for (const a of own) {
+    const list = JSON.parse(a.tools) as string[];
+    const add = everyone.filter((t) => !list.includes(t));
+    if (add.length) sqlite.prepare("UPDATE agents SET enabled_tools = ? WHERE id = ?").run(JSON.stringify([...list, ...add]), a.id);
+  }
+}
 
 async function ensureMessagingEnabled(row: AgentSettingsRow): Promise<AgentSettingsRow> {
   if (messagingEnabled) return row;
   messagingEnabled = true;
   const offered = new Set((row.offeredTools as string[] | null) ?? []);
   const enabled = (row.enabledTools as string[]) || [];
+  if (!sqlite.prepare("SELECT 1 FROM done_once WHERE name = 'letters-172'").get()) {
+    offerToEveryVillager(OFFERED_TO_EVERY_VILLAGER);
+    sqlite.prepare("INSERT OR IGNORE INTO done_once (name) VALUES ('letters-172')").run();
+  }
   const fresh = NEW_TOOLS_TO_OFFER.filter((t) => !offered.has(t));
   if (!fresh.length) return row;
   const next = [...enabled, ...fresh.filter((t) => !enabled.includes(t))];
