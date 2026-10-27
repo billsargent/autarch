@@ -166,7 +166,7 @@ export default function Outbox({ onClose, kicker = "Your home" }: { onClose: () 
                 </div>
               )}
               {noAddress && <p className="mt-1 text-[11px] font-semibold text-[#b3261e]">⚠ Add an email address in To before sending it.</p>}
-              {(d.newRecipients?.length ?? 0) > 0 && (
+              {!noAddress && !edits[d.id]?.target && (d.newRecipients?.length ?? 0) > 0 && (
                 <p className="mt-1 text-[11px] font-semibold text-[#8a5a2b]">⚠ Never emailed before: {d.newRecipients!.join(", ")}</p>
               )}
               {d.status === "draft" ? (
