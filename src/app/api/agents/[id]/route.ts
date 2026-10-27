@@ -20,7 +20,9 @@ export async function PATCH(req: Request, { params }: Params) {
   const agent = await find((await params).id);
   if (!agent) return NextResponse.json({ error: "No such villager." }, { status: 404 });
   const body = await req.json().catch(() => ({}));
-  const checked = validateAgentInput(body, ALL_TOOL_DEFINITIONS.map((t) => t.function.name), false);
+  // A tool already on their list stays allowed even if this version of the
+  // app doesn't know it (#182): a newer version may have added it.
+  const checked = validateAgentInput(body, [...ALL_TOOL_DEFINITIONS.map((t) => t.function.name), ...((agent.enabledTools as string[] | null) ?? [])], false);
   if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
   const [updated] = await db
     .update(agents)

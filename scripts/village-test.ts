@@ -10,6 +10,7 @@ import fs from "node:fs";
 import { CHARACTER_GROUPS, CHARACTER_KEYS, TRADE_LOOKS } from "../src/lib/agent/villagerLooks";
 import { dayPhase, isNight, nextWake, parseHM } from "../src/lib/agent/daynight";
 import path from "node:path";
+import { REMEMBER_MS, allPositions, remember, startingSpot } from "../src/components/village/villagerMemory";
 
 let failures = 0;
 function check(name: string, actual: unknown, expected: unknown) {
@@ -171,6 +172,21 @@ check(
   const grouped = CHARACTER_GROUPS.flatMap((g) => g.keys);
   check("the look picker shows every look once", [CHARACTER_KEYS.filter((k) => !grouped.includes(k)), grouped.length], [[], CHARACTER_KEYS.length]);
   check("trade looks are real looks", Object.values(TRADE_LOOKS).flat().filter((k) => !(CHARACTER_KEYS as readonly string[]).includes(k)), []);
+}
+
+// Where villagers were (#181): nobody runs in from the gate.
+{
+  const stored = new Map<string, string>();
+  (globalThis as { localStorage?: unknown }).localStorage = { getItem: (k: string) => stored.get(k) ?? null, setItem: (k: string, v: string) => void stored.set(k, v) };
+  const home = { id: "cot1", x: 100, y: 200 };
+  const now = 1_000_000_000;
+  check("with nothing remembered, a villager starts where they belong, already there", startingSpot(undefined, home, now), { x: 100, y: 200, reached: "cot1" });
+  check("…and when they were last seen there", startingSpot({ x: 5, y: 5, target: "cot1", at: now - 1000 }, home, now), { x: 100, y: 200, reached: "cot1" });
+  check("caught mid-walk a moment ago, they carry on from where they were", startingSpot({ x: 40, y: 60, target: "", at: now - 1000 }, home, now), { x: 40, y: 60, reached: null });
+  check("…but not from a spot long stale", startingSpot({ x: 40, y: 60, target: "", at: now - REMEMBER_MS - 1 }, home, now), { x: 100, y: 200, reached: "cot1" });
+  remember("village:7", { x: 1, y: 2, target: "plaza", at: Date.now() }, true);
+  check("positions are kept in the browser, per scene and villager", JSON.parse(stored.get("autarch.villagerPositions") ?? "{}")["village:7"]?.target, "plaza");
+  check("…and read back", allPositions()["village:7"]?.x, 1);
 }
 
 if (failures > 0) {
