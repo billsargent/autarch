@@ -8,7 +8,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function PATCH(req: Request, { params }: Params) {
   const id = Number((await params).id);
   const body = await req.json().catch(() => ({}));
-  if (body.action !== "approve" && body.action !== "discard") return NextResponse.json({ error: "action: must be approve or discard." }, { status: 400 });
+  if (!["approve", "discard", "retry"].includes(body.action)) return NextResponse.json({ error: "action: must be approve, discard or retry." }, { status: 400 });
   try {
     await decideDraft(id, body.action, typeof body.edits === "object" && body.edits ? body.edits : undefined);
     return NextResponse.json({ ok: true });

@@ -429,6 +429,21 @@ if (!globalForDb.__agentLabSqlite) {
   // Every email says who wrote it and why, and what was sent is kept (#143).
   if (!existingCols("drafts").includes("why")) sqlite.exec("ALTER TABLE drafts ADD COLUMN why TEXT");
   if (!existingCols("drafts").includes("sent_at")) sqlite.exec("ALTER TABLE drafts ADD COLUMN sent_at INTEGER");
+  // A calendar event's when and where (#142), and the calendar connection.
+  if (!existingCols("drafts").includes("details")) sqlite.exec("ALTER TABLE drafts ADD COLUMN details TEXT");
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS calendar_settings (
+    id INTEGER PRIMARY KEY,
+    google_client_id TEXT,
+    google_client_secret TEXT,
+    google_refresh_token TEXT,
+    google_access_token TEXT,
+    google_access_expires_at INTEGER,
+    google_account TEXT,
+    google_calendar_id TEXT,
+    google_calendar_name TEXT,
+    readers TEXT NOT NULL DEFAULT '[]',
+    updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
   for (const [col, def] of [
     ["from_name", "TEXT"],
     ["footer", "INTEGER NOT NULL DEFAULT 0"],

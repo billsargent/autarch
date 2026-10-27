@@ -21,7 +21,7 @@ export const MAIL_PRESETS = {
     smtp: { host: "smtp.gmail.com", port: 465, security: "tls" },
     auth: "app-password",
     help: "https://myaccount.google.com/apppasswords",
-    note: "Turn on 2-Step Verification, then make an app password and paste it below. Your user is your full Gmail address.",
+    note: "Gmail needs an app password, not your Google password. Turn on 2-Step Verification in your Google account, then make an app password (name it \"Village\"). Google shows a 16-letter code: paste it into the App password box below. It isn't the 6-digit sign-in code from your phone.",
   },
   outlook: {
     label: "Outlook / Hotmail / Microsoft 365",

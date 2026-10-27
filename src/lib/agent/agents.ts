@@ -2,7 +2,7 @@ import { db, sqlite } from "@/db";
 import { agents, jobs } from "@/db/schema";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
-import { mailReaders } from "./mailAccess";
+import { calendarReaders, mailReaders } from "./mailAccess";
 import { isTradeKey } from "./trades";
 import { lifeSummary } from "./life";
 import { CHARACTER_KEYS, isCharacterKey, TRADE_LOOKS, VILLAGER_COLORS } from "./villagerLooks";
@@ -68,9 +68,9 @@ export function effectiveTools(agent: AgentRow, settings: AgentSettingsRow): str
   const tier = agent.isMayor ? "mayor" : agent.tier === "mayor" ? "director" : agent.tier;
   const town = ((settings.enabledTools as string[]) || []).filter((t) => tierAllows(tier, t));
   const own = agent.enabledTools as string[] | null;
-  const tools = (own ? town.filter((t) => own.includes(t)) : town).filter((t) => t !== "read_email");
-  // The owner's inbox goes only to the villagers they picked (#124).
-  return mailReaders().includes(agent.id) ? [...tools, "read_email"] : tools;
+  const tools = (own ? town.filter((t) => own.includes(t)) : town).filter((t) => t !== "read_email" && t !== "read_calendar");
+  // The owner's inbox and calendar go only to the villagers they picked (#124, #142).
+  return [...tools, ...(mailReaders().includes(agent.id) ? ["read_email"] : []), ...(calendarReaders().includes(agent.id) ? ["read_calendar"] : [])];
 }
 
 export function agentModel(agent: AgentRow, settings: AgentSettingsRow): string {

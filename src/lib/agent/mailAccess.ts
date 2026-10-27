@@ -17,3 +17,17 @@ export function mailReaders(): number[] {
     return [];
   }
 }
+
+// The villagers allowed to read the owner's calendar (#142), when there is one
+// (Google connected, or an ICS address).
+export function calendarReaders(): number[] {
+  try {
+    const row = sqlite.prepare("SELECT readers, google_refresh_token AS token FROM calendar_settings WHERE id = 1").get() as { readers: string; token: string | null } | undefined;
+    const ics = (sqlite.prepare("SELECT calendar_ics_url AS url FROM agent_settings LIMIT 1").get() as { url: string | null } | undefined)?.url;
+    if (!row || (!row.token && !ics)) return [];
+    const ids = JSON.parse(row.readers);
+    return Array.isArray(ids) ? ids.filter((n) => Number.isInteger(n)) : [];
+  } catch {
+    return [];
+  }
+}

@@ -81,6 +81,11 @@ export default function EmailPage() {
   };
 
   if (!mail) return <p className="text-sm">Reading the ledger…</p>;
+  // A provider with app passwords (#142): one address and one app password
+  // fill in both sending and reading; the servers come from the preset.
+  const presetKey = form.preset ?? mail.preset;
+  const preset = isPresetKey(presetKey) ? (MAIL_PRESETS[presetKey] as MailPreset) : null;
+  const simple = preset?.auth === "app-password";
   const val = (k: keyof Mail) => (form[k] ?? String(mail[k] ?? "")) as string;
   const set = (k: keyof Mail | "smtpPassword" | "imapPassword") => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const dirty = Object.keys(form).length > 0;
@@ -179,45 +184,93 @@ export default function EmailPage() {
         );
       })()}
 
-      <fieldset className="space-y-2 rounded border-2 border-[#3b2716] bg-[#fffaf0]/60 p-3">
-        <legend className="px-1 text-xs font-semibold">Sending (SMTP) {mail.smtpReady ? "· ready" : ""}</legend>
-        <div className="grid gap-2 sm:grid-cols-[1fr_6rem]">
-          {field("Server", "smtpHost", { placeholder: "smtp.example.com" })}
-          {field("Port", "smtpPort", { type: "number" })}
-        </div>
-        {security("smtpSecurity")}
-        <div className="grid gap-2 sm:grid-cols-2">
-          {field("User", "smtpUser", { autoComplete: "off" })}
-          {password("smtpPassword", mail.smtpPasswordSet, "clearSmtpPassword")}
-        </div>
-        {field("From address", "fromAddress", { type: "email", placeholder: "you@example.com" })}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <button onClick={() => void runTest("smtp")} disabled={dirty || !mail.smtpReady} className="village-btn px-2.5 py-1 text-[11px] disabled:opacity-50">
-            ✉ Send a test to the From address
-          </button>
-          {test.smtp && <span className="text-[11px]">{test.smtp}</span>}
-        </div>
-      </fieldset>
+      {simple && (
+        <fieldset className="space-y-2 rounded border-2 border-[#3b2716] bg-[#fffaf0]/60 p-3">
+          <legend className="px-1 text-xs font-semibold">Your account {mail.smtpReady && mail.imapReady ? "· ready" : ""}</legend>
+          <label className="block text-xs font-semibold">
+            Your email address
+            <input
+              name="account"
+              type="email"
+              autoComplete="off"
+              value={form.fromAddress ?? (mail.fromAddress || mail.smtpUser)}
+              onChange={(e) => setForm((f) => ({ ...f, fromAddress: e.target.value, smtpUser: e.target.value, imapUser: e.target.value }))}
+              placeholder="you@gmail.com"
+              className={input}
+            />
+          </label>
+          <label className="block text-xs font-semibold">
+            App password
+            <input
+              name="appPassword"
+              type="password"
+              autoComplete="new-password"
+              value={form.smtpPassword ?? ""}
+              onChange={(e) => {
+                const code = e.target.value.replace(/\s+/g, "");
+                setForm((f) => ({ ...f, smtpPassword: code, imapPassword: code }));
+              }}
+              placeholder={mail.smtpPasswordSet && mail.imapPasswordSet ? "•••••••• (set; type to replace)" : "the 16-letter app password"}
+              className={input}
+            />
+            <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">
+              {`The app password ${preset!.label} gave you: not your normal password, and not the code from your phone. Spaces don't matter. It's used for both sending and reading.`}
+            </span>
+          </label>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button onClick={() => void runTest("smtp")} disabled={dirty || !mail.smtpReady} className="village-btn px-2.5 py-1 text-[11px] disabled:opacity-50">
+              ✉ Send a test to yourself
+            </button>
+            <button onClick={() => void runTest("imap")} disabled={dirty || !mail.imapReady} className="village-btn px-2.5 py-1 text-[11px] disabled:opacity-50">
+              📬 Check the inbox
+            </button>
+            {(test.smtp || test.imap) && <span className="text-[11px]">{[test.smtp, test.imap].filter(Boolean).join(" · ")}</span>}
+          </div>
+        </fieldset>
+      )}
 
-      <fieldset className="space-y-2 rounded border-2 border-[#3b2716] bg-[#fffaf0]/60 p-3">
-        <legend className="px-1 text-xs font-semibold">Reading (IMAP) {mail.imapReady ? "· ready" : ""}</legend>
-        <div className="grid gap-2 sm:grid-cols-[1fr_6rem]">
-          {field("Server", "imapHost", { placeholder: "imap.example.com" })}
-          {field("Port", "imapPort", { type: "number" })}
-        </div>
-        {security("imapSecurity")}
-        <div className="grid gap-2 sm:grid-cols-2">
-          {field("User", "imapUser", { autoComplete: "off" })}
-          {password("imapPassword", mail.imapPasswordSet, "clearImapPassword")}
-        </div>
-        {field("Mailbox", "imapMailbox", { placeholder: "INBOX" })}
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <button onClick={() => void runTest("imap")} disabled={dirty || !mail.imapReady} className="village-btn px-2.5 py-1 text-[11px] disabled:opacity-50">
-            📬 Check the inbox
-          </button>
-          {test.imap && <span className="text-[11px]">{test.imap}</span>}
-        </div>
-      </fieldset>
+      <details open={!simple} className="space-y-2">
+        <summary className="cursor-pointer text-xs font-semibold">{simple ? `Server settings (already filled in for ${preset!.label})` : "Server settings"}</summary>
+        <fieldset className="space-y-2 rounded border-2 border-[#3b2716] bg-[#fffaf0]/60 p-3">
+          <legend className="px-1 text-xs font-semibold">Sending (SMTP) {mail.smtpReady ? "· ready" : ""}</legend>
+          <div className="grid gap-2 sm:grid-cols-[1fr_6rem]">
+            {field("Server", "smtpHost", { placeholder: "smtp.example.com" })}
+            {field("Port", "smtpPort", { type: "number" })}
+          </div>
+          {security("smtpSecurity")}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {field("User", "smtpUser", { autoComplete: "off" })}
+            {password("smtpPassword", mail.smtpPasswordSet, "clearSmtpPassword")}
+          </div>
+          {field("From address", "fromAddress", { type: "email", placeholder: "you@example.com" })}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button onClick={() => void runTest("smtp")} disabled={dirty || !mail.smtpReady} className="village-btn px-2.5 py-1 text-[11px] disabled:opacity-50">
+              ✉ Send a test to the From address
+            </button>
+            {test.smtp && <span className="text-[11px]">{test.smtp}</span>}
+          </div>
+        </fieldset>
+
+        <fieldset className="space-y-2 rounded border-2 border-[#3b2716] bg-[#fffaf0]/60 p-3">
+          <legend className="px-1 text-xs font-semibold">Reading (IMAP) {mail.imapReady ? "· ready" : ""}</legend>
+          <div className="grid gap-2 sm:grid-cols-[1fr_6rem]">
+            {field("Server", "imapHost", { placeholder: "imap.example.com" })}
+            {field("Port", "imapPort", { type: "number" })}
+          </div>
+          {security("imapSecurity")}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {field("User", "imapUser", { autoComplete: "off" })}
+            {password("imapPassword", mail.imapPasswordSet, "clearImapPassword")}
+          </div>
+          {field("Mailbox", "imapMailbox", { placeholder: "INBOX" })}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button onClick={() => void runTest("imap")} disabled={dirty || !mail.imapReady} className="village-btn px-2.5 py-1 text-[11px] disabled:opacity-50">
+              📬 Check the inbox
+            </button>
+            {test.imap && <span className="text-[11px]">{test.imap}</span>}
+          </div>
+        </fieldset>
+      </details>
 
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={() => void save()} disabled={!dirty} className="village-btn village-btn-go px-3 py-1.5 text-xs disabled:opacity-50">

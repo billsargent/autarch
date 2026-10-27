@@ -1,7 +1,9 @@
+import { TOWNS } from "./lifeRules";
 import { db, sqlite } from "@/db";
 import { drafts } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import type { ToolContext } from "./tools";
+import type { EventDetails } from "./google";
 
 // The outbox (#107, docs/town-charter.md section 2). Anything meant to leave
 // the machine (an email, a post, a listing, a message to someone) is only
@@ -11,7 +13,7 @@ import type { ToolContext } from "./tools";
 // ready for the owner to send themselves.
 
 export type DraftRow = typeof drafts.$inferSelect;
-export const DRAFT_KINDS = ["email", "post", "listing", "message", "other"] as const;
+export const DRAFT_KINDS = ["email", "event", "post", "listing", "message", "other"] as const;
 export type DraftKind = (typeof DRAFT_KINDS)[number];
 export const DRAFTS_PER_DAY = 10;
 
@@ -30,6 +32,8 @@ const SENDERS: Partial<Record<DraftKind, Sender>> = {
     const writer = d.agentId ? (sqlite.prepare("SELECT name FROM agents WHERE id = ?").get(d.agentId) as { name: string } | undefined)?.name : null;
     return (await import("./email")).sendMail({ to: d.target ?? "", subject: d.subject, text: d.content, writer });
   },
+  // An approved event goes on the owner's Google Calendar (#142).
+  event: async (d) => (await import("./google")).createGoogleEvent({ title: d.subject ?? "An event", description: d.content, details: d.details as EventDetails }),
 };
 
 // Every address an email has gone to (#143), lower-cased.
@@ -64,7 +68,29 @@ function mailRules(d: DraftRow): string | null {
 }
 const senderReady: Partial<Record<DraftKind, () => Promise<boolean>>> = {
   email: async () => (await import("./email")).publicMail(await (await import("./email")).getMail()).smtpReady,
+  event: async () => (await import("./google")).googleConnected(await (await import("./google")).getCalendarSettings()),
 };
+
+// "2026-11-03T14:00" (local) or "2026-11-03" (all day) -> a Date, or null.
+function localTime(v: unknown): { date: Date; allDay: boolean } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/.exec(String(v ?? "").trim());
+  if (!m) return null;
+  const [, y, mo, d, h, mi] = m;
+  const date = new Date(Number(y), Number(mo) - 1, Number(d), Number(h ?? 0), Number(mi ?? 0));
+  return Number.isNaN(date.getTime()) ? null : { date, allDay: h == null };
+}
+
+// An event's when and where from save_draft's arguments, or why not.
+export function eventDetails(args: Record<string, unknown>): EventDetails | string {
+  const start = localTime(args.start);
+  if (!start) return "an event needs a `start` like 2026-11-03T14:00 (or 2026-11-03 for all day).";
+  const end = args.end ? localTime(args.end) : null;
+  if (args.end && !end) return "`end` should look like 2026-11-03T15:00.";
+  const endDate = end?.date ?? new Date(start.date.getTime() + (start.allDay ? 0 : 3600_000));
+  if (endDate < start.date) return "the event ends before it starts.";
+  const location = typeof args.location === "string" && args.location.trim() ? args.location.trim().slice(0, 200) : null;
+  return { start: start.date.toISOString(), end: endDate.toISOString(), allDay: start.allDay, location };
+}
 
 export async function saveDraftTool(args: Record<string, unknown>, ctx?: ToolContext) {
   if (!ctx?.agentId) return { output: "Refused: only a villager can write a draft.", summary: "draft refused" };
@@ -77,6 +103,20 @@ export async function saveDraftTool(args: Record<string, unknown>, ctx?: ToolCon
   const since = Math.floor(Date.now() / 1000) - 86400;
   const { n } = sqlite.prepare("SELECT COUNT(*) AS n FROM drafts WHERE agent_id = ? AND created_at >= ?").get(ctx.agentId, since) as { n: number };
   if (n >= DRAFTS_PER_DAY) return { output: `Refused: you've written ${DRAFTS_PER_DAY} drafts today.`, summary: "draft refused" };
+  // An email needs a real address now, not when the owner tries to send it (#142).
+  if (kind === "email") {
+    try {
+      (await import("./email")).parseRecipients(args.to ? String(args.to) : "");
+    } catch (err) {
+      const problem = err instanceof Error ? err.message : String(err);
+      return {
+        output: `Refused: ${problem} An email draft needs a real email address in \`to\` (name@example.com). The neighbouring towns in village life (${TOWNS.join(", ")}) have no email: answer their orders with accept_order. If you don't know someone's address, ask the owner.`,
+        summary: "draft refused (no address)",
+      };
+    }
+  }
+  const details = kind === "event" ? eventDetails(args) : null;
+  if (typeof details === "string") return { output: `Refused: ${details}`, summary: "draft refused" };
   const [row] = await db
     .insert(drafts)
     .values({
@@ -87,6 +127,7 @@ export async function saveDraftTool(args: Record<string, unknown>, ctx?: ToolCon
       agentId: ctx.agentId,
       conversationId: ctx.conversationId ?? null,
       why: why.slice(0, 300),
+      details,
     })
     .returning();
   return {
@@ -103,15 +144,34 @@ export async function listDrafts(limit = 40) {
 }
 
 // The owner's decision. `edits` lets them change the words before it goes.
-export async function decideDraft(id: number, action: "approve" | "discard", edits?: { content?: string; subject?: string | null; target?: string | null }) {
+export async function decideDraft(id: number, action: "approve" | "discard" | "retry", edits?: { content?: string; subject?: string | null; target?: string | null }) {
   const [d] = await db.select().from(drafts).where(eq(drafts.id, id));
   if (!d) throw new DraftError("No such draft.", 404);
+  // One that couldn't be sent goes back in the tray, to fix and send again.
+  if (action === "retry") {
+    if (d.status !== "failed") throw new DraftError("Only a draft that couldn't be sent can be tried again.");
+    await db.update(drafts).set({ status: "draft", sendResult: null, decidedAt: null }).where(eq(drafts.id, id));
+    return;
+  }
+  if (action === "discard" && d.status === "failed") {
+    await db.update(drafts).set({ status: "discarded", decidedAt: new Date() }).where(eq(drafts.id, id));
+    return;
+  }
   if (d.status !== "draft") throw new DraftError(`That draft is already ${d.status}.`);
   if (action === "discard") {
     await db.update(drafts).set({ status: "discarded", decidedAt: new Date() }).where(eq(drafts.id, id));
     return;
   }
   if (d.kind === "email") {
+    // A bad address is caught here, before it's marked approved.
+    const to = edits && "target" in edits ? edits.target || null : d.target;
+    if (await senderReady.email!()) {
+      try {
+        (await import("./email")).parseRecipients(to);
+      } catch (err) {
+        throw new DraftError(`${err instanceof Error ? err.message : String(err)} Put an email address in "To" first.`);
+      }
+    }
     const blocked = mailRules({ ...d, target: edits && "target" in edits ? edits.target || null : d.target });
     if (blocked && (await senderReady.email!())) throw new DraftError(blocked);
   }

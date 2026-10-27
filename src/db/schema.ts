@@ -285,7 +285,7 @@ export const modelPrices = sqliteTable("model_prices", {
 // The outbox (#107): outward-facing work waits here for the owner.
 export const drafts = sqliteTable("drafts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  kind: text("kind", { enum: ["email", "post", "listing", "message", "other"] }).notNull().default("other"),
+  kind: text("kind", { enum: ["email", "event", "post", "listing", "message", "other"] }).notNull().default("other"),
   // Who or where it's for (an address, a channel, a shop).
   target: text("target"),
   subject: text("subject"),
@@ -295,6 +295,8 @@ export const drafts = sqliteTable("drafts", {
   // Why the villager wrote it, in a sentence (#143), and when it went.
   why: text("why"),
   sentAt: integer("sent_at", { mode: "timestamp" }),
+  // A calendar event's when and where (#142): { start, end, allDay, location }.
+  details: text("details", { mode: "json" }),
   agentId: integer("agent_id").references(() => agents.id, { onDelete: "set null" }),
   conversationId: integer("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
@@ -327,6 +329,23 @@ export const mailSettings = sqliteTable("mail_settings", {
   knownOnly: integer("known_only", { mode: "boolean" }).notNull().default(false),
   // The provider preset chosen (#141), e.g. "gmail".
   preset: text("preset"),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+});
+
+// The owner's calendar connection (#142): one row (id 1). Google's client
+// secret and tokens are secrets: no API returns them and no tool reads them.
+// `readers`: the villagers the owner lets read the calendar (read_calendar).
+export const calendarSettings = sqliteTable("calendar_settings", {
+  id: integer("id").primaryKey(),
+  googleClientId: text("google_client_id"),
+  googleClientSecret: text("google_client_secret"),
+  googleRefreshToken: text("google_refresh_token"),
+  googleAccessToken: text("google_access_token"),
+  googleAccessExpiresAt: integer("google_access_expires_at"),
+  googleAccount: text("google_account"),
+  googleCalendarId: text("google_calendar_id"),
+  googleCalendarName: text("google_calendar_name"),
+  readers: text("readers", { mode: "json" }).notNull().default(sql`'[]'`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 

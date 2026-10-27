@@ -1,3 +1,4 @@
+import { TOWNS } from "./lifeRules";
 import type OpenAI from "openai";
 import type { RiskResult } from "./risk";
 import type { ToolContext } from "./tools";
@@ -60,6 +61,24 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
     },
     risk: { risk: "low", reason: "Reads the owner's inbox, read-only; the owner chose who may." },
     run: async (args, ctx) => (await import("./email")).readEmailTool(args, ctx),
+  },
+  // The owner's calendar (#142): only for the villagers the owner picks
+  // (the calendar desk); effectiveTools adds it for them alone.
+  read_calendar: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "read_calendar",
+        description:
+          "Read the owner's upcoming calendar events (read-only). To add an event, write a draft with save_draft, kind \"event\", with start and end; the owner approves it.",
+        parameters: {
+          type: "object",
+          properties: { days: { type: "number", description: "How many days ahead (1–31, default 7)." } },
+        },
+      },
+    },
+    risk: { risk: "low", reason: "Reads the owner's calendar, read-only; the owner chose who may." },
+    run: async (args, ctx) => (await import("./calendar")).readCalendarTool(args, ctx),
   },
   // The Mayor's powers (#58, #81, #98, #105): only the Mayor is ever given these (mayorTools.ts).
   assign_goal: {
@@ -328,14 +347,17 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
       function: {
         name: "save_draft",
         description:
-          "Save something meant for the outside world (an email, a post, a shop listing, a message to someone) as a draft in the owner's outbox. Nothing is ever sent by you: the owner reads it, may edit it, and decides. Use this instead of trying to send anything yourself.",
+          `Save something meant for the real outside world (an email, an event for the owner's calendar, a post, a shop listing, a message to someone) as a draft in the owner's outbox. Nothing is ever sent by you: the owner reads it, may edit it, and decides. An email needs a real email address in \`to\`. The neighbouring towns (${TOWNS.join(", ")}) are part of village life and have no email: answer their orders with accept_order, not a letter.`,
         parameters: {
           type: "object",
           properties: {
-            kind: { type: "string", enum: ["email", "post", "listing", "message", "other"] },
-            to: { type: "string", description: "Who or where it's for: an address, a channel, a shop." },
-            subject: { type: "string" },
-            content: { type: "string", description: "The full text, ready to send." },
+            kind: { type: "string", enum: ["email", "event", "post", "listing", "message", "other"] },
+            to: { type: "string", description: "Who or where it's for. For an email: one or more real email addresses (name@example.com), comma-separated." },
+            subject: { type: "string", description: "The subject; for an event, its title." },
+            content: { type: "string", description: "The full text, ready to send; for an event, its description." },
+            start: { type: "string", description: "An event's start, as local date and time: 2026-11-03T14:00 (or just 2026-11-03 for all day)." },
+            end: { type: "string", description: "An event's end, like start. Default: an hour after the start (or the same day, for all day)." },
+            location: { type: "string", description: "An event's place." },
             why: { type: "string", description: "Why you're writing it, in a sentence, for the owner: who asked, or which goal it's for." },
           },
           required: ["kind", "content", "why"],
