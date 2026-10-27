@@ -2,11 +2,12 @@ import { db, sqlite } from "@/db";
 import { economy } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { listBuildings } from "./buildings";
+import { tradeOf } from "./trades";
 
-// The village's little economy (#106): pure bookkeeping once a day, no model
-// calls. Farms grow wheat, bakeries bake it into bread, everyone eats a loaf.
-// A building with a keeper (a villager looking after it) does three times
-// the work. Running short only dents morale; it never stops anyone working.
+// The village's little economy (#106): pure bookkeeping, no model calls.
+// Villagers make the goods by working their trade and eat when hungry
+// (life.ts, #132); a farm or bakery nobody works still makes a little.
+// Running short only dents morale; it never stops anyone working.
 
 export interface Stock {
   wheat: number;
@@ -35,18 +36,19 @@ export async function getEconomy() {
 
 const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-// Once a day (the worker calls it in the daytime): grow, bake, eat.
+// Once a day (the worker calls it in the daytime). Since village life (#132),
+// villagers make the goods by working their trade and eat when they're
+// hungry (life.ts); this only lets a farm or bakery that nobody works produce
+// a little on its own, and starts the day's count of hungry moments afresh.
 export async function dailyEconomy(now = new Date()): Promise<boolean> {
   const state = await getEconomy();
   if (state.lastTickDay === dayKey(now)) return false;
-  const active = new Set((sqlite.prepare("SELECT id FROM agents WHERE status = 'active'").all() as Array<{ id: number }>).map((r) => r.id));
+  const villagers = sqlite.prepare("SELECT role, trade, is_mayor AS isMayor FROM agents WHERE status = 'active'").all() as Array<{ role: string; trade: string | null; isMayor: number }>;
+  const trades = new Set(villagers.map((v) => tradeOf({ trade: v.trade, role: v.role, isMayor: Boolean(v.isMayor) })));
   const built = (await listBuildings(now)).filter((b) => b.status === "built");
-  const kept = (kind: string) => built.filter((b) => b.kind === kind).map((b) => b.keeperId != null && active.has(b.keeperId));
-  const next = economyTick(state, kept("farm"), kept("bakery"), active.size);
-  await db
-    .update(economy)
-    .set({ wheat: next.wheat, bread: next.bread, shortage: next.shortage, lastTickDay: dayKey(now) })
-    .where(eq(economy.id, 1));
+  const unworked = (kind: string, trade: string) => (trades.has(trade as never) ? [] : built.filter((b) => b.kind === kind).map(() => false));
+  const next = economyTick(state, unworked("farm", "farmer"), unworked("bakery", "baker"), 0);
+  await db.update(economy).set({ wheat: next.wheat, bread: next.bread, shortage: 0, lastTickDay: dayKey(now) }).where(eq(economy.id, 1));
   return true;
 }
 

@@ -164,7 +164,13 @@ export async function setKeeper(id: number, agentId: number | null) {
   const [b] = await db.select().from(buildings).where(eq(buildings.id, id));
   if (!b) throw new BuildingError("No such building.", 404);
   await db.update(buildings).set({ keeperId: agentId }).where(eq(buildings.id, id));
+  // Keeping a building is a trade (#131): the keeper works there.
+  const trade = KEEPER_TRADE[b.kind];
+  if (agentId != null && trade) sqlite.prepare("UPDATE agents SET trade = ? WHERE id = ?").run(trade, agentId);
 }
+
+// The trade that works each kind of building (trades.ts).
+const KEEPER_TRADE: Record<string, string> = { farm: "farmer", bakery: "baker", tavern: "innkeeper", garden: "gardener", shop: "shopkeeper", workshop: "carpenter" };
 
 // The Mayor's propose_building tool.
 export async function proposeBuildingTool(args: Record<string, unknown>, ctx?: ToolContext) {

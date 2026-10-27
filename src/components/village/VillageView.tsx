@@ -12,6 +12,9 @@ import { VILLAGE_LEVELS } from "./scenes";
 import { useBuildings } from "../data/useBuildings";
 import { useVillageSound } from "./useVillageSound";
 import WelcomeDialog from "./WelcomeDialog";
+import Animals, { type AnimalSpec } from "./Animals";
+import { TRADES, type TradeKey } from "@/lib/agent/trades";
+import type { VillagerLife } from "@/lib/agent/clientTypes";
 import { BUBBLE_MS, MOOD_BADGE, MOOD_PLACE, bubbleLine, moodLabel, nextHangout, standOffsets, villagerMood } from "./villagerState";
 import { snapshotOf, useVillageData } from "./useVillageData";
 import SceneView, { type VillagerSpec } from "./SceneView";
@@ -175,11 +178,12 @@ export default function VillageView() {
   const plans = villagers.map((v) => {
     const mood = villagerMood(snapshotOf(v, data.paused, night));
     const home = scene.places.find((p) => p.id === MOOD_PLACE[mood]) ?? scene.places[0];
-    // A keeper with nothing else on is at their farm or bakery (#106).
-    const keeps = mood === "idle" ? scene.plots.find((p) => p.id === buildings.state?.keepers[v.id]) : undefined;
-    const stroll = mood === "idle" && !keeps ? strolls[v.id] : null;
-    const target = keeps?.door ?? stroll ?? home.door;
-    return { v, mood, target, strolling: mood === "idle" && !keeps && target !== home.door };
+    // With nothing else on, a villager is wherever their village life has
+    // them (#132): at work, the tavern, the plaza, a friend's, or home.
+    const living = mood === "idle" && v.life ? lifeSpot(v.life, scene, buildings.state) : null;
+    const stroll = mood === "idle" && !v.life ? strolls[v.id] : null;
+    const target = living ?? stroll ?? home.door;
+    return { v, mood, target, strolling: mood === "idle" && !v.life && target !== home.door };
   });
   // A villager asking a neighbour something walks over to them (#57).
   for (const p of plans) {
@@ -190,6 +194,16 @@ export default function VillageView() {
     }
   }
   const offsets = standOffsets(plans.map((p) => p.target));
+  // Villagers out and about together share one bubble ("🍺 6 at the tavern"),
+  // shown over the first of them (#132).
+  const lifeLine = (i: number): string | null => {
+    const { v, mood, target } = plans[i];
+    if (mood !== "idle" || !v.life || v.life.place === "home") return null;
+    const group = plans.filter((p) => p.mood === "idle" && p.target === target && p.v.life && p.v.life.place === v.life!.place);
+    if (group[0].v.id !== v.id) return null;
+    const icon = PLACE_ICON[v.life.place] ?? v.life.icon;
+    return group.length > 1 ? `${icon} ${group.length} ${PLACE_GROUP[v.life.place] ?? `together: ${v.life.activity}`}` : `${icon} ${v.life.activity}`;
+  };
   const specs: VillagerSpec[] = plans.map(({ v, mood, target, strolling }, i) => ({
     id: `agent-${v.id}`,
     name: v.name,
@@ -207,7 +221,7 @@ export default function VillageView() {
           ? bubbleLine(v.lastSaid)
           : mood !== "asleep" && clock - Date.parse(v.createdAt) < NEWCOMER_MS
             ? `👋 Hello! I'm ${v.name}, new in town.`
-            : null,
+            : lifeLine(i),
     asleep: mood === "asleep",
     hint:
       v.id === talkKeyTarget ? (
@@ -230,7 +244,7 @@ export default function VillageView() {
             .filter((p) => p.mood !== "idle" || p.strolling)
             .slice(0, 2)
             .map((p) => moodLabel(p.mood, p.v.name, p.strolling))
-            .join(" · ") || `${plans.length} villagers relaxing at home`;
+            .join(" · ") || lifeSummaryLine(plans.map((p) => p.v)) || `${plans.length} villagers relaxing at home`;
 
   return (
     <div className={`${villageFonts} village-root flex h-full w-full flex-col`}>
@@ -260,6 +274,7 @@ export default function VillageView() {
         overlays={
           <>
             <PlotBuildings scene={scene} state={buildings.state} onOpen={(id) => openAction(`building.${id}`)} />
+            <Animals animals={villageAnimals(scene, buildings.state)} />
             {(phase === "dusk" || phase === "night") && !data.paused && <LitWindows level={level} scene={scene} plots={buildings.state} />}
           </>
         }
@@ -328,6 +343,75 @@ export default function VillageView() {
 
 // What stands on the village's plots (#105): finished buildings (click one to
 // open it), and scaffolding where one is going up.
+// Where a villager's life has them (#132), as a waypoint of the scene.
+const PLACE_ICON: Record<string, string> = { tavern: "🍺", plaza: "🚶", visit: "🫖" };
+const PLACE_GROUP: Record<string, string> = { tavern: "at the tavern", plaza: "out in the plaza", visit: "having a natter", work: "at work" };
+
+// The village at a glance, from everyone's life: "6 at the tavern · Gus working the fields".
+function lifeSummaryLine(vs: Array<{ name: string; life?: VillagerLife | null }>): string {
+  const groups = new Map<string, string[]>();
+  for (const v of vs) {
+    if (!v.life || v.life.place === "home") continue;
+    const k = v.life.place === "work" ? `work:${v.life.activity}` : v.life.place;
+    groups.set(k, [...(groups.get(k) ?? []), v.name]);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 2)
+    .map(([k, names]) => {
+      const place = k.startsWith("work:") ? k.slice(5) : (PLACE_GROUP[k] ?? k);
+      return names.length > 1 ? `${names.length} ${place}` : `${names[0]} ${place}`;
+    })
+    .join(" · ");
+}
+function lifeSpot(life: VillagerLife, scene: SceneManifest, state: ReturnType<typeof useBuildings>["state"]): string | null {
+  const has = (w: string) => scene.waypoints.some((p) => p.id === w);
+  const doorOf = (kind: string | null) => {
+    const b = kind ? state?.buildings.find((x) => x.kind === kind && x.status === "built") : undefined;
+    return b ? scene.plots.find((p) => p.id === b.plotId)?.door : undefined;
+  };
+  const trade = TRADES[life.trade as TradeKey];
+  switch (life.place) {
+    case "work":
+      return doorOf(trade?.building ?? null) ?? (trade && has(trade.spot) ? trade.spot : null);
+    case "tavern":
+      return doorOf("tavern") ?? (has("tr") ? "tr" : null);
+    case "plaza":
+      return has("c") ? "c" : null;
+    case "visit":
+      return has("cot") ? "cot" : null;
+    default:
+      return null;
+  }
+}
+
+// Who lives where (#138): chickens and a cow on every farm, a cat by the
+// bakery (or the cottages), a dog by your door, and a horse by the west road.
+function villageAnimals(scene: SceneManifest, state: ReturnType<typeof useBuildings>["state"]): AnimalSpec[] {
+  const out: AnimalSpec[] = [];
+  const built = (state?.buildings ?? []).filter((b) => b.status === "built");
+  const plotOf = (id: string) => scene.plots.find((p) => p.id === id);
+  for (const b of built.filter((x) => x.kind === "farm")) {
+    const p = plotOf(b.plotId);
+    if (!p) continue;
+    out.push(
+      { id: `chicken-a-${b.id}`, kind: "chicken-white", area: p.rect },
+      { id: `chicken-b-${b.id}`, kind: "chicken-brown", area: p.rect },
+      { id: `cow-${b.id}`, kind: "cow", area: p.rect },
+    );
+  }
+  const bakery = built.find((x) => x.kind === "bakery");
+  const bakeryPlot = bakery && plotOf(bakery.plotId);
+  const cottages = scene.places.find((p) => p.id === "cottages")?.rect;
+  const catArea = bakeryPlot ? { ...bakeryPlot.rect, y: bakeryPlot.rect.y + bakeryPlot.rect.h - CELL, h: CELL } : cottages && { x: cottages.x, y: cottages.y + cottages.h, w: cottages.w, h: CELL };
+  if (catArea) out.push({ id: "cat", kind: "cat", area: catArea });
+  const home = scene.places.find((p) => p.id === "home")?.rect;
+  if (home) out.push({ id: "dog", kind: "dog", area: { x: home.x - CELL * 2, y: home.y + home.h - CELL, w: CELL * 2, h: CELL } });
+  const westRoad = scene.waypoints.find((w) => w.id === "wrt");
+  if (westRoad) out.push({ id: "horse", kind: "horse", area: { x: CELL * 0.5, y: westRoad.y - CELL * 1.6, w: CELL * 3, h: CELL } });
+  return out;
+}
+
 // The stamps and labels come with the buildings (src/lib/agent/buildings.ts).
 function PlotBuildings({ scene, state, onOpen }: { scene: SceneManifest; state: ReturnType<typeof useBuildings>["state"]; onOpen: (id: number) => void }) {
   if (!state) return null;

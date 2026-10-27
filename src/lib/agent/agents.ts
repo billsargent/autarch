@@ -3,6 +3,8 @@ import { agents, jobs } from "@/db/schema";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { mailReaders } from "./mailAccess";
+import { isTradeKey } from "./trades";
+import { lifeSummary } from "./life";
 import { CHARACTER_KEYS, isCharacterKey, VILLAGER_COLORS } from "./villagerLooks";
 import { ABANDONED_AFTER_MS } from "./turnLock";
 import { tierAllows } from "./mayorTools";
@@ -104,9 +106,12 @@ export interface AgentInput {
   area?: unknown;
   managerId?: unknown;
   providerId?: unknown;
+  trade?: unknown;
+  lifeBalance?: unknown;
+  workShare?: unknown;
 }
 
-type Clean = Partial<Pick<AgentRow, "name" | "role" | "persona" | "character" | "color" | "model" | "enabledTools" | "dailyBudgetUsd" | "maxActionsPerHour" | "status" | "tier" | "area" | "managerId" | "providerId">>;
+type Clean = Partial<Pick<AgentRow, "name" | "role" | "persona" | "character" | "color" | "model" | "enabledTools" | "dailyBudgetUsd" | "maxActionsPerHour" | "status" | "tier" | "area" | "managerId" | "providerId" | "trade" | "lifeBalance" | "workShare">>;
 
 // Checks a create/update body. Returns the clean fields, or the first problem
 // as "field: reason" (the same shape as settings errors, so forms can place it).
@@ -147,6 +152,19 @@ export function validateAgentInput(input: AgentInput, toolNames: readonly string
     const v = text("persona", 4000);
     if (isErr(v)) return { ok: false, error: v.error };
     out.persona = v;
+  }
+  if (has("trade")) {
+    if (input.trade !== null && !isTradeKey(input.trade)) return { ok: false, error: "trade: isn't one of the village's trades." };
+    out.trade = (input.trade as string | null) ?? null;
+  }
+  if (has("lifeBalance")) {
+    if (input.lifeBalance !== null && !["idle", "hours", "balanced"].includes(input.lifeBalance as string)) return { ok: false, error: "lifeBalance: idle, hours, balanced, or empty for the town's." };
+    out.lifeBalance = (input.lifeBalance as "idle" | "hours" | "balanced" | null) ?? null;
+  }
+  if (has("workShare")) {
+    const v = num("workShare", 0, 100, true);
+    if (isErr(v)) return { ok: false, error: v.error };
+    out.workShare = v;
   }
   if (has("character")) {
     if (!isCharacterKey(input.character)) return { ok: false, error: "character: isn't one of the village's looks." };
@@ -242,6 +260,8 @@ export interface VillagerState {
   inMeeting: boolean;
   // Has free time (#59): their daydream job is on.
   daydream: boolean;
+  // Their village life (#132): trade, what they're doing, how they feel, friends.
+  life: ReturnType<typeof lifeSummary>;
 }
 
 // What each villager is up to right now: for the village to draw them.
@@ -297,6 +317,7 @@ export function villagerStates(ids: number[], now = new Date()): Map<number, Vil
       lastSaidAt: said ? said.created_at * 1000 : null,
       talkingWith: partner.get(id) ?? null,
       inMeeting: attending.has(id),
+      life: lifeSummary(id),
       daydream: Boolean(sqlite.prepare("SELECT 1 FROM jobs WHERE agent_id = ? AND kind = 'daydream' AND enabled = 1").get(id)),
     });
   }
@@ -388,13 +409,14 @@ export function population(): number {
   return (sqlite.prepare("SELECT COUNT(*) AS n FROM agents WHERE status <> 'dismissed'").get() as { n: number }).n;
 }
 
-// --- free time (#59) -----------------------------------------------------------------
+// --- village life (#59, #133) -----------------------------------------------------------------
 
 export const DAYDREAM_EVERY_MINUTES = 240;
 export const DAYDREAM_MINUTES = 5;
 
-// Switches a villager's free time on or off: a short window every few hours,
-// on their own budget, where they explore and may pin an idea.
+// Switches a villager's village life on or off (#133): a short life window
+// once a day, on their own budget; the day split decides when (#130). The job
+// kind is still "daydream", from when this was free time (#59).
 export async function setDaydream(agent: AgentRow, on: boolean) {
   const [job] = await db.select().from(jobs).where(and(eq(jobs.agentId, agent.id), eq(jobs.kind, "daydream"))).limit(1);
   if (job) {
@@ -404,8 +426,8 @@ export async function setDaydream(agent: AgentRow, on: boolean) {
       .where(eq(jobs.id, job.id));
   } else if (on) {
     await db.insert(jobs).values({
-      name: `${agent.name}'s free time`,
-      instruction: "Free time: explore something you're curious about, and pin an idea for the village if one is worth it.",
+      name: `${agent.name}'s village life`,
+      instruction: "Village life: their own time in the village, once a day, with village tools only (#133).",
       kind: "daydream",
       intervalMinutes: DAYDREAM_EVERY_MINUTES,
       maxDurationMinutes: DAYDREAM_MINUTES,

@@ -22,10 +22,12 @@
     "test:jobs": "tsx scripts/jobs-test.ts",
     "test:turns": "tsx scripts/turn-test.ts",
     "test:villagers": "tsx scripts/villagers-test.ts",
-    "test": "npm run test:sanitizer && npm run test:compact && npm run test:chatmode && npm run test:village && npm run test:safety && npm run test:jobs && npm run test:turns && npm run test:villagers",
+    "test:life": "tsx scripts/life-test.ts",
+    "test": "npm run test:sanitizer && npm run test:compact && npm run test:chatmode && npm run test:village && npm run test:safety && npm run test:jobs && npm run test:turns && npm run test:villagers && npm run test:life",
     "pixelate": "tsx scripts/pixelate.ts",
     "village:map": "tsx scripts/build-village-map.ts",
-    "village:custom-art": "tsx scripts/build-custom-tiles.ts"
+    "village:custom-art": "tsx scripts/build-custom-tiles.ts",
+    "village:characters": "tsx scripts/import-characters.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.5.0",

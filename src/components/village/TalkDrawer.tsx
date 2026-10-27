@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import Markdown from "../Markdown";
 import { useConversation } from "./useConversation";
 import VillagerPortrait from "./VillagerPortrait";
+import VillagerCard from "./VillagerCard";
 import type { AgentRow } from "@/lib/agent/clientTypes";
 
 interface TalkDrawerProps {
@@ -72,6 +73,7 @@ export default function TalkDrawer({ villager, onClose }: TalkDrawerProps) {
           ✕
         </button>
       </header>
+      {villager.life && <VillagerCard life={villager.life} />}
 
       <div className="flex items-center gap-2 border-b-2 border-[#d8c49a] px-4 py-2 text-xs">
         <select

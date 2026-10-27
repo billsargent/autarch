@@ -61,7 +61,7 @@ async function ensureDailyReportJob() {
     enabled: false,
     nextRunAt: first,
   });
-  console.log("[worker] added the daily self-report job, switched off (turn it on in the Mayor's ledger → Free time)");
+  console.log("[worker] added the daily self-report job, switched off (turn it on in the Mayor's ledger → Work & life)");
 }
 
 // Seed a recurring self-directed work window, so the agent can take initiative
@@ -81,7 +81,7 @@ async function ensureSelfWorkJob() {
     enabled: false,
     nextRunAt: new Date(Date.now() + SELF_WORK_INTERVAL_MINUTES * 60_000),
   });
-  console.log(`[worker] added the self-directed work job, switched off (turn it on in the Mayor's ledger → Free time)`);
+  console.log(`[worker] added the self-directed work job, switched off (turn it on in the Mayor's ledger → Work & life)`);
 }
 
 // Enforce "how often it starts working" (cooldown + daily cap). Applies to
@@ -164,6 +164,13 @@ async function runDueJobs() {
   if (stopping) return;
   const settings = await getSettings();
   if (settings.paused) return; // global kill switch: don't start anything
+  // Every ten minutes, village life moves on (#132), day and night (sleep
+  // is part of it); no model calls.
+  try {
+    await (await import("@/lib/agent/life")).runLifeTick();
+  } catch (err) {
+    console.error(`[worker] village life failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
   // Night (#100): the village sleeps. Nothing autonomous starts; jobs that fall
   // due stay due and run after wake-up.
   if (isNight(new Date(), settings.bedtime, settings.wakeTime)) {
@@ -211,6 +218,16 @@ async function runDueJobs() {
     .filter((j) => j.agentId === null || working.has(j.agentId))
     .slice(0, 5);
   if (!due.length) return;
+  // The day split (#130): each villager's work windows and life window take
+  // turns as the owner chose. A life window already had today waits for tomorrow.
+  const life = await import("@/lib/agent/life");
+  const { run: allowed, postpone } = life.chooseWindows(due, settings);
+  for (const j of postpone) {
+    const tomorrow = nextWake(new Date(Date.now() + 3600_000), settings.wakeTime);
+    await db.update(jobs).set({ nextRunAt: new Date(tomorrow.getTime() + 60 * 60_000), updatedAt: new Date() }).where(eq(jobs.id, j.id));
+  }
+  due.splice(0, due.length, ...allowed);
+  if (!due.length) return;
 
   // Overlap guard: never start a scheduled session while any turn is active.
   const running = await db.select().from(workSessions).where(eq(workSessions.status, "running")).limit(1);
@@ -242,11 +259,11 @@ async function runDueJobs() {
     const isReport = job.kind === "daily_report";
     const isSelfWork = job.kind === "self_work";
     const isDaydream = job.kind === "daydream";
-    const trigger: SessionTrigger = isReport ? "report" : "scheduled";
+    const trigger: SessionTrigger = isReport ? "report" : isDaydream ? "life" : "scheduled";
     const eventNote = isReport
       ? `[DAILY REPORT] It's time for your daily self-report. Look back at what you did over the past day (journal, sessions, tool executions), summarize it, note what you spent, and write your plan for today into your journal (category=reflection).`
       : isDaydream
-        ? `[FREE TIME] Some free time (up to ${job.maxDurationMinutes} minutes, on your own budget). Look into something you're curious about that touches your work or the village: read, poke around, try a small experiment. If you come away with an idea worth the village's time, pin it with propose_idea (at most one). Jot what you found in your journal. Don't start big work.`
+        ? `[VILLAGE LIFE] Your own time in the village. No computer work now: live your life a little.`
         : isSelfWork
         ? `[SELF-DIRECTED WORK] Your initiative window is open (up to ${job.maxDurationMinutes} minutes). Review your goals and journal, pick the highest-value goal, and take real action on it — explore, build, test, or automate something. Act, don't plan. Journal what you did. Only notify the human if something genuinely needs their input.`
         : `[SCHEDULED WORK] Your scheduled job "${job.name}" is due — a work window just opened (up to ${job.maxDurationMinutes} minutes). ${job.instruction ? `Job instructions: ${job.instruction}` : "Decide what to do and get to work."}`;
@@ -264,9 +281,13 @@ async function runDueJobs() {
         conversationId,
         eventNote,
         trigger,
-        jobId: job.id,
+        // A life window isn't a work window: no job mandate in the prompt.
+        jobId: isDaydream ? null : job.id,
         maxDurationMinutes: job.maxDurationMinutes,
       });
+      if (isDaydream && job.agentId) {
+        sqlite.prepare("UPDATE villager_life SET last_life_day = ? WHERE agent_id = ?").run(life.dayKey(new Date()), job.agentId);
+      }
       await db
         .update(jobs)
         .set({ lastStatus: "completed", updatedAt: new Date() })

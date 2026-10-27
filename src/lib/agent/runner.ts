@@ -7,13 +7,14 @@ import { buildPromptMessages } from "./compact";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { TRUNCATION_DEFAULT } from "./promptDefaults";
 import { buildSystemPrompt } from "./systemPrompt";
-import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, executeTool } from "./tools";
+import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, executeTool, lifeToolDefinitions } from "./tools";
+import { LIFE_TOOL_NAMES } from "./lifeTools";
 import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
 import { isChatMode, resolveToolAccess } from "./chatMode";
 import { HEARTBEAT_MS, TurnBusyError, claimTurn, heartbeat, isCancelRequested } from "./turnLock";
 import { resolveRun, type RunSettings } from "./providers";
 import { autoJournal, importPlanFile } from "./memory";
-import { TALK_ONLY_TRIGGERS, type SessionTrigger } from "./triggers";
+import { LIFE_STEPS, TALK_ONLY_TRIGGERS, type SessionTrigger } from "./triggers";
 import { BudgetError, actionsInLastHour, budgetAlerts, budgetProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
 
 export { BudgetError } from "./agents";
@@ -394,10 +395,14 @@ export async function runAgentTurn(opts: {
     // or report) auto-scale steps from the time budget so a 45min job isn't choked
     // by a 16-step default. Roughly 2 steps per minute (one step ≈ 30s model call + tool).
     const isWorkWindow = trigger === "scheduled" || trigger === "report";
-    const maxSteps = isWorkWindow
-      ? Math.max(settings.maxAgentSteps, Math.ceil(maxDurationMinutes * 2))
-      : Math.max(1, settings.maxAgentSteps);
-    const tools = getEnabledToolDefinitions(settings.enabledTools as string[]);
+    // A life window (#133) has only the village-life tools, and a few steps.
+    const lifeTurn = trigger === "life";
+    const maxSteps = lifeTurn
+      ? LIFE_STEPS
+      : isWorkWindow
+        ? Math.max(settings.maxAgentSteps, Math.ceil(maxDurationMinutes * 2))
+        : Math.max(1, settings.maxAgentSteps);
+    const tools = lifeTurn ? lifeToolDefinitions() : getEnabledToolDefinitions(settings.enabledTools as string[]);
     // Direct user chat in a conversation-mode conversation: we DON'T expose
     // tools at all (a tool call becomes impossible), and toolsForbidden refuses
     // any call that still reaches execution. Each conversation's own toggle is
@@ -614,7 +619,7 @@ export async function runAgentTurn(opts: {
         }
 
         const enabledTools = settings.enabledTools as string[];
-        const toolIsEnabled = enabledTools.includes(toolName);
+        const toolIsEnabled = enabledTools.includes(toolName) || (lifeTurn && LIFE_TOOL_NAMES.includes(toolName));
 
         const execRow = await db
           .insert(toolExecutions)
@@ -639,6 +644,11 @@ export async function runAgentTurn(opts: {
           status = "blocked";
           output = "Tools are disabled in conversation mode. The agent cannot act until the human switches to agentic mode.";
           resultContent = `BLOCKED (conversation mode): ${output}`;
+        } else if (lifeTurn && !LIFE_TOOL_NAMES.includes(toolName)) {
+          // Never the computer in a villager's own time, whatever the mode.
+          status = "blocked";
+          output = "This is your own time in the village: only village-life tools work now. Computer work waits for a work window.";
+          resultContent = `BLOCKED: ${output}`;
         } else if (settings.paused) {
           status = "blocked";
           output = "The human has globally PAUSED the agent. No actions run while paused.";

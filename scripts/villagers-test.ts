@@ -233,8 +233,15 @@ async function main() {
   };
   // Make it daytime whatever the real clock says: nobody can be asked at night.
   const hm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  // A time on today's clock face, `min` minutes from now. Clock arithmetic,
+  // not real time, so it holds on the night the clocks change.
+  const clockIn = (min: number) => {
+    const n = new Date();
+    const t = (((n.getHours() * 60 + n.getMinutes() + min) % 1440) + 1440) % 1440;
+    return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+  };
   const hmNow = new Date();
-  await updateSettings({ bedtime: hm(new Date(hmNow.getTime() + 2 * 3600_000)), wakeTime: hm(new Date(hmNow.getTime() + 3 * 3600_000)) });
+  await updateSettings({ bedtime: clockIn(120), wakeTime: clockIn(180) });
   fake.script.length = 0;
   fake.byAgent.Cal = [{ tools: [{ name: "ask_villager", args: { to: "dot", message: "Where are the nets?" } }] }, { text: "I've asked Dot." }];
   fake.byAgent.Dot = [{ text: "In the shed by the pond." }];
@@ -279,7 +286,7 @@ async function main() {
   check("not yourself", (await askVillager({ to: "Cal", message: "hi" }, ctxCal)).output, "Refused: that's you.");
   await agentRoute.PATCH(req(`/api/agents/${ann.id}`, "PATCH", { status: "paused" }), { params: Promise.resolve({ id: String(ann.id) }) });
   check("not someone who's paused", (await askVillager({ to: "Ann", message: "hi" }, ctxCal)).output.includes("resting"), true);
-  await updateSettings({ bedtime: hm(new Date(hmNow.getTime() - 3600_000)), wakeTime: hm(new Date(hmNow.getTime() + 3600_000)) });
+  await updateSettings({ bedtime: clockIn(-60), wakeTime: clockIn(60) });
   check("not at night", (await askVillager({ to: "Bea", message: "hi" }, ctxCal)).output.includes("is asleep"), true);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
 
@@ -415,7 +422,7 @@ async function main() {
   const meetingsRoute = await import("../src/app/api/meetings/route");
   const meetingRoute = await import("../src/app/api/meetings/[id]/route");
   const { meetings: meetingsT } = await import("../src/db/schema");
-  const daytime = () => updateSettings({ bedtime: hm(new Date(Date.now() + 2 * 3600_000)), wakeTime: hm(new Date(Date.now() + 3 * 3600_000)) });
+  const daytime = () => updateSettings({ bedtime: clockIn(120), wakeTime: clockIn(180) });
   await daytime();
   const view = async (id: number) => (await meetingRoute.GET(req(`/api/meetings/${id}`, "GET"), { params: Promise.resolve({ id: String(id) }) })).json();
   const patchMeeting = (id: number, body: unknown) => meetingRoute.PATCH(req(`/api/meetings/${id}`, "PATCH", body), { params: Promise.resolve({ id: String(id) }) });
@@ -481,7 +488,7 @@ async function main() {
   await settleTurns(mid);
   check("an ended meeting takes no more questions", (await patchMeeting(mid, { action: "ask", message: "Hello?" })).status, 409);
   check("…and everyone goes back to work", villagers.villagerStates([gus.id]).get(gus.id)?.inMeeting, false);
-  await updateSettings({ bedtime: hm(new Date(Date.now() - 3600_000)), wakeTime: hm(new Date(Date.now() + 3600_000)) });
+  await updateSettings({ bedtime: clockIn(-60), wakeTime: clockIn(60) });
   check("no meetings at night", (await meetingsRoute.POST(req("/api/meetings", "POST", {}))).status, 409);
   await daytime();
 
@@ -527,7 +534,7 @@ async function main() {
   check("never his own requests", await away.considerWhileAway(await pend(mayor.id, "low")), "skipped");
   await updateSettings({ awaySpendCapUsd: 0 });
   check("nothing once the away budget is spent", await away.considerWhileAway(await pend(cal.id, "low")), "skipped");
-  await updateSettings({ awaySpendCapUsd: 5, bedtime: hm(new Date(Date.now() - 3600_000)), wakeTime: hm(new Date(Date.now() + 3600_000)) });
+  await updateSettings({ awaySpendCapUsd: 5, bedtime: clockIn(-60), wakeTime: clockIn(60) });
   check("nothing at night", await away.considerWhileAway(await pend(cal.id, "low")), "skipped");
   await daytime();
 
@@ -636,7 +643,7 @@ async function main() {
   check("the Mayor can", (await power("call_vote", { ideaId: threeId })).startsWith(`The vote on idea #${threeId}`), true);
   check("…and it's adopted", (await settleIdea(threeId)).status, "adopted");
   check("one daily vote at most", await ideasLib.dailyVote(), null);
-  await updateSettings({ bedtime: hm(new Date(Date.now() - 3600_000)), wakeTime: hm(new Date(Date.now() + 3600_000)) });
+  await updateSettings({ bedtime: clockIn(-60), wakeTime: clockIn(60) });
   const nightIdea = (await (await ideasRoute.POST(req("/api/ideas", "POST", { title: "Night idea" }))).json()).idea;
   check("no votes at night", (await ideaPatch(nightIdea.id, "vote")).status, 409);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
@@ -682,7 +689,7 @@ async function main() {
   const stockBefore = await econ.getEconomy();
   check("the day's economy runs once a day", [await econ.dailyEconomy(later), await econ.dailyEconomy(later)], [true, false]);
   const after = await econ.getEconomy();
-  check("…the kept farm grew 6 wheat, the unkept bakery baked 2", [after.wheat, after.bread], [stockBefore.wheat + 6 - 2, Math.max(0, stockBefore.bread + 2 - (await db.select().from(agents).where(eq(agents.status, "active"))).length)]);
+  check("…a farm with a farmer waits for them (village life makes the goods), and nobody eats from the daily tally any more", [after.wheat, after.bread, after.shortage], [stockBefore.wheat, stockBefore.bread, 0]);
   check("keepers spend their spare time at their building", (await econ.keeperDoors())[gus.id], "west-1");
   check("when the village runs short, morale dips", (await (await import("../src/lib/agent/morale")).villageMorale()).every((m) => m.reasons.includes("the village ran short of bread (−10)")), after.shortage > 0);
 
@@ -992,6 +999,55 @@ async function main() {
   await updateSettings({ townDailyBudgetUsd: null });
   const activity = (await (await (await import("../src/app/api/usage/route")).GET()).json()).byActivity as Array<{ name: string }>;
   check("the vault shows today by what it was for", ["chat", "meetings", "votes", "interviews"].every((n) => activity.some((a) => a.name === n)), true);
+
+  // --- village life (#129) -----------------------------------------------------------------
+  const life = await import("../src/lib/agent/life");
+  const { sqlite: lifeDb } = await import("../src/db");
+  const today = new Date();
+  const at = (h: number) => new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, 0, 0);
+  await life.runLifeTick(at(10), () => 0.9, true);
+  const calLife = life.lifeSummary(cal.id)!;
+  check("every villager has a trade and a day: Cal the carpenter is at the workbench", [calLife.trade, calLife.place, calLife.activity], ["carpenter", "work", "at the workbench"]);
+  check("…and keeping the farm made Gus a farmer", life.lifeSummary(gus.id)!.trade, "farmer");
+  check("life moves on at most every ten minutes", await life.runLifeTick(at(10), () => 0.9), false);
+  lifeDb.prepare("UPDATE villager_life SET company = 10, fullness = 90, energy = 90").run();
+  const [lo, hi] = cal.id < dot.id ? [cal.id, dot.id] : [dot.id, cal.id];
+  lifeDb.prepare("INSERT OR REPLACE INTO relationships (a_id, b_id, affinity, status) VALUES (?, ?, 29, 'acquaintance')").run(lo, hi);
+  await life.runLifeTick(at(19), () => 0.9, true);
+  check("in the evening the lonely go to the tavern", [life.lifeSummary(cal.id)!.place, life.lifeSummary(dot.id)!.place], ["tavern", "tavern"]);
+  check("…and evenings together make friends", [life.lifeSummary(cal.id)!.friends.some((f) => f.id === dot.id && f.status === "friend"), life.lifeSummary(cal.id)!.recent.some((t) => /friends now/.test(t))], [true, true]);
+  check("a villager's life goes into their prompt", life.lifeBlock(cal.id).split("\n").slice(0, 2), ["YOUR LIFE IN THE VILLAGE", "- You're an apprentice carpenter (level 1). Right now you're at the tavern."]);
+
+  const calChat2 = (await runAgentTurn({ userMessage: "How's your day going?", agentId: cal.id })).conversationId;
+  const calSaw = [...fake.seen].reverse().find((s) => s.system.startsWith("You are Cal"))!;
+  check("villagers are told they're villagers first, with their life in every turn", [calSaw.system.includes("YOUR LIFE IN THE VILLAGE"), calSaw.system.includes("Your trade is looking after the computer"), calSaw.system.includes("not an assistant")], [true, false, true]);
+
+  fake.byAgent.Cal = [{ tools: [{ name: "run_shell_command", args: { command: "ls" } }, { name: "do_activity", args: { what: "rest" } }] }, { text: "A quiet afternoon; I put my feet up." }];
+  const lifeTurn = await runAgentTurn({ agentId: cal.id, trigger: "life", eventNote: "[VILLAGE LIFE] Your own time." });
+  const lifeSaw = [...fake.seen].reverse().find((s) => s.system.startsWith("You are Cal") && s.system.includes("YOUR OWN TIME"))!;
+  check("a life window offers only village life and the diary", [...lifeSaw.tools].sort(), ["do_activity", "update_journal", "visit"]);
+  const lifeMsgs = await msgsOf(lifeTurn.conversationId);
+  check("…the computer is off-limits there, whatever the mode", lifeMsgs.find((m) => m.role === "tool" && m.toolName === "run_shell_command")?.content?.startsWith("BLOCKED: This is your own time"), true);
+  check("…and village tools change their life", life.lifeSummary(cal.id)!.activity, "having a rest");
+  void calChat2;
+
+  const settingsNow = await getSettings();
+  const due = [
+    { id: 901, agentId: cal.id, kind: "interval" },
+    { id: 902, agentId: cal.id, kind: "daydream" },
+  ];
+  lifeDb.prepare("UPDATE villager_life SET last_life_day = NULL WHERE agent_id = ?").run(cal.id);
+  check("idle: computer work first", life.chooseWindows(due, { ...settingsNow, lifeBalance: "idle" }, at(11)).run.map((j) => j.id), [901]);
+  check("work hours: life after hours", life.chooseWindows(due, { ...settingsNow, lifeBalance: "hours" }, at(18)).run.map((j) => j.id), [902]);
+  check("work hours: work in hours", life.chooseWindows(due, { ...settingsNow, lifeBalance: "hours" }, at(11)).run.map((j) => j.id), [901]);
+  lifeDb.prepare("UPDATE agents SET life_balance = 'hours' WHERE id = ?").run(cal.id);
+  check("a villager's own split wins over the town's", life.chooseWindows(due, { ...settingsNow, lifeBalance: "idle" }, at(18)).run.map((j) => j.id), [902]);
+  lifeDb.prepare("UPDATE agents SET life_balance = NULL WHERE id = ?").run(cal.id);
+  lifeDb.prepare("UPDATE villager_life SET last_life_day = ? WHERE agent_id = ?").run(life.dayKey(at(11)), cal.id);
+  check("one life window a day", life.chooseWindows(due, { ...settingsNow, lifeBalance: "hours" }, at(18)).postpone.map((j) => j.id), [902]);
+  check("a trade must be a real one", (await (await agentRoute.PATCH(req(`/api/agents/${cal.id}`, "PATCH", { trade: "astronaut" }), { params: Promise.resolve({ id: String(cal.id) }) })).json()).error, "trade: isn't one of the village's trades.");
+  await agentRoute.PATCH(req(`/api/agents/${cal.id}`, "PATCH", { trade: "baker" }), { params: Promise.resolve({ id: String(cal.id) }) });
+  check("…and the owner can change it", life.lifeSummary(cal.id)!.trade, "baker");
 
   fake.close();
   try {

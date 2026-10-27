@@ -4,11 +4,12 @@ import { desc, asc, eq, or, isNull, and } from "drizzle-orm";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { workspaceSkillsDir } from "./config";
-import { FOCUSED_CHAT_DEFAULT, coreDefault, fillPlaceholders, workWindowDefault } from "./promptDefaults";
+import { FOCUSED_CHAT_DEFAULT, LIFE_WINDOW_NOTE, coreDefault, fillPlaceholders, workWindowDefault } from "./promptDefaults";
 import { SKILL_PROMPT_CHARS, SKILLS_IN_PROMPT } from "./limits";
 import type { AgentSettingsRow } from "./settingsStore";
 import { DEFAULT_PERSONA } from "./persona";
 import { isNight } from "./daynight";
+import { lifeBlock } from "./life";
 import type { AgentRow } from "./agents";
 import type { SessionTrigger } from "./triggers";
 
@@ -179,7 +180,8 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
 CURRENT STATE (DYNAMIC — this section updates every turn)
 ${statusNotes}${agent?.status === "paused" ? `\n⏸ ${agent.pausedBy === "mayor" ? "The Mayor" : "The human"} has paused you: you can chat, but your tools are blocked until they let you work again.` : ""}${agent?.isMayor ? `\n${MAYOR_NOTE}` : ""}
 ${neighboursLine}
-${isWorkTurn ? (settings.workWindowPrompt ? fill(settings.workWindowPrompt) : workWindowText) : (settings.focusedChatPrompt ? fill(settings.focusedChatPrompt) : FOCUSED_CHAT_DEFAULT)}
+${agent ? lifeBlock(agent.id) : ""}
+${isWorkTurn ? (settings.workWindowPrompt ? fill(settings.workWindowPrompt) : workWindowText) : trigger === "life" ? LIFE_WINDOW_NOTE : (settings.focusedChatPrompt ? fill(settings.focusedChatPrompt) : FOCUSED_CHAT_DEFAULT)}
 
 YOUR GOALS
 ${isWorkTurn

@@ -7,6 +7,7 @@ import { ROOM_ACTIONS } from "../src/components/village/rooms/actions";
 import { nearestWaypoint, shortestPath, type Edge, type Waypoint } from "../src/components/village/path";
 import { MOOD_PLACE, bubbleLine, nextHangout, standOffsets, villagerMood } from "../src/components/village/villagerState";
 import fs from "node:fs";
+import { CHARACTER_GROUPS, CHARACTER_KEYS, TRADE_LOOKS } from "../src/lib/agent/villagerLooks";
 import { dayPhase, isNight, nextWake, parseHM } from "../src/lib/agent/daynight";
 import path from "node:path";
 
@@ -156,6 +157,21 @@ check(
   ),
   [],
 );
+
+// Every villager look has its sprite sheet, in the 64×112 layout the village
+// animates (#138). A PNG's size is in its header: width at byte 16, height at 20.
+{
+  const bad = CHARACTER_KEYS.filter((k) => {
+    const f = path.join("public", "village", "characters", `${k}.png`);
+    if (!fs.existsSync(f)) return true;
+    const head = fs.readFileSync(f).subarray(0, 24);
+    return head.readUInt32BE(16) !== 64 || head.readUInt32BE(20) !== 112;
+  });
+  check("every look has a 64×112 sprite sheet", bad, []);
+  const grouped = CHARACTER_GROUPS.flatMap((g) => g.keys);
+  check("the look picker shows every look once", [CHARACTER_KEYS.filter((k) => !grouped.includes(k)), grouped.length], [[], CHARACTER_KEYS.length]);
+  check("trade looks are real looks", Object.values(TRADE_LOOKS).flat().filter((k) => !(CHARACTER_KEYS as readonly string[]).includes(k)), []);
+}
 
 if (failures > 0) {
   console.error(`\n${failures} village test(s) FAILED`);

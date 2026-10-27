@@ -239,14 +239,28 @@ each road.
 - Each finished house adds two beds, which raises the village's room for villagers (the
   `maxPopulation` setting plus the beds) that hiring respects.
 
-**Food.** Once a day, in the daytime, with no model calls:
+**A life of their own (#129).** Every villager has a village trade (farmer, baker, fisher,
+innkeeper, gardener, shopkeeper, carpenter, trader, scholar, watchman, or odd-jobber), separate
+from helping the owner with the computer. The owner chooses it, or it's guessed from their role;
+keeping a building makes them its trade.
 
-- each farm grows wheat, 6 with a keeper or 2 without;
-- each bakery bakes it into bread, up to 6 loaves with a keeper or 2 without;
-- every active villager eats a loaf.
-
-A keeper is a villager the owner assigns. They spend their spare time at the building. If the
-village runs short of bread, everyone's morale dips. Food never stops anyone working.
+- **Every ten minutes, with no model calls,** each villager's day moves on. Energy, fullness and
+  company drift. By day they work their trade at its building, making goods for the village
+  (wheat, bread, fish, flowers, crafts, ale) and earning experience, levels and a coin. When
+  hungry they eat from the village pantry, when tired they rest, and in the evening they go to
+  the tavern or drop in on a friend. At night they sleep.
+- **Friends.** Villagers who spend time together grow closer: acquaintances become friends, then
+  close friends.
+- **The life window.** If the owner switches village life on for a villager, once a day they get a
+  short turn of their own with village tools only (`do_activity`, `visit` and their diary). No
+  computer tool works there, whatever the autonomy mode. It costs a few short model calls, within
+  a daily life budget (default $0.02).
+- **The day split.** The owner decides how villagers' own time splits between computer jobs and
+  village life: village life when idle (the default), work hours then village life, or a balanced
+  share. Each villager can have their own. Anything the owner asks for always runs.
+- **Food.** Villagers eat when they're hungry. A farm or bakery nobody works still makes a little
+  each day. If someone goes hungry, everyone's morale dips. Food never stops anyone working.
+- Coins are the village's own and never real money.
 
 ## 10. Changing this charter
 

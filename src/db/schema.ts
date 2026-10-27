@@ -37,6 +37,11 @@ export const agents = sqliteTable("agents", {
   providerId: integer("provider_id"),
   area: text("area"),
   managerId: integer("manager_id"),
+  // Their village trade (#131); empty = guessed from the role (trades.ts).
+  trade: text("trade"),
+  // Their own day split (#130); empty = the town's.
+  lifeBalance: text("life_balance", { enum: ["idle", "hours", "balanced"] }),
+  workShare: integer("work_share"),
   // Limits (#60); empty = no cap of its own.
   dailyBudgetUsd: real("daily_budget_usd"),
   maxActionsPerHour: integer("max_actions_per_hour"),
@@ -322,6 +327,59 @@ export const economy = sqliteTable("economy", {
   // Loaves short at the last day's meals.
   shortage: integer("shortage").notNull().default(0),
   lastTickDay: text("last_tick_day"),
+  // More goods from the villagers' trades (#132), the village's coins and its
+  // name among the neighbouring towns (#136).
+  fish: integer("fish").notNull().default(0),
+  flowers: integer("flowers").notNull().default(0),
+  crafts: integer("crafts").notNull().default(0),
+  ale: integer("ale").notNull().default(0),
+  treasury: integer("treasury").notNull().default(0),
+  reputation: integer("reputation").notNull().default(0),
+  // When the life simulation last ran, in unix seconds (#132).
+  lastLifeTick: integer("last_life_tick"),
+});
+
+// Each villager's life (#132): their trade's experience, needs (0-100), game
+// coins, where they are and what they're doing, and their cottage decor.
+export const villagerLife = sqliteTable("villager_life", {
+  agentId: integer("agent_id")
+    .primaryKey()
+    .references(() => agents.id, { onDelete: "cascade" }),
+  xp: integer("xp").notNull().default(0),
+  energy: integer("energy").notNull().default(80),
+  fullness: integer("fullness").notNull().default(80),
+  company: integer("company").notNull().default(60),
+  coins: integer("coins").notNull().default(20),
+  // "home", "work", "tavern", "plaza", "visit" (with withId) or "out".
+  place: text("place").notNull().default("home"),
+  activity: text("activity").notNull().default("resting"),
+  withId: integer("with_id"),
+  // Open to romance (#134): the owner's toggle.
+  romanceOpen: integer("romance_open", { mode: "boolean" }).notNull().default(true),
+  decor: text("decor", { mode: "json" }).notNull().default(sql`'[]'`),
+  // The day of their last life window (#133), YYYY-MM-DD.
+  lastLifeDay: text("last_life_day"),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+});
+
+// How two villagers get on (#134); a_id < b_id.
+export const relationships = sqliteTable("relationships", {
+  aId: integer("a_id").notNull(),
+  bId: integer("b_id").notNull(),
+  affinity: integer("affinity").notNull().default(0),
+  romance: integer("romance").notNull().default(0),
+  status: text("status", { enum: ["acquaintance", "friend", "close friend", "sweetheart", "partner"] }).notNull().default("acquaintance"),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+});
+
+// The village chronicle (#132): what happened in villagers' lives.
+export const lifeEvents = sqliteTable("life_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  kind: text("kind").notNull(),
+  agentId: integer("agent_id").references(() => agents.id, { onDelete: "cascade" }),
+  otherId: integer("other_id").references(() => agents.id, { onDelete: "set null" }),
+  text: text("text").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
 
 // Town meetings (#81): the owner (or the Mayor) asks, and each villager at
@@ -432,6 +490,15 @@ export const agentSettings = sqliteTable("agent_settings", {
   townDailyBudgetUsd: real("town_daily_budget_usd"),
   // Day and night (#100): local "HH:MM". At night no autonomous work starts.
   bedtime: text("bedtime").notNull().default("22:00"),
+  // How the day splits between computer work and village life (#130):
+  // "idle" (life fills the gaps), "hours" (work hours, then life) or
+  // "balanced" (aim for workShare percent work).
+  lifeBalance: text("life_balance", { enum: ["idle", "hours", "balanced"] }).notNull().default("idle"),
+  workStart: text("work_start").notNull().default("09:00"),
+  workEnd: text("work_end").notNull().default("15:00"),
+  workShare: integer("work_share").notNull().default(60),
+  // What a villager's life windows may cost in a day (#133).
+  lifeBudgetUsd: real("life_budget_usd").notNull().default(0.02),
   // Hiring (#99): "ask" = every hire waits for the owner; "auto" = the Mayor
   // hires within the caps. And how many villagers the village can hold.
   hiringMode: text("hiring_mode", { enum: ["ask", "auto"] }).notNull().default("ask"),

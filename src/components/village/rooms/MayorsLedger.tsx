@@ -25,7 +25,7 @@ import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 const PAGES = [
   { id: "town", label: "Pause & chat" },
   { id: "villagers", label: "Villagers" },
-  { id: "freetime", label: "Free time" },
+  { id: "freetime", label: "Work & life" },
   { id: "overrides", label: "Overrides" },
   { id: "identity", label: "Identity & model" },
   { id: "providers", label: "Providers" },
@@ -232,7 +232,12 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
       );
 
     case "freetime":
-      return <FreeTimePage settings={settings} />;
+      return (
+        <>
+          <DaySplit s={s} settings={settings} save={save} />
+          <FreeTimePage settings={settings} />
+        </>
+      );
 
     case "providers":
       return <ProvidersPage />;
@@ -530,6 +535,63 @@ function IdentityPage({ s, settings }: { s: Settings; settings: SettingsRow }) {
 
 // Work the agent starts on its own. Both are off on a new install (#52); they
 // are ordinary jobs, so the workshop can change their schedule too.
+// How the villagers' own time splits between computer work and village life
+// (#130). Your own requests always run, whatever is chosen here.
+const SPLIT_MODES: Array<{ id: SettingsRow["lifeBalance"]; label: string; desc: string }> = [
+  { id: "idle", label: "Village life when idle", desc: "Computer jobs always come first; village life fills the gaps." },
+  { id: "hours", label: "Work hours, then village life", desc: "Computer jobs run in work hours; outside them it's village life, and jobs wait for the next work hours." },
+  { id: "balanced", label: "Balanced", desc: "Aim for a share of computer work through the day; the rest is village life." },
+];
+
+function DaySplit({ s, settings, save }: { s: Settings; settings: SettingsRow; save: (p: SettingsPatch) => void }) {
+  return (
+    <Section
+      title="Work & life"
+      intro="Every villager has a trade and a life in the village (the farm, the bakery, the tavern, their friends), worked out without any model calls. Switch on village life for a villager (Villagers page) and once a day they also get a short life window of their own, with village tools only. This is how their own time splits between computer jobs and village life; anything you ask them always runs."
+    >
+      <div role="radiogroup" aria-label="Day split" className="space-y-2">
+        {SPLIT_MODES.map((m) => (
+          <label
+            key={m.id}
+            className={`flex cursor-pointer items-start gap-3 rounded border-2 p-3 text-xs ${settings.lifeBalance === m.id ? "border-[#3b2716] bg-[#fffaf0]" : "border-[#d8c49a]"}`}
+          >
+            <input type="radio" name="lifeBalance" className="mt-0.5" checked={settings.lifeBalance === m.id} onChange={() => save({ lifeBalance: m.id })} />
+            <span>
+              <span className="village-pixel block text-sm">{m.label}</span>
+              <span className="text-[#6b4a2e]">{m.desc}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+      {settings.lifeBalance === "hours" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <TextField s={s} settings={settings} field="workStart" label="Work starts" type="time" />
+          <TextField s={s} settings={settings} field="workEnd" label="Work ends" type="time" />
+        </div>
+      )}
+      {settings.lifeBalance === "balanced" && (
+        <label className="block text-xs font-semibold">
+          Computer work: {settings.workShare}% of their own time
+          <input
+            type="range"
+            name="workShare"
+            min={0}
+            max={100}
+            step={5}
+            defaultValue={settings.workShare}
+            key={settings.workShare}
+            onPointerUp={(e) => save({ workShare: Number((e.target as HTMLInputElement).value) })}
+            onKeyUp={(e) => save({ workShare: Number((e.target as HTMLInputElement).value) })}
+            className="mt-1 block w-full"
+          />
+        </label>
+      )}
+      <NumberField s={s} settings={settings} field="lifeBudgetUsd" label="Life windows: daily budget per villager (USD)" step="0.01" help="A life window is a few short model calls; it's skipped once a villager has spent this on village life today." />
+      <p className="text-[11px] text-[#6b4a2e]">Each villager can have their own split on the Villagers page.</p>
+    </Section>
+  );
+}
+
 function FreeTimePage({ settings }: { settings: SettingsRow }) {
   const { jobs, loaded, setEnabled } = useJobs();
   const own = [
@@ -546,7 +608,7 @@ function FreeTimePage({ settings }: { settings: SettingsRow }) {
   ];
   return (
     <Section
-      title="Free time"
+      title="Work on their own"
       intro="Work the agent starts on its own, without being asked. Each run is a work session: it counts toward the daily session cap and the gap between sessions (Limits), and every risky action still needs your approval."
     >
       {!loaded && <p className="text-sm">Checking the job board…</p>}
@@ -777,7 +839,7 @@ function TextField({
 }: {
   s: Settings;
   settings: SettingsRow;
-  field: "agentName" | "workspaceDir" | "bedtime" | "wakeTime";
+  field: "agentName" | "workspaceDir" | "bedtime" | "wakeTime" | "workStart" | "workEnd";
   label: string;
   help?: string;
   type?: "text" | "time";
