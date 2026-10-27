@@ -174,6 +174,8 @@ export const DEFAULT_ENABLED_TOOLS = [
   // Letters between villagers (#172).
   "write_letter",
   "read_letters",
+  // The village calendar (#173).
+  "village_calendar",
   // The Mayor's (#58); only he ever gets them.
   "assign_goal",
   "schedule_job_for",
@@ -183,6 +185,8 @@ export const DEFAULT_ENABLED_TOOLS = [
   "resume_agent",
   "call_meeting",
   "call_vote",
+  "add_event",
+  "cancel_event",
   "propose_building",
   // Ideas (#98): anyone may propose.
   "propose_idea",

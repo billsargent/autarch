@@ -48,7 +48,13 @@ export interface Conduct {
   outcome: "warning" | "keeper" | "dismissal";
 }
 
-export async function proposeIdea(title: string, body: string | null, proposedBy: number | null, conduct: Conduct | null = null): Promise<IdeaRow> {
+export async function proposeIdea(
+  title: string,
+  body: string | null,
+  proposedBy: number | null,
+  conduct: Conduct | null = null,
+  event: { at: Date; allDay: boolean } | null = null,
+): Promise<IdeaRow> {
   const t = title.trim();
   if (!t) throw new IdeaError("An idea needs a title.", 400);
   const open = (sqlite.prepare("SELECT COUNT(*) AS n FROM ideas WHERE status IN ('open', 'voting')").get() as { n: number }).n;
@@ -59,7 +65,11 @@ export async function proposeIdea(title: string, body: string | null, proposedBy
     const mine = (sqlite.prepare("SELECT COUNT(*) AS n FROM ideas WHERE proposed_by = ? AND created_at >= ?").get(proposedBy, since) as { n: number }).n;
     if (mine >= IDEAS_PER_DAY) throw new IdeaError(`you've proposed ${IDEAS_PER_DAY} ideas today. Let the village catch up.`);
   }
-  const [row] = await db.insert(ideas).values({ title: t.slice(0, 120), body: body?.trim().slice(0, 2000) || null, proposedBy, conduct }).returning();
+  if (event && event.at.getTime() <= Date.now()) throw new IdeaError("the event's date has passed.");
+  const [row] = await db
+    .insert(ideas)
+    .values({ title: t.slice(0, 120), body: body?.trim().slice(0, 2000) || null, proposedBy, conduct, eventAt: event?.at ?? null, eventAllDay: event?.allDay ?? false })
+    .returning();
   return row;
 }
 
@@ -67,8 +77,17 @@ export async function proposeIdea(title: string, body: string | null, proposedBy
 export async function proposeIdeaTool(args: Record<string, unknown>, ctx?: ToolContext) {
   if (!ctx?.agentId) return { output: "Refused: only a villager can pin an idea.", summary: "idea refused" };
   try {
-    const idea = await proposeIdea(String(args.title ?? ""), args.body ? String(args.body) : null, ctx.agentId);
-    return { output: `Pinned idea #${idea.id} on the notice board: "${idea.title}". The village will vote on it.`, summary: `idea #${idea.id}` };
+    let event: { at: Date; allDay: boolean } | null = null;
+    if (args.when != null && String(args.when).trim()) {
+      const { parseWhen } = await import("./villageCalendar");
+      event = parseWhen(String(args.when));
+      if (!event) return { output: 'Refused: say when as a date, "2026-11-02", or a date and time, "2026-11-02 18:00".', summary: "idea refused" };
+    }
+    const idea = await proposeIdea(String(args.title ?? ""), args.body ? String(args.body) : null, ctx.agentId, null, event);
+    return {
+      output: `Pinned idea #${idea.id} on the notice board: "${idea.title}". The village will vote on it.${event ? " If it's adopted, it goes on the village calendar." : ""}`,
+      summary: `idea #${idea.id}`,
+    };
   } catch (err) {
     if (err instanceof IdeaError) return { output: `Refused: ${err.message}`, summary: "idea refused" };
     throw err;
@@ -156,11 +175,26 @@ async function adopt(idea: IdeaRow, by: "vote" | "owner", note: string) {
     .values({ title: idea.title, body: [idea.body, note].filter(Boolean).join("\n\n"), status: "backlog", priority: 3, agentId: null })
     .returning();
   await db.update(ideas).set({ status: "adopted", goalId: goal.id, decidedBy: by, decidedAt: new Date() }).where(eq(ideas.id, idea.id));
+  // A dated idea goes on the village calendar (#173), unless its day has passed.
+  let dated = "";
+  if (idea.eventAt) {
+    const cal = await import("./villageCalendar");
+    const at = idea.eventAt;
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const when = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}${idea.eventAllDay ? "" : ` ${pad(at.getHours())}:${pad(at.getMinutes())}`}`;
+    const kind = /festival|fair|feast|celebrat|party|dance/i.test(idea.title) ? "festival" : /work ?day|build|repair|clean/i.test(idea.title) ? "workday" : "other";
+    try {
+      const e = cal.addEvent({ title: idea.title, kind, when, notes: idea.body }, { source: "idea", sourceId: idea.id });
+      dated = ` It's on the village calendar for ${cal.describeWhen(e)}.`;
+    } catch {
+      /* its day has passed, or the calendar is full: it stays a goal */
+    }
+  }
   const mayor = await ensureMayor();
   await db.insert(notifications).values({
     kind: "idea",
     title: `Adopted: ${idea.title}`,
-    body: `${note} It's a town goal now (#${goal.id}); the Mayor can give it to someone.`,
+    body: `${note} It's a town goal now (#${goal.id}); the Mayor can give it to someone.${dated}`,
     severity: "success",
     source: mayor.name,
     agentId: mayor.id,
@@ -182,6 +216,7 @@ export async function veto(ideaId: number) {
   if (idea.status === "vetoed" || idea.status === "rejected") throw new IdeaError(`That idea is already ${idea.status}.`);
   await db.update(ideas).set({ status: "vetoed", decidedBy: "owner", decidedAt: new Date() }).where(eq(ideas.id, ideaId));
   if (idea.goalId) await db.update(goals).set({ status: "abandoned", updatedAt: new Date() }).where(eq(goals.id, idea.goalId));
+  (await import("./villageCalendar")).cancelEventsFrom("idea", ideaId);
 }
 
 export async function listIdeas(limit = 40) {

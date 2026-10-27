@@ -19,6 +19,9 @@ interface Idea {
   rounds: number;
   goalId: number | null;
   decidedBy: string | null;
+  // An idea that's an event (#173): adopted, it goes on the village calendar.
+  eventAt: string | null;
+  eventAllDay: boolean;
   voting: boolean;
   votes: Array<{ agentId: number | null; choice: "yes" | "no" | "abstain"; reason: string | null }>;
 }
@@ -117,6 +120,12 @@ export default function IdeasBoard({ onBack, onClose }: { onBack: () => void; on
             <li key={idea.id} className="rounded border-2 border-[#3b2716] bg-[#fffaf0] p-2.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold">💡 {idea.title}</span>
+                {idea.eventAt && (
+                  <span className="text-[11px] text-[#6b4a2e]">
+                    📅{" "}
+                    {new Date(idea.eventAt).toLocaleString([], idea.eventAllDay ? { weekday: "short", day: "numeric", month: "short" } : { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
+                  </span>
+                )}
                 <span className="ml-auto text-[11px] font-semibold" style={{ color: st.tone }}>
                   {st.label}
                 </span>

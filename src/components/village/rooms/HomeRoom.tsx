@@ -12,6 +12,7 @@ import { useSettings } from "../../data/useSettings";
 import { loadPercent, useSystemStatus } from "../../data/useSystemStatus";
 import { useVillagers } from "../../data/useVillagers";
 import ParchmentDialog from "../ParchmentDialog";
+import VillageCalendar from "./VillageCalendar";
 import TalkDrawer from "../TalkDrawer";
 import VillagerPortrait from "../VillagerPortrait";
 import { MapTable, Pantry } from "./BuildingDialogs";
@@ -296,6 +297,7 @@ export function Calendar({ onClose }: { onClose: () => void }) {
           falls due at night waits until morning.
         </p>
       )}
+      <VillageCalendar />
       <YourCalendar connected={Boolean(settings?.calendarSet)} />
       <VillageHappenings />
       <p className="text-xs font-semibold">The village&apos;s jobs</p>

@@ -50,6 +50,8 @@ export function publicCalendar(c: CalendarRow, redirectUri: string) {
     googleAccount: c.googleAccount ?? "",
     googleCalendarId: c.googleCalendarId ?? "",
     googleCalendarName: c.googleCalendarName ?? "",
+    villageCalendarId: c.villageCalendarId ?? "",
+    villageCalendarName: c.villageCalendarName ?? "",
     readers: (c.readers as number[]) ?? [],
     redirectUri,
   };
@@ -66,6 +68,10 @@ export async function saveCalendarSettings(patch: Record<string, unknown>) {
   if (typeof patch.googleCalendarId === "string") {
     out.googleCalendarId = patch.googleCalendarId || null;
     out.googleCalendarName = typeof patch.googleCalendarName === "string" ? patch.googleCalendarName.slice(0, 200) : null;
+  }
+  if (typeof patch.villageCalendarId === "string") {
+    out.villageCalendarId = patch.villageCalendarId || null;
+    out.villageCalendarName = patch.villageCalendarId && typeof patch.villageCalendarName === "string" ? patch.villageCalendarName.slice(0, 200) : null;
   }
   if (Array.isArray(patch.readers)) out.readers = patch.readers.filter((n): n is number => Number.isInteger(n));
   // A new client means signing in again.
@@ -204,14 +210,33 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 // Adds an approved event to the chosen calendar.
 export async function createGoogleEvent(e: { title: string; description: string; details: EventDetails }): Promise<string> {
   const c = await getCalendarSettings();
+  const made = await insertEvent(c.googleCalendarId || "primary", e);
+  return `Added to ${c.googleCalendarName || "your calendar"}.${made.htmlLink ? ` ${made.htmlLink}` : ""}`;
+}
+
+// The village calendar's copy (#173): an event added to a given calendar, by id.
+export async function createEventIn(calendarId: string, e: { title: string; description: string; details: EventDetails }): Promise<string> {
+  return (await insertEvent(calendarId, e)).id;
+}
+
+export async function deleteEventIn(calendarId: string, eventId: string): Promise<void> {
+  const res = await fetch(`${API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${await accessToken()}` },
+    signal: AbortSignal.timeout(15_000),
+  });
+  // Already gone from Google (deleted there by hand) counts as done.
+  if (!res.ok && res.status !== 404 && res.status !== 410) throw new GoogleError(`Google Calendar said: HTTP ${res.status}`);
+}
+
+async function insertEvent(calendarId: string, e: { title: string; description: string; details: EventDetails }): Promise<{ id: string; htmlLink?: string }> {
   const start = new Date(e.details.start);
   const end = new Date(e.details.end);
   const when = e.details.allDay
     ? { start: { date: ymd(start) }, end: { date: ymd(new Date(Math.max(end.getTime(), start.getTime() + 86400_000))) } }
     : { start: { dateTime: start.toISOString() }, end: { dateTime: end.toISOString() } };
-  const made = await api<{ id: string; htmlLink?: string }>(`/calendars/${encodeURIComponent(c.googleCalendarId || "primary")}/events`, {
+  return api<{ id: string; htmlLink?: string }>(`/calendars/${encodeURIComponent(calendarId)}/events`, {
     method: "POST",
     body: JSON.stringify({ summary: e.title, description: e.description, ...(e.details.location ? { location: e.details.location } : {}), ...when }),
   });
-  return `Added to ${c.googleCalendarName || "your calendar"}.${made.htmlLink ? ` ${made.htmlLink}` : ""}`;
 }

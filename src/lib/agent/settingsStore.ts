@@ -38,11 +38,15 @@ function migrateSkillsDirOnce(workspaceDir: string) {
 // stays off.
 export const DEFAULT_TOWN_BUDGET_USD = 2;
 
-const NEW_TOOLS_TO_OFFER = ["message_owner", "ask_villager", ...MAYOR_TOOLS, ...HIRING_TOOLS, "note_about", "propose_idea", "save_draft", "pin_notice", "write_letter", "read_letters"];
+const NEW_TOOLS_TO_OFFER = ["message_owner", "ask_villager", ...MAYOR_TOOLS, ...HIRING_TOOLS, "note_about", "propose_idea", "save_draft", "pin_notice", "write_letter", "read_letters", "village_calendar"];
 // Village tools every villager should have, even one with a tool list of
-// their own: added to those lists once (done_once), so a tool the owner later
-// takes off a villager stays off.
-const OFFERED_TO_EVERY_VILLAGER = ["write_letter", "read_letters"];
+// their own: added to those lists once each (done_once), so a tool the owner
+// later takes off a villager stays off.
+const EVERY_VILLAGER_OFFERS: Array<[string, string[]]> = [
+  ["letters-172", ["write_letter", "read_letters"]],
+  ["calendar-173", ["village_calendar"]],
+];
+const OFFERED_TO_EVERY_VILLAGER = EVERY_VILLAGER_OFFERS.flatMap(([, tools]) => tools);
 
 export function offerToEveryVillager(tools: string[]) {
   const everyone = tools.filter((t) => OFFERED_TO_EVERY_VILLAGER.includes(t));
@@ -60,9 +64,10 @@ async function ensureMessagingEnabled(row: AgentSettingsRow): Promise<AgentSetti
   messagingEnabled = true;
   const offered = new Set((row.offeredTools as string[] | null) ?? []);
   const enabled = (row.enabledTools as string[]) || [];
-  if (!sqlite.prepare("SELECT 1 FROM done_once WHERE name = 'letters-172'").get()) {
-    offerToEveryVillager(OFFERED_TO_EVERY_VILLAGER);
-    sqlite.prepare("INSERT OR IGNORE INTO done_once (name) VALUES ('letters-172')").run();
+  for (const [key, tools] of EVERY_VILLAGER_OFFERS) {
+    if (sqlite.prepare("SELECT 1 FROM done_once WHERE name = ?").get(key)) continue;
+    offerToEveryVillager(tools);
+    sqlite.prepare("INSERT OR IGNORE INTO done_once (name) VALUES (?)").run(key);
   }
   const fresh = NEW_TOOLS_TO_OFFER.filter((t) => !offered.has(t));
   if (!fresh.length) return row;

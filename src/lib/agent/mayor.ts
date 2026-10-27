@@ -70,6 +70,10 @@ export async function runMayorTool(tool: string, args: Record<string, unknown>, 
       return callConductVote(mayor, args, ctx);
     case "appoint_keeper":
       return appointKeeper(args, ctx);
+    case "add_event":
+      return (await import("./villageCalendar")).addEventTool(args, ctx);
+    case "cancel_event":
+      return (await import("./villageCalendar")).cancelEventTool(args);
     case "propose_building": {
       const busy = notWhileAnswering(ctx);
       if (busy) return busy;

@@ -60,6 +60,10 @@ function startFakeGoogle() {
         });
       }
       if (req.method === "POST" && url.pathname.endsWith("/events")) return json(200, { id: "ev1", htmlLink: "https://calendar.example/ev1" });
+      if (req.method === "DELETE" && /\/events\/[^/]+$/.test(url.pathname)) {
+        res.writeHead(204);
+        return res.end();
+      }
       json(404, { error: { message: "not here" } });
     });
   });
@@ -173,6 +177,105 @@ async function main() {
   const posted = JSON.parse(fake.seen.find((s) => s.method === "POST" && s.path.endsWith("/events"))!.body);
   check("approved, it's added to the chosen calendar", [sentEvent.status, posted.summary, posted.location, Boolean(posted.start.dateTime)], ["sent", "Village fair", "The plaza", true]);
   check("…into the calendar picked", fake.seen.find((s) => s.method === "POST" && s.path.endsWith("/events"))!.path, "/api/calendars/me%40example.com/events");
+
+  // --- the village calendar (#173) ---------------------------------------------------------
+  const cal = await import("../src/lib/agent/villageCalendar");
+  const ideasLib = await import("../src/lib/agent/ideas");
+  const { updateSettings } = await import("../src/lib/agent/settingsStore");
+  const calRoute = await import("../src/app/api/village-calendar/route");
+  const base = new Date(2026, 9, 28, 9, 30); // a Wednesday
+  check("dates are read plainly", [
+    cal.parseWhen("2026-11-02", base)?.allDay,
+    cal.parseWhen("2026-11-02 10:00", base)?.at.getHours(),
+    cal.parseWhen("2026-11-02T18:45:00", base)?.at.getMinutes(),
+    cal.parseWhen("tomorrow 09:15", base)?.at.getDate(),
+    cal.parseWhen("today", base)?.allDay,
+    cal.parseWhen("next tuesday", base),
+    cal.parseWhen("2026-02-30", base),
+    cal.parseWhen("2026-11-02 25:00", base),
+  ], [true, 10, 45, 29, true, null, null, null]);
+
+  const soon = new Date(Date.now() + 3 * 86400_000);
+  const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const mayorTool = async (name: string, args: Record<string, unknown>) => (await executeTool(name, args, { ...town, enabledTools: [...(town.enabledTools as string[]), "add_event", "cancel_event"] }, ctx)).output;
+  const added = await mayorTool("add_event", { title: "Harvest festival", kind: "festival", when: ymd(soon), place: "the square" });
+  check("the Mayor puts a festival on the calendar", added.startsWith("On the calendar as #"), true);
+  const festId = Number(/#(\d+)/.exec(added)![1]);
+  check("…not in the past, nor a meeting without a time, nor an unknown kind, nor years ahead", [
+    (await mayorTool("add_event", { title: "x", kind: "festival", when: "2020-01-01" })).includes("in the past"),
+    (await mayorTool("add_event", { title: "x", kind: "meeting", when: ymd(soon) })).includes("needs a time"),
+    (await mayorTool("add_event", { title: "x", kind: "party", when: ymd(soon) })).startsWith("Refused: the kind is one of"),
+    (await mayorTool("add_event", { title: "x", kind: "festival", when: "2030-01-01" })).includes("a year ahead"),
+  ], [true, true, true, true]);
+  const ranged = cal.addEvent({ title: "Meeting: who brings in the wheat", kind: "meeting", when: `${ymd(soon)} 10:00`, end: ymd(soon) }, { source: "owner" });
+  check("a timed event given only an end day runs to the end of it", new Date(ranged.endsAt!).getHours(), 23);
+  const allDayEnd = cal.addEvent({ title: "Fair", kind: "festival", when: ymd(soon), end: `${ymd(soon)} 18:00` }, { source: "owner" });
+  check("…and an all-day one given an end time keeps its day", [allDayEnd.allDay, new Date(allDayEnd.endsAt!).getHours()], [true, 0]);
+  check("a title that says what it is isn't repeated", cal.calendarLines().join("\n").includes("meeting, who brings in the wheat"), true);
+  cal.cancelEvent(ranged.id!);
+  cal.cancelEvent(allDayEnd.id!);
+  for (let i = 0; i < cal.MAYOR_EVENTS_PER_DAY - 1; i++) await mayorTool("add_event", { title: `Work day ${i}`, kind: "workday", when: ymd(soon) });
+  check("…and only so many a day", (await mayorTool("add_event", { title: "One more", kind: "other", when: ymd(soon) })).includes("plenty"), true);
+
+  await updateSettings({ marketDay: soon.getDay() });
+  sqlite.prepare("INSERT INTO trade_orders (town, good, qty, reward, due_at, status, accepted_by) VALUES ('Millbrook', 'bread', 6, 30, ?, 'accepted', ?)").run(Math.floor(soon.getTime() / 1000), mayor.id);
+  const week = cal.upcoming(8);
+  check("the calendar adds the market day and deliveries by itself", [week.some((e) => e.kind === "market" && new Date(e.startsAt).getDay() === soon.getDay()), week.some((e) => e.title === "Delivery due: 6 loaves to Millbrook")], [true, true]);
+  const lines = cal.calendarLines().join("\n");
+  check("every villager sees today's date and the week ahead", [lines.includes("Today is"), lines.includes(": Harvest festival (the square)"), lines.includes("Market day")], [true, true, true]);
+  const { villageFacts } = await import("../src/lib/agent/villageFacts");
+  check("…in THE VILLAGE TODAY", (await villageFacts()).includes("Coming up this week:"), true);
+  check("anyone can read further with village_calendar", (await tool("village_calendar", { days: 30 })).includes("Harvest festival"), true);
+
+  // Google, one way: new events copied, cancelled ones taken off.
+  check("nothing is copied until the owner picks a calendar", await cal.syncToGoogle(), 0);
+  await googleRoute.PUT(rq("/api/google", "PUT", { villageCalendarId: "team@example.com", villageCalendarName: "Team" }));
+  const beforeSync = fake.seen.length;
+  const copied = await cal.syncToGoogle();
+  const posts = fake.seen.slice(beforeSync).filter((s) => s.method === "POST");
+  check("then the stored events are copied to it", [copied, posts.length, posts.every((s) => s.path === "/api/calendars/team%40example.com/events"), JSON.parse(posts[0].body).summary], [cal.MAYOR_EVENTS_PER_DAY, cal.MAYOR_EVENTS_PER_DAY, true, "🎉 Harvest festival"]);
+  check("…once", await cal.syncToGoogle(), 0);
+  check("…and it shows they're on Google", cal.upcoming(8).find((e) => e.id === festId)?.synced, true);
+  check("the Mayor can take an event off", await mayorTool("cancel_event", { event: festId }), "Taken off the calendar: Harvest festival.");
+  const beforeDelete = fake.seen.length;
+  await cal.syncToGoogle();
+  check("…and it comes off Google too", fake.seen.slice(beforeDelete).map((s) => `${s.method} ${s.path}`), ["DELETE /api/calendars/team%40example.com/events/ev1"]);
+
+  // An idea that's an event: adopted, it goes on the calendar; vetoed, it comes off.
+  const fair = await ideasLib.proposeIdea("Autumn fair", "Stalls and music.", null, null, { at: soon, allDay: true });
+  await ideasLib.adoptNow(fair.id);
+  const fairEvent = cal.upcoming(8).find((e) => e.source === "idea" && e.sourceId === fair.id);
+  check("an adopted idea with a date goes on the calendar", [fairEvent?.title, fairEvent?.kind], ["Autumn fair", "festival"]);
+  check("…and the Mayor can't take it off", await mayorTool("cancel_event", { event: fairEvent!.id }), "Refused: the village voted for that one; only the owner can take it off.");
+  await ideasLib.veto(fair.id);
+  check("…but the owner's veto does", cal.upcoming(8).some((e) => e.source === "idea" && e.sourceId === fair.id), false);
+  check("an idea's date must be a date", await tool("propose_idea", { title: "Dance", when: "soonish" }), 'Refused: say when as a date, "2026-11-02", or a date and time, "2026-11-02 18:00".');
+
+  // The owner's page: adding and taking off.
+  const ownerAdd = await calRoute.POST(rq("/api/village-calendar", "POST", { title: "Bonfire night", kind: "festival", when: `${ymd(soon)} 19:00` }));
+  const ownerEvent = (await ownerAdd.json()).event;
+  check("the owner adds an event from the wall calendar", [ownerAdd.status, ownerEvent.source, ownerEvent.allDay], [200, "owner", false]);
+  check("…a bad one is refused with the reason", (await (await calRoute.POST(rq("/api/village-calendar", "POST", { title: "", when: "x" }))).json()).error, "Give the event a title.");
+  const listed = await (await calRoute.GET(rq("/api/village-calendar?days=8"))).json();
+  check("…and sees it, and where it's copied", [listed.events.some((e: { title: string }) => e.title === "Bonfire night"), listed.copiedTo], [true, "Team"]);
+  await calRoute.PATCH(rq("/api/village-calendar", "PATCH", { id: ownerEvent.id, action: "cancel" }));
+  check("…and takes it off", cal.upcoming(8).some((e) => e.title === "Bonfire night"), false);
+
+  // A meeting on the calendar is held when its time comes.
+  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  await updateSettings({ bedtime: hhmm(new Date(Date.now() + 2 * 3600_000)), wakeTime: hhmm(new Date(Date.now() + 3 * 3600_000)) });
+  const inAMinute = new Date(Date.now() + 120_000);
+  const meet = cal.addEvent({ title: "Planning the harvest", kind: "meeting", when: `${ymd(inAMinute)} ${hhmm(inAMinute)}`, notes: "who brings in the wheat" }, { source: "owner" });
+  check("a meeting isn't held before its time", await cal.calendarTick(), null);
+  const held = await cal.calendarTick(new Date(meet.startsAt + 60_000));
+  const meetings = await import("../src/lib/agent/meetings");
+  const open = await meetings.currentMeeting();
+  check("…and is held when it comes, about what it says", [held, open?.topic, open?.calledBy], ["Planning the harvest", "Planning the harvest: who brings in the wheat", "mayor"]);
+  if (open) await meetings.closeMeeting(open.id);
+  check("…once", await cal.calendarTick(new Date(meet.startsAt + 120_000)), null);
+  const missed = cal.addEvent({ title: "Old business", kind: "meeting", when: `${ymd(inAMinute)} ${hhmm(inAMinute)}` }, { source: "owner" });
+  check("one missed by hours (the app was off) is let go", [await cal.calendarTick(new Date(missed.startsAt + 3 * 3600_000)), await meetings.currentMeeting()], [null, null]);
+  await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
 
   // --- disconnecting ------------------------------------------------------------------------
   await googleRoute.DELETE(rq("/api/google", "DELETE"));
