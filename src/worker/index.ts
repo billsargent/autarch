@@ -8,6 +8,7 @@ import { reapStaleSessions } from "@/lib/agent/sessions";
 import { requestCancel } from "@/lib/agent/turnLock";
 import { ensureMayor } from "@/lib/agent/agents";
 import { isNight, nextWake } from "@/lib/agent/daynight";
+import { checkWorkAllowed } from "@/lib/agent/workCap";
 import { agents } from "@/db/schema";
 
 // Standalone background scheduler for the agent. Run with: npm run worker
@@ -82,49 +83,6 @@ async function ensureSelfWorkJob() {
     nextRunAt: new Date(Date.now() + SELF_WORK_INTERVAL_MINUTES * 60_000),
   });
   console.log(`[worker] added the self-directed work job, switched off (turn it on in the Mayor's ledger → Work & life)`);
-}
-
-// Enforce "how often it starts working" (cooldown + daily cap). Applies to
-// autonomous (scheduled/report) sessions only, not human-initiated chat.
-// The daily cap and the gap between sessions count each villager's own work
-// windows (#148): a bigger village doesn't share one allowance.
-async function checkWorkAllowed(settings: AgentSettingsRow, agentId: number | null): Promise<{ allowed: boolean; reason?: string }> {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const whose = agentId == null ? isNull(workSessions.agentId) : eq(workSessions.agentId, agentId);
-
-  const todayRows = await db
-    .select({ n: count() })
-    .from(workSessions)
-    .where(
-      and(
-        gte(workSessions.startedAt, todayStart),
-        inArray(workSessions.trigger, ["scheduled", "report"]),
-        ne(workSessions.status, "skipped"),
-        whose,
-      ),
-    );
-  const todayCount = Number(todayRows[0]?.n ?? 0);
-  if (todayCount >= settings.maxSessionsPerDay) {
-    return { allowed: false, reason: `daily cap reached (${todayCount}/${settings.maxSessionsPerDay} of their sessions today)` };
-  }
-
-  const lastScheduled = await db
-    .select()
-    .from(workSessions)
-    .where(and(inArray(workSessions.trigger, ["scheduled", "report"]), ne(workSessions.status, "skipped"), whose))
-    .orderBy(desc(workSessions.startedAt))
-    .limit(1);
-  if (lastScheduled.length) {
-    const elapsedMin = (Date.now() - lastScheduled[0].startedAt.getTime()) / 60_000;
-    if (elapsedMin < settings.minGapMinutes) {
-      return {
-        allowed: false,
-        reason: `cooldown active (${Math.round(elapsedMin)}m since last session; need ${settings.minGapMinutes}m)`,
-      };
-    }
-  }
-  return { allowed: true };
 }
 
 async function ensureJobConversation(job: typeof jobs.$inferSelect): Promise<number> {

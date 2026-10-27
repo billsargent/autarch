@@ -359,7 +359,7 @@ async function main() {
   check("…and a director doesn't get the Mayor's tools", villagers.effectiveTools({ ...(await rowOf(gus.id)), enabledTools: ["pause_agent", "read_file"] }, town2), ["read_file"]);
 
   const ctxGus = { agentId: gus.id, agentName: "Gus", conversationId: null };
-  const hal = { name: "Hal", role: "Weeder", persona: "Quiet and thorough.", dailyBudgetUsd: 0.5, reason: "The beds are full of weeds." };
+  const hal = { name: "Hal", role: "Weeder", trade: "gardener", persona: "Quiet and thorough.", dailyBudgetUsd: 0.5, reason: "The beds are full of weeds." };
   const ask = async (args: Record<string, unknown>, ctx: Record<string, unknown> = ctxGus) => (await proposeHire(args, ctx)).output;
   check("a worker can't take people on", (await ask(hal, { agentId: wes.id, agentName: "Wes" })).startsWith("Refused: workers can't"), true);
   check("only the Mayor takes on a director", (await ask({ ...hal, tier: "director" })).includes("only the Mayor"), true);
@@ -395,6 +395,7 @@ async function main() {
   const halRow = await rowOf(approved.agent?.id);
   check("the owner approves (and can edit first): Hal joins as Gus's worker", [halRow?.name, halRow?.tier, halRow?.managerId, halRow?.area, halRow?.persona, halRow?.home], ["Hal", "worker", gus.id, "garden", "Quiet, thorough, and fond of worms.", "villagers/hal"]);
   check("…and the request is closed", (await db.select().from(hireRequests).where(eq(hireRequests.id, halReq!.id)))[0].status, "hired");
+  check("…and arrives with the trade they were hired for", halRow?.trade, "gardener");
   check("a decided request can't be approved again", (await approve(halReq!.id)).status, 409);
 
   fake.byAgent["Mayor Ada"] = [{ text: "We don't need two weeders.\nVERDICT: REJECT" }];
@@ -1155,6 +1156,23 @@ async function main() {
   const treasuryNow = (lifeDb.prepare("SELECT treasury FROM economy WHERE id = 1").get() as { treasury: number }).treasury;
   await patchBuilding(Number(/#(\d+)/.exec(prop)?.[1]), { action: "approve" });
   check("approving the Mayor's building pays from the treasury", (lifeDb.prepare("SELECT treasury FROM economy WHERE id = 1").get() as { treasury: number }).treasury, treasuryNow - 25);
+
+  // The work cap is per villager (#148), and life windows don't count against it.
+  const { checkWorkAllowed } = await import("../src/lib/agent/workCap");
+  await updateSettings({ maxSessionsPerDay: 2, minGapMinutes: 0 });
+  const capSettings = await getSettings();
+  const already = await db.select().from(workSessions).where(eq(workSessions.agentId, cal.id));
+  for (const w of already) await db.update(workSessions).set({ startedAt: new Date(Date.now() - 3 * 86400_000) }).where(eq(workSessions.id, w.id));
+  await db.insert(workSessions).values([
+    { trigger: "scheduled", agentId: cal.id, status: "completed", startedAt: new Date() },
+    { trigger: "life", agentId: cal.id, status: "completed", startedAt: new Date() },
+    { trigger: "life", agentId: cal.id, status: "completed", startedAt: new Date() },
+  ]);
+  check("life windows don't use up a villager's work sessions", (await checkWorkAllowed(capSettings, cal.id)).allowed, true);
+  await db.insert(workSessions).values({ trigger: "report", agentId: cal.id, status: "completed", startedAt: new Date() });
+  const calCapped = await checkWorkAllowed(capSettings, cal.id);
+  check("a villager's own work sessions reach their cap", [calCapped.allowed, calCapped.reason?.startsWith("daily cap reached (2/2")], [false, true]);
+  check("…while a neighbour still has theirs", (await checkWorkAllowed(capSettings, dot.id)).allowed, true);
 
   fake.close();
   try {
