@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { SPRITE, type Place, type SceneManifest } from "./manifest";
+import { allPositions, remember, startingSpot } from "./villagerMemory";
 import { nearestWaypoint, shortestPath } from "./path";
 import type { DayPhase } from "@/lib/agent/daynight";
 
@@ -249,15 +250,40 @@ function nearestUsable(scene: SceneManifest, villagers: VillagerSpec[], x: numbe
 // ---------------------------------------------------------------------------
 
 function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }) {
-  const spawn = scene.waypoints.find((w) => w.id === scene.spawn) ?? scene.waypoints[0];
-  const [pos, setPos] = useState({ x: spawn.x, y: spawn.y });
+  // They start where they belong (the same on the server and in the browser);
+  // a remembered spot mid-walk is picked up once the page is in the browser.
+  const home = scene.waypoints.find((w) => w.id === v.target) ?? scene.waypoints.find((w) => w.id === scene.spawn) ?? scene.waypoints[0];
+  const memoryKey = `${scene.id}:${v.id}`;
+  const [pos, setPos] = useState({ x: home.x, y: home.y });
   const [facing, setFacing] = useState<Facing>("down");
   const [walking, setWalking] = useState(false);
   const [frame, setFrame] = useState(0);
   const [spriteReady, setSpriteReady] = useState(false);
   // The target they last reached, with nowhere left to walk.
-  const [reached, setReached] = useState<string | null>(null);
+  const [reached, setReached] = useState<string | null>(home.id === v.target ? v.target : null);
   const posRef = useRef(pos);
+  const [resumed, setResumed] = useState(false);
+
+  useEffect(() => {
+    const start = startingSpot(allPositions()[memoryKey], { id: v.target, x: home.x, y: home.y });
+    posRef.current = { x: start.x, y: start.y };
+    const t = setTimeout(() => {
+      setPos({ x: start.x, y: start.y });
+      setReached(start.reached);
+      setResumed(true);
+    }, 0);
+    return () => clearTimeout(t);
+    // Once, when they first appear.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Kept on leaving, so the next visit picks up from here: where they stood,
+  // and whether they'd got where they were going.
+  const reachedRef = useRef(reached);
+  useEffect(() => {
+    reachedRef.current = reached;
+  }, [reached]);
+  useEffect(() => () => remember(memoryKey, { ...posRef.current, target: reachedRef.current ?? "", at: Date.now() }, true), [memoryKey]);
 
   useEffect(() => {
     const img = new Image();
@@ -266,6 +292,7 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
   }, [v.sprite]);
 
   useEffect(() => {
+    if (!resumed) return;
     const start = nearestWaypoint(scene.waypoints, posRef.current.x, posRef.current.y);
     const route = shortestPath(scene.waypoints, scene.edges, start.id, v.target) ?? [v.target];
     const byId = new Map(scene.waypoints.map((w) => [w.id, w]));
@@ -283,6 +310,7 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
         setWalking(false);
         setFacing("down");
         setReached(v.target);
+        remember(memoryKey, { ...posRef.current, target: v.target, at: Date.now() }, true);
         return;
       }
       const cur = posRef.current;
@@ -297,6 +325,7 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
       posRef.current = moved;
       setPos(moved);
       setWalking(true);
+      remember(memoryKey, { ...moved, target: "", at: Date.now() });
       frameClock += dt;
       if (frameClock > 0.125) {
         frameClock = 0;
@@ -306,7 +335,7 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [scene, v.target]);
+  }, [scene, v.target, resumed, memoryKey]);
 
   const indoors = Boolean(v.inside && reached === v.target);
   return (

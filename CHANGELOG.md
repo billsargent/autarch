@@ -3,6 +3,15 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — Villagers start where they are
+
+- **Nobody runs in from the gate.** Opening the village (or a building) used to start every
+  villager at the gate, and they'd all run to where they belonged, even those asleep at home. Now
+  each one appears where they belong: at their place, or already inside.
+- **Where they were is remembered** in your browser, per scene and villager. A reload or a visit
+  indoors picks up where they were, and someone caught mid-walk a moment ago carries on from
+  there. Anything older than a couple of minutes is let go, so nobody re-walks a long route.
+
 ## 2026-10-28 — The village calendar
 
 - **A shared calendar** of what's coming up: market days, meetings, festivals, work days, votes
