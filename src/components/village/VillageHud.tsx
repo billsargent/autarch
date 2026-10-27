@@ -11,6 +11,7 @@ interface VillageHudProps {
   waiting: number;
   openGoals: number;
   spentToday: number;
+  spendCeilingUsd: number | null;
   unread: number;
   paused: boolean;
   // The village clock (#100).
@@ -48,7 +49,11 @@ export default function VillageHud(p: VillageHudProps) {
         <Chip label="Villagers" value={String(p.villagers)} dot="#5f8a3c" />
         <Chip label="Working" value={String(p.working)} dot="#e3b04b" />
         <Chip label="Open goals" value={String(p.openGoals)} dot="#4f86c6" />
-        <Chip label="Spent today" value={`$${p.spentToday.toFixed(2)}`} dot="#d9643a" />
+        <Chip
+          label={p.spendCeilingUsd != null ? "Spent / ceiling" : "Spent today"}
+          value={`$${p.spentToday.toFixed(2)}${p.spendCeilingUsd != null ? ` / $${p.spendCeilingUsd.toFixed(2)}` : ""}`}
+          dot="#d9643a"
+        />
         <Chip label={p.phase} value={`${PHASE_ICON[p.phase]} ${p.time}`} dot={p.phase === "night" ? "#1d2340" : "#e3b04b"} />
       </div>
       <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:ml-auto sm:pb-0">

@@ -1262,6 +1262,55 @@ async function main() {
   check("a villager's own work sessions reach their cap", [calCapped.allowed, calCapped.reason?.startsWith("daily cap reached (2/2")], [false, true]);
   check("…while a neighbour still has theirs", (await checkWorkAllowed(capSettings, dot.id)).allowed, true);
 
+  // "No limits" (#171): budgets, session caps, hourly actions and step caps
+  // lifted; the safety rules and the emergency ceiling still apply.
+  await settingsRoute.PUT(req("/api/settings", "PUT", { noLimits: true, townDailyBudgetUsd: 0.000001, maxAgentSteps: 2 }));
+  check("the switch is saved", (await getSettings()).noLimits, true);
+  check("no limits: a capped villager may start more work sessions", (await checkWorkAllowed(await getSettings(), cal.id)).allowed, true);
+  fake.script.length = 0;
+  fake.script.push(
+    { tools: [{ name: "list_directory", args: { path: "." } }] },
+    { tools: [{ name: "list_directory", args: { path: "." } }] },
+    { tools: [{ name: "list_directory", args: { path: "." } }] },
+    { text: "done" },
+  );
+  const { conversationId: annFree } = await runAgentTurn({ userMessage: "busy day?", agentId: ann.id });
+  const annFreeMsgs = await msgsOf(annFree);
+  check("no limits: a villager over her own budget, in a village over its budget, still works", annFreeMsgs.some((m) => m.content?.startsWith("[BUDGET]")), false);
+  check("…past the steps-per-turn cap", [annFreeMsgs.some((m) => m.content?.startsWith("[TRUNCATED]")), annFreeMsgs.at(-1)?.content], [false, "done"]);
+  fake.script.push(
+    {
+      tools: [
+        { name: "list_directory", args: { path: "." } },
+        { name: "list_directory", args: { path: "." } },
+      ],
+    },
+    { text: "ok" },
+  );
+  const { conversationId: beaFree } = await runAgentTurn({ userMessage: "look twice", agentId: bea.id });
+  check("…and past an hourly action limit", (await db.select().from(toolExecutions).where(eq(toolExecutions.conversationId, beaFree))).map((e) => e.status), ["success", "success"]);
+  fake.script.push({ tools: [{ name: "read_file", args: { path: ".env" } }] }, { text: "can't" });
+  const { conversationId: annSecret } = await runAgentTurn({ userMessage: "read the secrets", agentId: ann.id });
+  check("no limits keeps the safety rules: reading a secret is still blocked", (await db.select().from(toolExecutions).where(eq(toolExecutions.conversationId, annSecret))).map((e) => e.status), ["blocked"]);
+
+  await settingsRoute.PUT(req("/api/settings", "PUT", { spendCeilingUsd: 0.0000001 }));
+  const ceilingErr = async (opts: Parameters<typeof runAgentTurn>[0]) => {
+    try {
+      await runAgentTurn(opts);
+      return "";
+    } catch (err) {
+      return err instanceof villagers.BudgetError ? err.message : `other: ${String(err)}`;
+    }
+  };
+  check("the emergency ceiling stops work even with no limits on", (await ceilingErr({ userMessage: "hello", agentId: bea.id })).includes("emergency ceiling"), true);
+  check("…research turns too", (await ceilingErr({ eventNote: "research", trigger: "research", agentId: bea.id })).includes("emergency ceiling"), true);
+  check("…and the owner is told once", [await villagers.budgetAlerts(), await villagers.budgetAlerts()], [["The village reached its emergency ceiling"], []]);
+  await settingsRoute.PUT(req("/api/settings", "PUT", { noLimits: false, spendCeilingUsd: "" }));
+  const settled = await getSettings();
+  check("switching it off brings the limits back", [settled.noLimits, settled.spendCeilingUsd, (await checkWorkAllowed(settled, cal.id)).allowed], [false, null, false]);
+  check("…the village's budget among them", (await ceilingErr({ userMessage: "hello", agentId: bea.id })).startsWith("The village has spent today's budget"), true);
+  await settingsRoute.PUT(req("/api/settings", "PUT", { townDailyBudgetUsd: "", maxAgentSteps: 16 }));
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

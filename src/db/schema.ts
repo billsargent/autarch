@@ -541,6 +541,11 @@ export const agentSettings = sqliteTable("agent_settings", {
   cacheHitInputPricePerMTok: real("cache_hit_input_price_per_mtok").notNull().default(0.0028),
   // What the whole town may spend per day, in USD; empty = no town cap (#60).
   townDailyBudgetUsd: real("town_daily_budget_usd"),
+  // "No limits" (#171): lifts the budgets, session caps, hourly actions and
+  // step caps; the safety rules stay. The ceiling (empty = none) still stops
+  // all work for the day once the village has spent it.
+  noLimits: integer("no_limits", { mode: "boolean" }).notNull().default(false),
+  spendCeilingUsd: real("spend_ceiling_usd"),
   // Day and night (#100): local "HH:MM". At night no autonomous work starts.
   bedtime: text("bedtime").notNull().default("22:00"),
   // How the day splits between computer work and village life (#130):

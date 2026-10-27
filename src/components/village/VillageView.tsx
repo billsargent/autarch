@@ -276,6 +276,7 @@ export default function VillageView() {
         waiting={data.pending.length}
         openGoals={data.openGoals}
         spentToday={data.spentToday}
+        spendCeilingUsd={data.spendCeilingUsd}
         unread={data.unread}
         paused={data.paused}
         time={time}
