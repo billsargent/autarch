@@ -123,7 +123,7 @@ export default function IdeasBoard({ onBack, onClose }: { onBack: () => void; on
               </div>
               <p className="mt-0.5 flex items-center gap-1 text-[11px] text-[#6b4a2e]">
                 {who && <VillagerPortrait character={who.character} color={who.color} size={16} />}
-                Pinned by {who ? who.name : "you"}
+                Pinned by {who ? who.name : idea.body?.startsWith("Raised at town meeting") ? "the town meeting" : "you"}
                 {idea.rounds > 0 && ` · vote ${idea.rounds}: 👍 ${count("yes")} · 👎 ${count("no")} · 🤷 ${count("abstain")}`}
                 {idea.goalId && ` · goal #${idea.goalId}`}
               </p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { GoalRow } from "@/lib/agent/clientTypes";
 import { EMPTY_GOAL, GOAL_STATUSES, GOAL_STATUS_LABEL, useGoals, type GoalInput } from "../../data/useGoals";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
@@ -15,6 +15,60 @@ import type { RoomProps } from "./types";
 // The notice board in the village square: goals are notes pinned to it.
 // Same data and actions as the Goals page (useGoals). Ideas and votes join
 // the board with #98.
+
+// Notices pinned by villagers (#147): news and agreed terms, not voted on.
+interface Notice {
+  id: number;
+  title: string;
+  body: string | null;
+  agentId: number | null;
+  createdAt: number;
+}
+
+function Notices({ byId }: { byId: (id: number | null | undefined) => AgentRow | null | undefined }) {
+  const [list, setList] = useState<Notice[]>([]);
+  const load = useCallback(async () => {
+    try {
+      const d = await fetch("/api/notices", { cache: "no-store" }).then((r) => r.json());
+      if (Array.isArray(d.notices)) setList(d.notices);
+    } catch {
+      /* keep what we have */
+    }
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(load, 0);
+    return () => clearTimeout(t);
+  }, [load]);
+  if (!list.length) return null;
+  return (
+    <section className="mb-3">
+      <h3 className="village-pixel mb-1 text-xs">📌 Notices</h3>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {list.map((n) => (
+          <li key={n.id} className="rounded border-2 border-[#c9b27a] bg-[#fffaf0] p-2 text-xs shadow-sm">
+            <p className="flex items-start gap-2">
+              <strong className="flex-1">{n.title}</strong>
+              <button
+                onClick={async () => {
+                  await fetch(`/api/notices?id=${n.id}`, { method: "DELETE" }).catch(() => {});
+                  await load();
+                }}
+                className="text-[11px] text-[#6b4a2e] underline"
+                aria-label={`Take down "${n.title}"`}
+              >
+                take down
+              </button>
+            </p>
+            {n.body && <p className="mt-1 whitespace-pre-wrap">{n.body}</p>}
+            <p className="mt-1 text-[11px] text-[#6b4a2e]">
+              {byId(n.agentId)?.name ?? "A villager"} · {new Date(n.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 type View = { kind: "board" } | { kind: "note"; id: number } | { kind: "pin" } | { kind: "morale" } | { kind: "ideas" } | { kind: "chronicle" };
 
@@ -118,6 +172,7 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
         </>
       }
     >
+      <Notices byId={byId} />
       <p className="mb-3 text-xs text-[#6b4a2e]">
         Goals the agent works toward. It reads the board at the start of every work window and picks what to do from it,
         most urgent pin first. It can pin and update its own notes with its <code>manage_goal</code> tools.

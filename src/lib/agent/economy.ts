@@ -3,6 +3,7 @@ import { economy } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { listBuildings } from "./buildings";
 import { tradeOf } from "./trades";
+import { logLife } from "./life";
 
 // The village's little economy (#106): pure bookkeeping, no model calls.
 // Villagers make the goods by working their trade and eat when hungry
@@ -14,6 +15,7 @@ export interface Stock {
   bread: number;
 }
 export const YIELD = { kept: 6, unkept: 2 };
+export const RELIEF_LOAVES = 8;
 const MAX_STOCK = 99;
 
 export function economyTick(stock: Stock, farms: boolean[], bakeries: boolean[], eaters: number): Stock & { shortage: number; grown: number; baked: number } {
@@ -49,7 +51,14 @@ export async function dailyEconomy(now = new Date()): Promise<boolean> {
   const built = (await listBuildings(now)).filter((b) => b.status === "built");
   const unworked = (kind: string, trade: string) => (trades.has(trade as never) ? [] : built.filter((b) => b.kind === kind).map(() => false));
   const next = economyTick(state, unworked("farm", "farmer"), unworked("bakery", "baker"), 0);
-  await db.update(economy).set({ wheat: next.wheat, bread: next.bread, shortage: 0, lastTickDay: dayKey(now) }).where(eq(economy.id, 1));
+  // A safety net: a village that went hungry with an empty pantry gets a
+  // relief basket from a neighbouring town, so it can never starve for good.
+  const relief = state.shortage > 0 && next.bread + (state.fish ?? 0) === 0 ? RELIEF_LOAVES : 0;
+  await db
+    .update(economy)
+    .set({ wheat: next.wheat, bread: next.bread + relief, shortage: 0, lastTickDay: dayKey(now) })
+    .where(eq(economy.id, 1));
+  if (relief) logLife("order", null, `Millbrook sent a relief basket of ${relief} loaves: the pantry was empty and folk went hungry. A baker or a fisher would help.`);
   return true;
 }
 

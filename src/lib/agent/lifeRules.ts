@@ -65,12 +65,12 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
   const evening = i.hour >= 17 && i.hour < 22;
   const food: Good | null = (i.stock.bread ?? 0) > 0 ? "bread" : (i.stock.fish ?? 0) > 0 ? "fish" : null;
 
-  if (st.fullness < 35) {
-    if (!food) {
-      out.hungry = true;
-      set("plaza", "looking for something to eat");
-      return out;
-    }
+  // Hungry with nothing in the pantry: they still rest when worn out and
+  // work their trade by day (or nobody would ever grow the food), and forage
+  // a little otherwise. Hunger never stops the village working.
+  const hungryNoFood = st.fullness < 35 && !food;
+  if (hungryNoFood) out.hungry = true;
+  if (st.fullness < 35 && food) {
     out.used[food] = 1;
     st.fullness = clamp(st.fullness + 45);
     if (evening && i.tavern && st.coins >= 2) {
@@ -102,7 +102,12 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
       out.used[t.uses] = n;
     }
     if (n && t.goods) out.produced[t.goods] = n;
-    set("work", t.doing);
+    set("work", hungryNoFood ? `${t.doing} on an empty stomach` : t.doing);
+    return out;
+  }
+  if (hungryNoFood) {
+    st.fullness = clamp(st.fullness + 15);
+    set("plaza", "foraging for berries");
     return out;
   }
   // Now and then, coins to spare go on something for the cottage.

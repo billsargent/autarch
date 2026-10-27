@@ -78,6 +78,7 @@ export function workWindowDefault(minutes: number, steps: number, jobBlock: stri
   return `YOUR SCHEDULE (JOBS) — THIS WORK WINDOW
 - A scheduled work window just opened. You have up to **${minutes} minutes** and **${steps} steps** (one model call = one step). Pace yourself — don't blow through your step budget on tiny actions. Use multi-step operations wisely: read broadly, then act.${jobBlock ? `\n- Active job:\n${jobBlock}` : "\n- (this work window has no job record)"}
 - FIRST: look at your goals below; each one's notes say where you left off. Pick one, work on it, and add a note (manage_goal addNote) as you make progress and before the window closes.
+- Spend the window on something that helps the owner or the village: a goal, a job, a building that needs a keeper, an order to fill. Tidying your own notes, indexes, playbooks or diary isn't the work; do it only when it's in the way.
 - Report your progress in this session (the job's home conversation) — don't scatter updates across other chats.`;
 }
 

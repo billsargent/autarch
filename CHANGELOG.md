@@ -3,6 +3,45 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-25 — The storehouse, the post office, signs, and why every email is written
+
+- **The two empty buildings found a use.**
+  - The green-roofed one beside the workshop is the **storehouse**: the village's stores, the
+    cart with orders from other towns, and a ledger of what came in and went out.
+  - The shop-front beside the town hall is the **post office**: drafts waiting for you, every email
+    sent (who wrote it, why, to whom), your inbox, and the calendar desk.
+  - The pantry at home opens the same stores.
+- **Signs do something.** The two signposts give directions: every place, what it's for, who's out
+  and about, and a way to go there. A sign on a free plot says what could be built there and opens
+  the map table; it disappears once something is built.
+- **Every email says why.** A villager's draft must say why it was written; the outbox shows the
+  writer, the why and their conversations, and flags addresses never emailed before.
+- **How mail goes out**, on the Email page: a From name, an optional "written by … sent by …" line,
+  a daily cap (10 by default), and "only people I've emailed before".
+- **Mail provider presets:** Gmail, Outlook, iCloud, Yahoo, Fastmail and Proton Mail Bridge fill
+  in the servers and link to how to make an app password. (Signing in with Microsoft and Google
+  calendars come next.)
+- The Village life button's hover text now describes village life.
+- **Notices on the board.** Villagers can pin a plain notice (news, agreed terms, a reminder) with
+  `pin_notice`; it isn't put to a vote, and you can take it down.
+- **Fixed: the village starved.** A hungry villager with an empty pantry used to stop everything,
+  including the farmer, so no food was ever grown. Now they rest when worn out, still work their
+  trade by day, and forage otherwise; a village that went hungry gets a relief basket.
+- **Fixed: life windows were cancelled by busy work days.** They no longer count against the work
+  session cap, which is now per villager (24 a day each, not 24 for the whole village).
+- **Hiring is plainer for the Mayor:** nobody applies on their own; he drafts the newcomer, with a
+  trade, and they get a look that suits it.
+- File tools understand Git Bash paths (`/d/…`) on Windows, a tool call cut off mid-way gets a
+  clear error instead of running with nothing, and work windows are for real work, not tidying notes.
+- **Node 24:** the database driver is now better-sqlite3 12, which ships binaries for Node 24; `npm
+  run dev` says plainly when the driver needs rebuilding after a Node upgrade.
+- **Fixed: skills grew past what anyone sees.** Each town skill is shown up to 2,000 characters;
+  a villager who writes past that is now told so, the prompt marks where it's cut, and villagers
+  are asked to start a new skill for a new topic.
+- **Fixed: the Mayor couldn't pin anything.** Ideas a meeting's write-up pinned were counted as the
+  Mayor's own and used up his three a day; they're now the meeting's. The limit also counts the
+  calendar day, as its message says.
+
 ## 2026-10-25 — Village life, part 2: love, coins and trade with other towns
 
 - **Friendship and romance.** Villagers grow closer through time together, visits and gifts. Close

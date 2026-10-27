@@ -5,6 +5,18 @@
 // Extra arguments go to `next dev`, e.g. `npm run dev -- -p 3001`.
 import { spawn } from "node:child_process";
 
+// The database driver is a native module built for one Node version: after a
+// Node upgrade it has to be rebuilt, or nothing can open the database.
+try {
+  const { createRequire } = await import("node:module");
+  const Database = createRequire(import.meta.url)("better-sqlite3");
+  new Database(":memory:").close();
+} catch (err) {
+  console.error(`\nThe database driver doesn't work with this Node (${process.version}): ${String(err?.message ?? err).split("\n")[0]}`);
+  console.error("Run `npm rebuild better-sqlite3` (or switch back to the Node version it was installed with), then try again.\n");
+  process.exit(1);
+}
+
 const extra = process.argv.slice(2).join(" ");
 const parts = [
   { name: "web", color: "\x1b[36m", cmd: `npx next dev ${extra}`.trim() },

@@ -1,6 +1,6 @@
 import { db, sqlite } from "@/db";
 import { jobs, workSessions, conversations } from "@/db/schema";
-import { eq, and, gte, lte, ne, inArray, asc, desc, count } from "drizzle-orm";
+import { eq, and, gte, lte, ne, inArray, isNull, asc, desc, count } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "@/lib/agent/settingsStore";
 import { BudgetError, TurnBusyError, runAgentTurn, type SessionTrigger } from "@/lib/agent/runner";
 import { nextCronRun } from "@/lib/agent/cron";
@@ -86,9 +86,12 @@ async function ensureSelfWorkJob() {
 
 // Enforce "how often it starts working" (cooldown + daily cap). Applies to
 // autonomous (scheduled/report) sessions only, not human-initiated chat.
-async function checkWorkAllowed(settings: AgentSettingsRow): Promise<{ allowed: boolean; reason?: string }> {
+// The daily cap and the gap between sessions count each villager's own work
+// windows (#150): a bigger village doesn't share one allowance.
+async function checkWorkAllowed(settings: AgentSettingsRow, agentId: number | null): Promise<{ allowed: boolean; reason?: string }> {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
+  const whose = agentId == null ? isNull(workSessions.agentId) : eq(workSessions.agentId, agentId);
 
   const todayRows = await db
     .select({ n: count() })
@@ -98,17 +101,18 @@ async function checkWorkAllowed(settings: AgentSettingsRow): Promise<{ allowed: 
         gte(workSessions.startedAt, todayStart),
         inArray(workSessions.trigger, ["scheduled", "report"]),
         ne(workSessions.status, "skipped"),
+        whose,
       ),
     );
   const todayCount = Number(todayRows[0]?.n ?? 0);
   if (todayCount >= settings.maxSessionsPerDay) {
-    return { allowed: false, reason: `daily cap reached (${todayCount}/${settings.maxSessionsPerDay} sessions today)` };
+    return { allowed: false, reason: `daily cap reached (${todayCount}/${settings.maxSessionsPerDay} of their sessions today)` };
   }
 
   const lastScheduled = await db
     .select()
     .from(workSessions)
-    .where(and(inArray(workSessions.trigger, ["scheduled", "report"]), ne(workSessions.status, "skipped")))
+    .where(and(inArray(workSessions.trigger, ["scheduled", "report"]), ne(workSessions.status, "skipped"), whose))
     .orderBy(desc(workSessions.startedAt))
     .limit(1);
   if (lastScheduled.length) {
@@ -240,16 +244,19 @@ async function runDueJobs() {
     // jobs due at the same time can't blow past maxSessionsPerDay / minGapMinutes.
     const latestSettings = await getSettings();
     if (latestSettings.paused || stopping) break;
-    const { allowed, reason } = await checkWorkAllowed(latestSettings);
-    if (!allowed) {
-      for (const j of due.slice(i)) {
+    // The session cap and gap are for computer work. A life window (a
+    // "daydream" job) has its own rules: once a day, within the life budget
+    // (life.chooseWindows), so a busy work day can't cancel it.
+    if (job.kind !== "daydream") {
+      const { allowed, reason } = await checkWorkAllowed(latestSettings, job.agentId);
+      if (!allowed) {
         await db
           .update(jobs)
-          .set({ lastStatus: "skipped", lastError: reason, nextRunAt: nextRunFor(j), updatedAt: new Date() })
-          .where(eq(jobs.id, j.id));
+          .set({ lastStatus: "skipped", lastError: reason, nextRunAt: nextRunFor(job), updatedAt: new Date() })
+          .where(eq(jobs.id, job.id));
+        console.log(`[worker] job #${job.id} "${job.name}" skipped: ${reason}`);
+        continue;
       }
-      console.log(`[worker] ${due.length - i} due job(s) skipped: ${reason}`);
-      return;
     }
 
     // Overlap guard: never run two sessions at once.
@@ -265,7 +272,7 @@ async function runDueJobs() {
       : isDaydream
         ? `[VILLAGE LIFE] Your own time in the village. No computer work now: live your life a little.`
         : isSelfWork
-        ? `[SELF-DIRECTED WORK] Your initiative window is open (up to ${job.maxDurationMinutes} minutes). Review your goals and journal, pick the highest-value goal, and take real action on it — explore, build, test, or automate something. Act, don't plan. Journal what you did. Only notify the human if something genuinely needs their input.`
+        ? `[SELF-DIRECTED WORK] Your initiative window is open (up to ${job.maxDurationMinutes} minutes). Review your goals, pick the one that most helps the owner or the village, and take real action on it — build, fix, hire, fill an order, find something out. Act, don't plan, and don't spend the window tidying your own notes. Journal what you did. Only notify the human if something genuinely needs their input.`
         : `[SCHEDULED WORK] Your scheduled job "${job.name}" is due — a work window just opened (up to ${job.maxDurationMinutes} minutes). ${job.instruction ? `Job instructions: ${job.instruction}` : "Decide what to do and get to work."}`;
 
     await db

@@ -51,14 +51,18 @@ const ORIGINAL: SceneLayout = {
     { id: "mailbox", label: "Mailbox", role: "Letters from the agents — notifications", action: "mail.open", door: "bl", parts: [{ stamp: "svMailbox", col: 3, row: 19 }] },
     { id: "guardtower", label: "Guard tower", role: "The town watch — the activity log", interior: "guardtower", door: "gt", parts: [{ stamp: "lookout", col: 19, row: 18 }] },
     { id: "vault", label: "Vault", role: "Budget and spending", interior: "vault", door: "vlt", parts: [{ stamp: "stoneHouse", col: 25, row: 18 }] },
+    // The two empty buildings found a use (#144, #145), and the signposts give
+    // directions (#146).
+    { id: "storehouse", label: "Storehouse", role: "The village's stores, its treasury, and goods waiting for the cart", interior: "storehouse", door: "sh", parts: [{ stamp: "greenMarket", col: 9, row: 4 }] },
+    { id: "postoffice", label: "Post office", role: "Your mail: drafts to approve, everything sent and why, your inbox and calendars", interior: "postoffice", door: "po", parts: [{ stamp: "fishShop", col: 24, row: 4 }] },
+    { id: "signpost-west", label: "Signpost", role: "Directions: every place in the village, and who's there", door: "tl", action: "signs.directions", parts: [{ stamp: "svSignLeft", col: 2, row: 8 }] },
+    { id: "signpost-east", label: "Signpost", role: "Directions: every place in the village, and who's there", door: "po", action: "signs.directions", parts: [{ stamp: "svSign", col: 26, row: 7 }] },
     // The market stall is the trading post (#136): orders from other towns.
     { id: "tradingpost", label: "Trading post", role: "Orders from the neighbouring towns, the village's stores and treasury", door: "nb", action: "trade.post", parts: [{ stamp: "marketStall", col: 9, row: 12 }] },
     { id: "home", label: "Your home", role: "Your own house: your computer, your desk, books and a guitar", interior: "home", door: "br", parts: [{ stamp: "beigeHouse", col: 35, row: 19 }] },
   ],
   // Scenery with no hotspot.
   decor: [
-    { stamp: "fishShop", col: 24, row: 4 },
-    { stamp: "greenMarket", col: 9, row: 4 },
     { stamp: "barrel", col: 12, row: 13 },
     { stamp: "produceCrate", col: 8, row: 13 },
     { stamp: "svFlowersPatch", col: 26, row: 13 },
@@ -78,8 +82,6 @@ const ORIGINAL: SceneLayout = {
     { stamp: "pineTree", col: 33, row: 19 },
     { stamp: "pineTree", col: 16, row: 12 },
     // Signposts at the roads out of town.
-    { stamp: "svSignLeft", col: 2, row: 8 },
-    { stamp: "svSign", col: 26, row: 7 },
   ],
   lamps: [
     { stamp: "lampPost", col: 8, row: 7 },
@@ -99,6 +101,8 @@ const ORIGINAL: SceneLayout = {
     { id: "tl", x: 3, y: 10 },
     { id: "ws", x: 6, y: 10 },
     { id: "tc", x: 20, y: 10 },
+    { id: "sh", x: 11, y: 10 }, // the storehouse door
+    { id: "po", x: 25.5, y: 10 }, // the post office door
     { id: "lib", x: 30.5, y: 10 }, // left of the door, clear of the observatory sign
     { id: "tr", x: 37, y: 10 },
     { id: "nb", x: 3, y: 13 },
@@ -113,8 +117,10 @@ const ORIGINAL: SceneLayout = {
   ],
   edges: [
     ["tl", "ws"],
-    ["ws", "tc"],
-    ["tc", "nj"],
+    ["ws", "sh"],
+    ["sh", "tc"],
+    ["tc", "po"],
+    ["po", "nj"],
     ["nj", "lib"],
     ["ng", "nj"],
     ["wg", "tl"],
@@ -208,8 +214,8 @@ function villageAtLevel(level: number): SceneLayout {
       );
     }
   }
-  // A sign on each empty plot (a building drawn there covers it).
-  for (const p of plots) decor.push({ stamp: "svSign", col: p.col + 3, row: p.row + 3 });
+  // Each plot's sign is drawn live by the village (#146): clickable, and gone
+  // once something is built there.
 
   return {
     ...moved,

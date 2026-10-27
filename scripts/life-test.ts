@@ -37,6 +37,12 @@ const at = (hour: number, more: Partial<TickInput> = {}): TickInput => ({
   check("the hungry eat first (bread before fish)", [lifeTick({ ...base, fullness: 20 }, at(10)).used, lifeTick({ ...base, fullness: 20 }, at(10)).state.fullness], [{ bread: 1 }, 63]);
   check("with nothing in the pantry they go hungry", lifeTick({ ...base, fullness: 20 }, at(10, { stock: {} })).hungry, true);
   check("the worn out rest", lifeTick({ ...base, energy: 20 }, at(10)).state.activity, "having a rest");
+  // Hungry with an empty pantry: the village must still be able to feed itself.
+  const empty = { stock: {}, trade: "farmer" as const };
+  const starving = { ...base, fullness: 0, energy: 60 };
+  check("hungry with nothing to eat, a farmer still farms by day", [lifeTick(starving, at(10, empty)).state.activity, lifeTick(starving, at(10, empty)).produced, lifeTick(starving, at(10, empty)).hungry], ["working the fields on an empty stomach", { wheat: 1 }, true]);
+  check("…forages after work", [lifeTick(starving, at(19, empty)).state.activity, lifeTick(starving, at(19, empty)).state.fullness], ["foraging for berries", 15]);
+  check("…and rests when worn out, hungry or not", lifeTick({ ...starving, energy: 0 }, at(10, empty)).state.activity, "having a rest");
   const evening = lifeTick({ ...base, company: 40 }, at(19));
   check("a lonely evening at the tavern, with an ale", [evening.state.place, evening.state.activity, evening.spent, evening.state.company], ["tavern", "having an ale at the tavern", 1, 51]);
   check("no tavern: they visit a friend", [lifeTick({ ...base, company: 40 }, at(19, { tavern: false })).state.place, lifeTick({ ...base, company: 40 }, at(19, { tavern: false })).state.withId], ["visit", 9]);

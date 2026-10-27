@@ -6,6 +6,7 @@ import { mailSettings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import type { ToolContext } from "./tools";
 import { mailReaders } from "./mailAccess";
+import { isPresetKey } from "./mailPresets";
 
 export { mailReaders };
 
@@ -49,6 +50,11 @@ export function publicMail(m: MailRow) {
     imapPasswordSet: Boolean(m.imapPassword),
     imapMailbox: m.imapMailbox,
     readers: (m.readers as number[]) ?? [],
+    fromName: m.fromName ?? "",
+    footer: Boolean(m.footer),
+    dailyCap: m.dailyCap,
+    knownOnly: Boolean(m.knownOnly),
+    preset: m.preset ?? "",
     smtpReady: smtpReady(m),
     imapReady: imapReady(m),
   };
@@ -110,6 +116,19 @@ export async function updateMail(input: Record<string, unknown>): Promise<MailRo
   }
   if (input.clearSmtpPassword === true) out.smtpPassword = null;
   if (input.clearImapPassword === true) out.imapPassword = null;
+  const fromName = text("fromName", 100);
+  if (fromName !== undefined) out.fromName = fromName;
+  if (input.footer !== undefined) out.footer = input.footer === true;
+  if (input.knownOnly !== undefined) out.knownOnly = input.knownOnly === true;
+  if (input.dailyCap !== undefined) {
+    const n = Number(input.dailyCap);
+    if (!Number.isInteger(n) || n < 0 || n > 500) throw new MailError("dailyCap: a whole number from 0 to 500.");
+    out.dailyCap = n;
+  }
+  if (input.preset !== undefined) {
+    if (input.preset !== null && input.preset !== "" && !isPresetKey(input.preset)) throw new MailError("preset: not one of the providers.");
+    out.preset = (input.preset as string) || null;
+  }
   if (input.readers !== undefined) {
     if (!Array.isArray(input.readers) || input.readers.some((r) => !Number.isInteger(r))) throw new MailError("readers: a list of villager ids.");
     out.readers = [...new Set(input.readers as number[])];
@@ -152,11 +171,14 @@ export function parseRecipients(target: string | null | undefined): string[] {
   return parts;
 }
 
-export async function sendMail(msg: { to: string; subject: string | null; text: string }): Promise<string> {
+// `writer`: the villager who wrote it, for the optional footer (#143).
+export async function sendMail(msg: { to: string; subject: string | null; text: string; writer?: string | null }): Promise<string> {
   const m = await getMail();
   if (!smtpReady(m)) throw new MailError("Email isn't set up: add the SMTP server and From address in the Mayor's ledger → Email.", 409);
   const to = parseRecipients(msg.to);
-  const info = await transport(m).sendMail({ from: m.fromAddress!, to, subject: msg.subject ?? "", text: msg.text });
+  const from = m.fromName ? { name: m.fromName, address: m.fromAddress! } : m.fromAddress!;
+  const text = m.footer && msg.writer ? `${msg.text}\n\n--\nWritten by ${msg.writer}, sent by ${m.fromName || m.fromAddress}.` : msg.text;
+  const info = await transport(m).sendMail({ from, to, subject: msg.subject ?? "", text });
   const refused = info.rejected?.length ? ` (refused: ${info.rejected.join(", ")})` : "";
   return `Sent to ${to.join(", ")}${refused}.`;
 }

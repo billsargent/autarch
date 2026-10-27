@@ -296,8 +296,8 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
             <NumberField s={s} settings={settings} field="maxActionsPerHour" label="Actions per hour" />
             <NumberField s={s} settings={settings} field="commandTimeoutSec" label="Command timeout (seconds)" />
             <NumberField s={s} settings={settings} field="toolRetries" label="Retries when a tool fails" help="1 second apart." />
-            <NumberField s={s} settings={settings} field="minGapMinutes" label="Gap between work sessions (min)" />
-            <NumberField s={s} settings={settings} field="maxSessionsPerDay" label="Autonomous sessions per day" />
+            <NumberField s={s} settings={settings} field="minGapMinutes" label="Gap between each villager's work sessions (min)" />
+            <NumberField s={s} settings={settings} field="maxSessionsPerDay" label="Work sessions per villager per day" />
             <NumberField s={s} settings={settings} field="maxSessionMinutes" label="Longest work session (min)" />
             <NumberField s={s} settings={settings} field="inputPricePerMTok" label="Input price per 1M tokens" step="0.01" />
             <NumberField s={s} settings={settings} field="outputPricePerMTok" label="Output price per 1M tokens" step="0.01" />
@@ -632,7 +632,7 @@ function FreeTimePage({ settings }: { settings: SettingsRow }) {
         );
       })}
       <p className="text-[11px] text-[#6b4a2e]">
-        Today&apos;s cap: {settings.maxSessionsPerDay} autonomous sessions, at least {settings.minGapMinutes} min apart.
+        {`Each villager: up to ${settings.maxSessionsPerDay} work sessions a day, at least ${settings.minGapMinutes} min apart. Village-life windows don't count.`}
       </p>
     </Section>
   );

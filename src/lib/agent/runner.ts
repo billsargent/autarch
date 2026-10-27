@@ -602,10 +602,13 @@ export async function runAgentTurn(opts: {
         const call = rawCall as OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall;
         const toolName = call.function.name;
         let args: Record<string, unknown> = {};
+        // Arguments that aren't valid JSON were usually cut off (a long file
+        // in one call): nothing runs, and the villager is told why (#150).
+        let argsBroken = false;
         try {
           args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
         } catch {
-          args = {};
+          argsBroken = true;
         }
 
         let resultContent = "";
@@ -640,7 +643,11 @@ export async function runAgentTurn(opts: {
         const mode = settings.autonomyMode as "manual" | "balanced" | "autonomous" | "unrestricted";
         const unrestricted = mode === "unrestricted";
 
-        if (toolsForbidden) {
+        if (argsBroken) {
+          status = "error";
+          output = `Your ${toolName} call arrived cut off or garbled (its arguments weren't valid JSON, usually because it was too long), so nothing ran. Try again in smaller pieces: for a long file, write the first part, then add the rest with append.`;
+          resultContent = `ERROR: ${output}`;
+        } else if (toolsForbidden) {
           status = "blocked";
           output = "Tools are disabled in conversation mode. The agent cannot act until the human switches to agentic mode.";
           resultContent = `BLOCKED (conversation mode): ${output}`;

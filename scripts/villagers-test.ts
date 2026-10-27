@@ -720,7 +720,8 @@ async function main() {
   // --- the outbox (#107) and the owner's calendar (#108) ---------------------------------
   const { drafts: draftsT } = await import("../src/db/schema");
   const draftRoute = await import("../src/app/api/drafts/[id]/route");
-  const drafted = await executeTool("save_draft", { kind: "email", to: "shop@example.com", subject: "Order", content: "Two sacks of flour, please." }, town, ctxCal);
+  check("a draft must say why (#143)", (await executeTool("save_draft", { kind: "email", to: "shop@example.com", content: "Hi" }, town, ctxCal)).output.startsWith("Refused: say `why`"), true);
+  const drafted = await executeTool("save_draft", { kind: "email", to: "shop@example.com", subject: "Order", content: "Two sacks of flour, please.", why: "The owner asked me to order flour." }, town, ctxCal);
   check("a villager saves outward work as a draft", drafted.output.startsWith("Saved draft #") && drafted.output.includes("Nothing has been sent"), true);
   const draftId = Number(/#(\d+)/.exec(drafted.output)?.[1]);
   const draftRow = async () => (await db.select().from(draftsT).where(eq(draftsT.id, draftId)))[0];
@@ -729,7 +730,7 @@ async function main() {
   await decideD(draftId, { action: "approve", edits: { content: "Three sacks of flour, please." } });
   check("the owner approves it, with their edits (no connector yet: ready to send by hand)", [(await draftRow()).status, (await draftRow()).content], ["approved", "Three sacks of flour, please."]);
   check("a decided draft stays decided", (await decideD(draftId, { action: "discard" })).status, 409);
-  const second = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "post", content: "Hello world" }, town, ctxCal)).output)?.[1]);
+  const second = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "post", content: "Hello world", why: "To say hello." }, town, ctxCal)).output)?.[1]);
   await decideD(second, { action: "discard" });
   check("…or discards it", (await db.select().from(draftsT).where(eq(draftsT.id, second)))[0].status, "discarded");
   check("no tool sends or approves anything", ALL_TOOL_DEFINITIONS.map((t) => t.function.name).filter((n) => /send|publish|approve_draft/i.test(n)), []);
@@ -774,14 +775,31 @@ async function main() {
   check("the passwords never come back from the API", [JSON.stringify(savedMail).includes("imap-secret-123"), savedMail.imapPasswordSet, savedMail.smtpReady], [false, true, true]);
   check("…nor through query_database", (await executeTool("query_database", { sql: "select * from mail_settings" }, town, ctxCal)).output.includes("not allowed"), true);
 
-  const mailDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "Shop <shop@example.com>", subject: "Flour", content: "Two sacks, please." }, town, ctxCal)).output)?.[1]);
+  const mailDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "Shop <shop@example.com>", subject: "Flour", content: "Two sacks, please.", why: "The pantry is low." }, town, ctxCal)).output)?.[1]);
   await decideD(mailDraft, { action: "approve" });
   const sentRow = (await db.select().from(draftsT).where(eq(draftsT.id, mailDraft)))[0];
   check("an approved email draft is sent over SMTP", [sentRow.status, sentRow.sendResult], ["sent", "Sent to shop@example.com."]);
   check("…with its words, from the owner's address", [received.some((l) => l === "Two sacks, please."), received.some((l) => /^From: owner@example.com/i.test(l)), received.some((l) => /^Subject: Flour/i.test(l))], [true, true, true]);
-  const badDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "nobody", content: "x" }, town, ctxCal)).output)?.[1]);
+  const badDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "nobody", content: "x", why: "A test." }, town, ctxCal)).output)?.[1]);
   await decideD(badDraft, { action: "approve" });
   check("a draft to a bad address fails, saying why", (await db.select().from(draftsT).where(eq(draftsT.id, badDraft)))[0].sendResult, '"nobody" isn\'t an email address.');
+
+  // Who wrote it, why, and how it goes out (#143).
+  check("the sent log keeps who wrote it, why and when", [sentRow.agentId, sentRow.why, sentRow.sentAt instanceof Date], [cal.id, "The pantry is low.", true]);
+  const drafts2 = await import("../src/lib/agent/drafts");
+  const fresh = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "new@example.com, shop@example.com", subject: "Hi", content: "Hello there.", why: "A first hello." }, town, ctxCal)).output)?.[1]);
+  check("an address never emailed before is flagged", (await drafts2.listDrafts()).find((d) => d.id === fresh)?.newRecipients, ["new@example.com"]);
+  await putMail({ knownOnly: true });
+  check("…and with 'only people I've emailed before' on, it waits", (await decideD(fresh, { action: "approve" })).status, 409);
+  await putMail({ knownOnly: false, fromName: "Owner's village", footer: true });
+  received.length = 0;
+  await decideD(fresh, { action: "approve" });
+  check("the From name and the 'written by' footer", [received.some((l) => /^From: .*Owner's village/i.test(l)), received.some((l) => l === "Written by Cal, sent by Owner's village.")], [true, true]);
+  await putMail({ dailyCap: 1, footer: false });
+  const tooMany = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "shop@example.com", content: "Again.", why: "A test." }, town, ctxCal)).output)?.[1]);
+  const cappedRes = await decideD(tooMany, { action: "approve" });
+  check("the daily cap holds the rest until tomorrow", [cappedRes.status, (await cappedRes.json()).error.startsWith("Today's limit of 1 email")], [409, true]);
+  await putMail({ dailyCap: 10, fromName: "" });
   smtp.close();
 
   const calRow2 = await rowOf(cal.id);
@@ -987,7 +1005,21 @@ async function main() {
   check("…turns what was agreed into goals, on the villager's own board", (await db.select().from(goals).where(eq(goals.title, "Fix the bridge rail")))[0]?.agentId, cal.id);
   check("…or the town's, if nobody by that name lives here", (await db.select().from(goals).where(eq(goals.title, "Count the lanterns")))[0]?.agentId, null);
   check("…and keeps those lines out of the summary", written.summary?.includes("ACTION"), false);
-  check("…and pins the ideas it raised", (await ideasLib.listIdeas()).some((i) => i.title === "Paint the bridge red" && i.proposedBy === mayor.id), true);
+  check("…and pins the ideas it raised, as the meeting's, not the Mayor's (#147)", (await ideasLib.listIdeas()).some((i) => i.title === "Paint the bridge red" && i.proposedBy === null && i.body?.startsWith("Raised at town meeting")), true);
+  const { sqlite: ideaDb } = await import("../src/db");
+  ideaDb.prepare("UPDATE ideas SET created_at = created_at - 86400 * 2 WHERE proposed_by = ?").run(mayor.id);
+  const mine = ideaDb.prepare("SELECT COUNT(*) AS n FROM ideas WHERE proposed_by = ? AND created_at >= ?").get(mayor.id, Math.floor(new Date(new Date().setHours(0, 0, 0, 0)).getTime() / 1000)) as { n: number };
+  check("…so the Mayor still has his own ideas to pin today", [mine.n, (await executeTool("propose_idea", { title: "A tavern ledger", body: "x" }, town, ctxMayor)).output.startsWith("Pinned idea #")], [0, true]);
+
+  // Notices (#147): news and agreed terms, no vote.
+  const noticesRoute = await import("../src/app/api/notices/route");
+  check("a villager pins a notice", (await executeTool("pin_notice", { title: "Tavern terms", text: "Start small; books, not barrels." }, town, ctxMayor)).output.startsWith("Pinned notice #"), true);
+  const posted = (await (await noticesRoute.GET()).json()).notices as Array<{ id: number; title: string }>;
+  check("…it's on the board", posted[0]?.title, "Tavern terms");
+  for (let i = 0; i < 2; i++) await executeTool("pin_notice", { title: `More ${i}`, text: "x" }, town, ctxMayor);
+  check("…a few a day", (await executeTool("pin_notice", { title: "One too many", text: "x" }, town, ctxMayor)).output, "Refused: you've pinned 3 notices today. Tomorrow.");
+  await noticesRoute.DELETE(new Request(`http://x/api/notices?id=${posted[0].id}`, { method: "DELETE" }));
+  check("the owner can take one down", ((await (await noticesRoute.GET()).json()).notices as Array<{ id: number }>).some((n) => n.id === posted[0].id), false);
   check("past meetings show at the long table", (await (await meetingsRoute.GET()).json()).past.some((p: { summary: string | null }) => p.summary === "We all agreed, briefly."), true);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
 
@@ -1052,6 +1084,15 @@ async function main() {
   check("a trade must be a real one", (await (await agentRoute.PATCH(req(`/api/agents/${cal.id}`, "PATCH", { trade: "astronaut" }), { params: Promise.resolve({ id: String(cal.id) }) })).json()).error, "trade: isn't one of the village's trades.");
   await agentRoute.PATCH(req(`/api/agents/${cal.id}`, "PATCH", { trade: "baker" }), { params: Promise.resolve({ id: String(cal.id) }) });
   check("…and the owner can change it", life.lifeSummary(cal.id)!.trade, "baker");
+
+  // A skill too long for the prompt says so, to its writer and where it's cut.
+  const longSkill = await executeTool("write_file", { path: "skills/zz-long.md", content: `# Long\n${"x".repeat(2100)}` }, town, ctxCal);
+  check("writing a skill past the limit warns the writer", longSkill.output.includes("only the first 2000 reach anyone's prompt"), true);
+  const { buildSystemPrompt: promptFor } = await import("../src/lib/agent/systemPrompt");
+  check("…and the prompt marks where it's cut", (await promptFor(await getSettings(), { agent: await rowOf(cal.id) })).includes("[…cut: this skill is"), true);
+  await executeTool("delete_path", { path: "skills/zz-long.md" }, town, ctxCal);
+  check("a short skill gets no warning", (await executeTool("write_file", { path: "skills/zz-short.md", content: "# Short\nFine." }, town, ctxCal)).output.includes("Note:"), false);
+  await executeTool("delete_path", { path: "skills/zz-short.md" }, town, ctxCal);
 
   // --- orders from other towns (#136), the shop (#135), friendship and romance (#134) ----
   const orders = await import("../src/lib/agent/orders");

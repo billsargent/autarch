@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useVillagers } from "../../data/useVillagers";
+import { MAIL_PRESETS, PRESET_KEYS, isPresetKey, type MailPreset } from "@/lib/agent/mailPresets";
 
 // The Mayor's ledger → Email (#124): the owner's SMTP server (approved email
 // drafts go out through it) and IMAP inbox (read-only, for the villagers the
@@ -22,6 +23,11 @@ interface Mail {
   imapPasswordSet: boolean;
   imapMailbox: string;
   readers: number[];
+  fromName: string;
+  footer: boolean;
+  dailyCap: number;
+  knownOnly: boolean;
+  preset: string;
   smtpReady: boolean;
   imapReady: boolean;
 }
@@ -64,7 +70,7 @@ export default function EmailPage() {
   };
   const save = async () => {
     const patch: Record<string, unknown> = { ...form };
-    for (const k of ["smtpPort", "imapPort"] as const) if (k in patch) patch[k] = Number(patch[k]);
+    for (const k of ["smtpPort", "imapPort", "dailyCap"] as const) if (k in patch) patch[k] = Number(patch[k]);
     if (await put(patch)) setForm({});
   };
   const runTest = async (what: "smtp" | "imap") => {
@@ -127,6 +133,52 @@ export default function EmailPage() {
         </p>
       </div>
 
+      <label className="block text-xs font-semibold">
+        Your mail provider
+        <select
+          name="preset"
+          value={form.preset ?? mail.preset}
+          onChange={(e) => {
+            const p = isPresetKey(e.target.value) ? MAIL_PRESETS[e.target.value] : null;
+            setForm((f) => ({
+              ...f,
+              preset: e.target.value,
+              ...(p
+                ? {
+                    smtpHost: p.smtp.host,
+                    smtpPort: String(p.smtp.port),
+                    smtpSecurity: p.smtp.security,
+                    imapHost: p.imap.host,
+                    imapPort: String(p.imap.port),
+                    imapSecurity: p.imap.security,
+                  }
+                : {}),
+            }));
+          }}
+          className={input}
+        >
+          <option value="">Other (fill in the servers yourself)</option>
+          {PRESET_KEYS.map((k) => (
+            <option key={k} value={k}>
+              {MAIL_PRESETS[k].label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {(() => {
+        const key = form.preset ?? mail.preset;
+        if (!isPresetKey(key)) return null;
+        const p = MAIL_PRESETS[key] as MailPreset;
+        return (
+          <p className={`rounded border-2 px-3 py-2 text-[11px] ${p.auth === "oauth" ? "border-[#b3261e] bg-[#fbe3df]" : "border-[#d8c49a] bg-[#fffaf0]"}`}>
+            {p.note}{" "}
+            <a href={p.help} target="_blank" rel="noreferrer" className="underline">
+              {p.auth === "app-password" ? "Make an app password" : p.auth === "oauth" ? "How Microsoft sign-in works" : "Get it"}
+            </a>
+          </p>
+        );
+      })()}
+
       <fieldset className="space-y-2 rounded border-2 border-[#3b2716] bg-[#fffaf0]/60 p-3">
         <legend className="px-1 text-xs font-semibold">Sending (SMTP) {mail.smtpReady ? "· ready" : ""}</legend>
         <div className="grid gap-2 sm:grid-cols-[1fr_6rem]">
@@ -183,6 +235,25 @@ export default function EmailPage() {
         )}
         {saved && !dirty && !error && <span className="text-xs text-[#3f6b22]">Saved.</span>}
       </div>
+
+      <fieldset className="space-y-2 rounded border-2 border-[#3b2716] bg-[#fffaf0]/60 p-3">
+        <legend className="px-1 text-xs font-semibold">How mail goes out</legend>
+        <p className="text-[11px] text-[#6b4a2e]">
+          Villagers only write drafts, each saying why; you approve every email before it goes, from your own address.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {field("From name (what people see)", "fromName", { placeholder: "e.g. Alex's village" })}
+          {field("At most this many emails a day", "dailyCap", { type: "number" })}
+        </div>
+        <label className="flex items-center gap-2 text-xs">
+          <input type="checkbox" checked={mail.footer} onChange={(e) => void put({ footer: e.target.checked })} />
+          Add &quot;Written by &lt;villager&gt;, sent by &lt;you&gt;&quot; at the end of each email
+        </label>
+        <label className="flex items-center gap-2 text-xs">
+          <input type="checkbox" checked={mail.knownOnly} onChange={(e) => void put({ knownOnly: e.target.checked })} />
+          Only send to people I&apos;ve emailed before
+        </label>
+      </fieldset>
 
       <fieldset className="rounded border-2 border-[#3b2716] bg-[#fffaf0]/60 p-3">
         <legend className="px-1 text-xs font-semibold">Who may read your inbox</legend>

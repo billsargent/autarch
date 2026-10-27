@@ -91,6 +91,8 @@ export async function proposeHire(args: Record<string, unknown>, ctx?: ToolConte
     enabledTools: args.tools ?? undefined,
     dailyBudgetUsd: args.dailyBudgetUsd,
     character: args.character,
+    // Their village trade (#131): innkeeper, baker, fisher …
+    trade: typeof args.trade === "string" ? args.trade.toLowerCase().trim() : undefined,
   };
   const checked = await checkDraft(draft, me, settings);
   if ("error" in checked) return refused(checked.error!);

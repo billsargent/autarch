@@ -188,6 +188,11 @@ async function main() {
     }
   }
 
+  if (process.platform === "win32") {
+    const r = [risk.resolvePathSafe("/d/root/x.md", "C:\\w"), risk.resolvePathSafe("/root/x.md", "C:\\w")];
+    check("windows: file tools read Git Bash drive paths (/d/… is D:)", r[0] === "D:\\root\\x.md" && r[1] !== "R:\\oot\\x.md", r);
+  }
+
   // Windows shells (Git Bash, PowerShell, cmd): the same lines drawn.
   {
     // Every command gets the expected risk; the misses are shown.

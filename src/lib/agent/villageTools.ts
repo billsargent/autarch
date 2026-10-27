@@ -233,6 +233,27 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
     risk: { risk: "low", reason: "The Mayor proposing a building; the owner approves it." },
     run: mayor("propose_building"),
   },
+  // A plain notice on the board (#147): news and agreements, no vote.
+  pin_notice: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "pin_notice",
+        description:
+          "Pin a notice on the village notice board for everyone to read: news, agreed terms, a reminder. It isn't put to a vote (for a proposal the village should vote on, use propose_idea). A few a day.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "A short headline." },
+            text: { type: "string", description: "The notice itself, plainly." },
+          },
+          required: ["title", "text"],
+        },
+      },
+    },
+    risk: { risk: "low", reason: "Pins a notice on the village board; nothing leaves the village." },
+    run: async (args, ctx) => (await import("./notices")).pinNoticeTool(args, ctx),
+  },
   // Orders from other towns (#136): the Mayor takes them on for the village.
   accept_order: {
     definition: {
@@ -254,12 +275,17 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
       function: {
         name: "propose_hire",
         description:
-          "Draft a new villager to help with your area, when there's more work than you can do. The Mayor interviews them, then the owner decides (or, if the owner allows it, the Mayor hires them). They can only have tools you have yourself, and a budget no bigger than yours. Workers report to you; only the Mayor can take on a director.",
+          "Bring a new villager to the village. Nobody applies on their own and there are no outside candidates to wait for: a newcomer arrives only when you draft one here, so invent them (a name, a personality, their trade). Use it when a job needs a person: a building with nobody to work it (a tavern needs an innkeeper, a bakery a baker), or more work than the village can do. The Mayor interviews them, then the owner decides (or, if the owner allows it, the Mayor hires them). They can only have tools you have yourself, and a budget no bigger than yours. Workers report to you; only the Mayor can take on a director.",
         parameters: {
           type: "object",
           properties: {
             name: { type: "string", description: "Their name (not already used in the village)." },
             role: { type: "string", description: "Their job, in a few words." },
+            trade: {
+              type: "string",
+              enum: ["farmer", "baker", "fisher", "innkeeper", "gardener", "shopkeeper", "carpenter", "trader", "scholar", "watchman", "helper"],
+              description: "What they do in the village: the innkeeper works the tavern, the baker the bakery, and so on.",
+            },
             persona: { type: "string", description: "Their personality, in a few sentences." },
             area: { type: "string", description: "The area they work in. Default: yours." },
             tier: { type: "string", enum: ["worker", "director"], description: "Default worker." },
@@ -310,8 +336,9 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
             to: { type: "string", description: "Who or where it's for: an address, a channel, a shop." },
             subject: { type: "string" },
             content: { type: "string", description: "The full text, ready to send." },
+            why: { type: "string", description: "Why you're writing it, in a sentence, for the owner: who asked, or which goal it's for." },
           },
-          required: ["kind", "content"],
+          required: ["kind", "content", "why"],
         },
       },
     },
