@@ -3,6 +3,20 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-27 — Inside the tavern, the bakery and the shop
+
+- **The tavern, the bakery and the shop have an inside.** Click one in the village to go in.
+  - **The tavern:** the bar (the ale in the stores, who's behind the bar, who's in tonight, what a
+    supper costs) and the hearth (who keeps the tavern).
+  - **The bakery:** the oven (loaves, wheat and fish in the stores, who bakes and who brings in
+    the wheat) and the baker's table (who bakes here).
+  - **The shop:** the counter (everything for sale and what the villagers bought lately) and the
+    shopkeeper's desk (who minds the shop).
+- Whoever is there by their village life is shown inside, saying what they're up to; the one who
+  works there stands at the bar, the oven or the counter. Leaving puts you back at its door.
+- Every building but a house can now have a keeper, who takes up its trade. The buildings'
+  descriptions match how village life works now (a trade without its building makes half as much).
+
 ## 2026-10-27 — The village keeps its own clock, knows its facts, and talks plainly
 
 - **The village keeps its own clock.** A village day lasts 4 real hours by default (1–24, in

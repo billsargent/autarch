@@ -10,6 +10,7 @@ import VaultRoom from "./VaultRoom";
 import WorkshopRoom from "./WorkshopRoom";
 import StorehouseRoom from "./StorehouseRoom";
 import PostOfficeRoom from "./PostOfficeRoom";
+import { BakeryRoom, ShopRoom, TavernRoom } from "./PlotRooms";
 import type { RoomProps } from "./types";
 
 // The UI for each scene, by scene id. Its furniture's actions (listed in
@@ -27,4 +28,7 @@ export const ROOMS: Record<string, ComponentType<RoomProps>> = {
   home: HomeRoom,
   storehouse: StorehouseRoom,
   postoffice: PostOfficeRoom,
+  tavern: TavernRoom,
+  bakery: BakeryRoom,
+  shop: ShopRoom,
 };

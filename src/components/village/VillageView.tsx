@@ -8,7 +8,7 @@ import { OWNER_SPRITE, VILLAGE, VILLAGE_MANIFESTS, spriteFor, type Place, type S
 import type { PlayerSpec } from "./SceneView";
 import StampSprite from "./StampSprite";
 import { CELL, STAMPS, stampRect, type StampId } from "./scene";
-import { VILLAGE_LEVELS } from "./scenes";
+import { PLOT_INTERIORS, VILLAGE_LEVELS } from "./scenes";
 import { useBuildings } from "../data/useBuildings";
 import { useVillageSound } from "./useVillageSound";
 import WelcomeDialog from "./WelcomeDialog";
@@ -31,10 +31,11 @@ import { useVillageClock } from "./useVillageClock";
 const NEWCOMER_MS = 60 * 60_000;
 
 // You walk the village too (#109): you start at your front door, or at the
-// door of the building you just left (?from=<place>).
+// door of the building you just left (?from=<place>, or a plot's id).
 function startingDoor(): string {
   const from = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("from");
-  return VILLAGE.places.find((p) => p.id === from)?.door ?? VILLAGE.places.find((p) => p.id === "home")?.door ?? VILLAGE.spawn;
+  const plot = VILLAGE_MANIFESTS.flatMap((m) => m.plots).find((p) => p.id === from);
+  return VILLAGE.places.find((p) => p.id === from)?.door ?? plot?.door ?? VILLAGE.places.find((p) => p.id === "home")?.door ?? VILLAGE.spawn;
 }
 
 // How far the land reaches (#105), remembered so a visit doesn't start on
@@ -165,6 +166,13 @@ export default function VillageView() {
     setOpened((n) => n + 1);
   }
 
+  // The tavern, bakery and shop have an inside (#154); the rest open a dialog.
+  function openBuilding(id: number) {
+    const b = buildings.state?.buildings.find((x) => x.id === id);
+    if (b?.status === "built" && (PLOT_INTERIORS as readonly string[]).includes(b.kind)) router.push(`/village/${b.kind}`);
+    else openAction(`building.${id}`);
+  }
+
   function openPlace(p: Place) {
     // Everyone has a cottage: ask whose, when there's more than one villager.
     if (p.interior === "cottage" && villagers.length > 1) setChoosingCottage(true);
@@ -273,7 +281,7 @@ export default function VillageView() {
         player={player}
         overlays={
           <>
-            <PlotBuildings scene={scene} state={buildings.state} onOpen={(id) => openAction(`building.${id}`)} />
+            <PlotBuildings scene={scene} state={buildings.state} onOpen={openBuilding} />
             <Animals animals={villageAnimals(scene, buildings.state)} />
             <PlotSigns scene={scene} state={buildings.state} onOpen={(id) => openAction(`plot.${id}`)} />
             {(phase === "dusk" || phase === "night") && !data.paused && <LitWindows level={level} scene={scene} plots={buildings.state} />}

@@ -12,12 +12,12 @@ import ParchmentDialog from "../ParchmentDialog";
 
 const WHAT: Record<BuildingKind, string> = {
   house: "Beds for two more villagers.",
-  farm: "Grows wheat: 6 a day with a keeper, 2 without.",
-  bakery: "Bakes the wheat into bread: up to 6 loaves a day with a keeper, 2 without.",
-  workshop: "Somewhere for the village to make things.",
-  tavern: "Somewhere to unwind after work: everyone's morale +5. Idle villagers drop in.",
-  shop: "A little shop on the road: everyone's morale +3.",
-  garden: "Flower beds and gravel paths: everyone's morale +3.",
+  farm: "Where the farmer grows wheat. Without a farm, a farmer grows half as much.",
+  bakery: "Where the baker bakes the village's wheat into loaves. Without a bakery, half as much.",
+  workshop: "Where the carpenter makes crafts. Without a workshop, half as much.",
+  tavern: "Where the innkeeper brews ale from wheat, and where villagers spend their evenings: everyone's morale +5.",
+  shop: "Where villagers buy things for their cottages, treats and flowers: everyone's morale +3.",
+  garden: "Where the gardener grows flowers: everyone's morale +3.",
 };
 const ICON: Record<BuildingKind, string> = { house: "🏠", farm: "🌾", bakery: "🍞", workshop: "🔧", tavern: "🍺", shop: "🛍️", garden: "🌷" };
 // "north-3" → "North road, left (second ring)": two plots per road per ring.
@@ -62,7 +62,8 @@ export function BuildingDialog({ id, onClose }: { id: number; onClose: () => voi
   }
   if (b.kind === "land") return null;
   const kind = state.kinds[b.kind];
-  const keeps = b.kind === "farm" || b.kind === "bakery";
+  // Every building but a house has a trade that works it (#154).
+  const keeps = b.kind !== "house";
   return (
     <ParchmentDialog kicker="The village" title={`${ICON[b.kind]} ${kind.label}`} onClose={onClose}>
       <p className="mb-2 text-xs text-[#6b4a2e]">{WHAT[b.kind]}</p>
@@ -86,7 +87,7 @@ export function BuildingDialog({ id, onClose }: { id: number; onClose: () => voi
               </option>
             ))}
           </select>
-          <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">The keeper spends their spare time here. Looking after it costs nothing.</span>
+          <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">The keeper works here, and takes up its trade. Looking after it costs nothing.</span>
         </label>
       )}
       {error && <p role="alert" className="text-xs text-[#b3261e]">{error}</p>}
