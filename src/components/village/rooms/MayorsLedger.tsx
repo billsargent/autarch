@@ -1,5 +1,6 @@
 "use client";
 
+import FolderPicker from "./FolderPicker";
 import { useEffect, useState, type ReactNode } from "react";
 import type { SettingsRow } from "@/lib/agent/clientTypes";
 import {
@@ -330,13 +331,7 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
             <NumberField s={s} settings={settings} field="voteCostCapUsd" label="Budget per round of votes (USD)" step="0.01" help="A vote stops collecting when it has spent this." />
             <NumberField s={s} settings={settings} field="awaySpendCapUsd" label="Away-mode budget (USD)" step="0.01" help="While you're away, the Mayor stops approving once the village has spent this." />
           </div>
-          <TextField
-            s={s}
-            settings={settings}
-            field="workspaceDir"
-            label="The agent's workspace"
-            help="Its own folder to play in: always low risk. Not the filesystem root, a system folder, your home folder itself, or this framework's folder."
-          />
+          <WorkspaceField s={s} settings={settings} />
           <Toggle
             label="Allow fetching from the web"
             desc="The fetch_url and download_file tools. This machine's own services are always off limits."
@@ -904,6 +899,35 @@ function TextField({
       {help && <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">{help}</span>}
       <FieldError msg={error} />
     </label>
+  );
+}
+
+// The workspace (#157): typed, or chosen with the folder picker.
+function WorkspaceField({ s, settings }: { s: Settings; settings: SettingsRow }) {
+  const [picking, setPicking] = useState(false);
+  return (
+    <div>
+      <TextField
+        s={s}
+        settings={settings}
+        field="workspaceDir"
+        label="The agent's workspace"
+        help="Its own folder to play in: always low risk. Not a drive's or the filesystem's root, a system folder, your home folder itself, or this framework's folder."
+      />
+      <button type="button" onClick={() => setPicking(true)} className="village-btn mt-1 px-2 py-1 text-[11px]">
+        📁 Browse…
+      </button>
+      {picking && (
+        <FolderPicker
+          start={settings.workspaceDir}
+          onClose={() => setPicking(false)}
+          onPick={(dir) => {
+            setPicking(false);
+            void s.save({ workspaceDir: dir });
+          }}
+        />
+      )}
+    </div>
   );
 }
 
