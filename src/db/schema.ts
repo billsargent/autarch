@@ -546,6 +546,10 @@ export const agentSettings = sqliteTable("agent_settings", {
   // all work for the day once the village has spent it.
   noLimits: integer("no_limits", { mode: "boolean" }).notNull().default(false),
   spendCeilingUsd: real("spend_ceiling_usd"),
+  // Better web search (#170): a Brave Search API key (a secret: never sent to
+  // the page or the model) and the owner's own SearXNG address.
+  searchApiKey: text("search_api_key"),
+  searxngUrl: text("searxng_url"),
   // Day and night (#100): local "HH:MM". At night no autonomous work starts.
   bedtime: text("bedtime").notNull().default("22:00"),
   // How the day splits between computer work and village life (#130):

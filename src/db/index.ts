@@ -577,6 +577,8 @@ if (!globalForDb.__agentLabSqlite) {
     ["library_readers", "TEXT NOT NULL DEFAULT '[]'"],
     ["no_limits", "INTEGER NOT NULL DEFAULT 0"],
     ["spend_ceiling_usd", "REAL"],
+    ["search_api_key", "TEXT"],
+    ["searxng_url", "TEXT"],
   ] as const) {
     if (!existingCols("agent_settings").includes(col)) sqlite.exec(`ALTER TABLE agent_settings ADD COLUMN ${col} ${def}`);
   }

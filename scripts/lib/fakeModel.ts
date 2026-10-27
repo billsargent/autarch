@@ -21,6 +21,7 @@ export interface SeenRequest {
   // …and whether it asked for thinking, and the temperature (#152).
   thinkingOn: boolean;
   temperature: number | undefined;
+  maxTokens: number | undefined;
 }
 
 function chunk(delta: Record<string, unknown>, extra: Record<string, unknown> = {}) {
@@ -48,6 +49,7 @@ export function startFakeModel() {
         thinking: "thinking" in parsed,
         thinkingOn: parsed.thinking?.type === "enabled",
         temperature: parsed.temperature,
+        maxTokens: parsed.max_tokens,
         lastUser: [...(parsed.messages ?? [])].reverse().find((m: { role: string }) => m.role === "user")?.content ?? "",
       });
       const who = Object.keys(byAgent).find((n) => byAgent[n].length && seen[seen.length - 1].system.startsWith(`You are ${n}`));

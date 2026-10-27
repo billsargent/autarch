@@ -390,6 +390,7 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
     case "tools":
       return (
         <Section title="Tools" intro="Switch off anything you don't want the agent to be able to do at all.">
+          <WebSearchSettings s={s} settings={settings} />
           <div className="flex gap-1.5">
             <button onClick={() => save({ enabledTools: s.tools.map((t) => t.name) })} className="village-btn px-2 py-1 text-[11px]">
               All on
@@ -937,6 +938,85 @@ function TextField({
       {help && <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">{help}</span>}
       <FieldError msg={error} />
     </label>
+  );
+}
+
+// Where web_search looks (#170): a Brave Search key and the owner's own
+// SearXNG, each optional; DuckDuckGo and Wikipedia are always tried after them.
+function WebSearchSettings({ s, settings }: { s: Settings; settings: SettingsRow }) {
+  const [key, setKey] = useState("");
+  const [url, setUrl] = useDraft(settings.searxngUrl ?? "", s.fieldErrors.searxngUrl);
+  const [trying, setTrying] = useState<string | null>(null);
+  const saveUrl = () => {
+    if (url !== (settings.searxngUrl ?? "")) void s.save({ searxngUrl: url.trim() || null });
+  };
+  return (
+    <div className="space-y-2 rounded border-2 border-[#d8c49a] p-3 text-xs">
+      <p className="font-semibold">Web search</p>
+      <p className="text-[11px] text-[#6b4a2e]">
+        web_search tries these in turn: a Brave Search key and your own SearXNG if you set them, then DuckDuckGo, then Wikipedia. DuckDuckGo often turns automated searches away, so for research across the whole web a free Brave key (api.search.brave.com) is the most reliable.
+      </p>
+      <div>
+        Brave Search key:{" "}
+        <strong className={settings.searchKeySet ? "text-[#3f6b22]" : "text-[#6b4a2e]"}>{settings.searchKeySet ? "saved" : "not set"}</strong>
+        <div className="mt-1 flex gap-2">
+          <input
+            type="password"
+            name="searchApiKey"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder={settings.searchKeySet ? "Enter a new key to replace it…" : "The key from api.search.brave.com"}
+            autoComplete="off"
+            className={`${input} mt-0`}
+          />
+          <button
+            disabled={!key.trim()}
+            onClick={async () => {
+              await s.save({ searchApiKey: key.trim() });
+              setKey("");
+            }}
+            className="village-btn village-btn-primary px-3 py-1.5 text-xs"
+          >
+            Save
+          </button>
+          {settings.searchKeySet && (
+            <button onClick={() => void s.save({ searchApiKey: null })} className="village-btn px-3 py-1.5 text-xs">
+              Remove
+            </button>
+          )}
+        </div>
+        <span className="mt-0.5 block text-[11px] text-[#6b4a2e]">Kept on this machine; never shown again or given to the villagers.</span>
+      </div>
+      <label className="block font-semibold">
+        Your SearXNG (optional)
+        <input
+          name="searxngUrl"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onBlur={saveUrl}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") saveUrl();
+          }}
+          placeholder="http://localhost:8888"
+          className={input}
+        />
+        <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">The address of a SearXNG you run, with its JSON format switched on.</span>
+        <FieldError msg={s.fieldErrors.searxngUrl} />
+      </label>
+      <button
+        onClick={async () => {
+          setTrying("Searching…");
+          const res = await fetch("/api/search?q=watermill").then((r) => r.json()).catch(() => ({ output: "Couldn't reach the app." }));
+          const lines = String(res.output ?? res.error ?? "").split("\n");
+          const first = lines.find((l) => /^1\. /.test(l))?.replace(/^1\. |\*\*/g, "");
+          setTrying(`${lines[0].replace(/:$/, "")}${first ? `. First: ${first}` : ""}`);
+        }}
+        className="village-btn px-2 py-1 text-[11px]"
+      >
+        Try a search
+      </button>
+      {trying && <p className="text-[11px]">{trying}</p>}
+    </div>
   );
 }
 

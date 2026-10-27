@@ -191,7 +191,8 @@ const CORE_TOOL_DEFINITIONS = [
     type: "function" as const,
     function: {
       name: "fetch_url",
-      description: "Fetch a URL over HTTP(S) and return the response body (truncated). Web pages come back as their readable text, without the HTML. Useful for research.",
+      description:
+        "Fetch a URL over HTTP(S) and return the response body (truncated). Web pages come back as their readable text, without the HTML. Useful for research; with links: true it also lists the page's links, to follow its references to their sources.",
       parameters: {
         type: "object",
         properties: {
@@ -199,6 +200,7 @@ const CORE_TOOL_DEFINITIONS = [
           method: { type: "string", enum: ["GET", "POST"], description: "Default GET." },
           body: { type: "string", description: "Optional request body for POST." },
           raw: { type: "boolean", description: "Return the raw HTML of a web page instead of its text." },
+          links: { type: "boolean", description: "Also list the page's links (address and text), to follow its references." },
         },
         required: ["url"],
       },
@@ -577,7 +579,7 @@ export async function executeTool(
         String(args.service || ""),
       );
     case "fetch_url":
-      return fetchUrl(String(args.url || ""), (args.method as "GET" | "POST") || "GET", args.body as string | undefined, Boolean(args.raw));
+      return fetchUrl(String(args.url || ""), (args.method as "GET" | "POST") || "GET", args.body as string | undefined, Boolean(args.raw), Boolean(args.links));
     case "update_journal":
       return updateJournal(args, ctx);
     case "schedule_job":
@@ -604,7 +606,7 @@ export async function executeTool(
     case "edit_file":
       return skillSizeNote(await editFile(args, settings.workspaceDir), String(args.path || ""), settings.workspaceDir);
     case "web_search":
-      return webSearch(args);
+      return webSearch(args, settings);
     case "take_screenshot":
       return takeScreenshot(args, settings.workspaceDir);
     default:
@@ -902,7 +904,28 @@ export function htmlToText(html: string): string {
   return title ? `# ${title}\n\n${text}` : text;
 }
 
-async function fetchUrl(url: string, method: "GET" | "POST", body?: string, raw = false) {
+// A page's outbound links, absolute and once each, with their text: how a
+// researcher follows a page's references to the sources behind it (#170).
+export function pageLinks(html: string, base: string, max = 40): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of html.matchAll(/<a\b[^>]*?href\s*=\s*["']([^"'#][^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    let href: string;
+    try {
+      href = new URL(m[1].replace(/&amp;/g, "&"), base).toString();
+    } catch {
+      continue;
+    }
+    if (!/^https?:/i.test(href) || seen.has(href)) continue;
+    seen.add(href);
+    const text = htmlToText(m[2]).replace(/\s+/g, " ").trim().slice(0, 80);
+    out.push(`- ${text || "(no text)"}: ${href}`);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+async function fetchUrl(url: string, method: "GET" | "POST", body?: string, raw = false, links = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
@@ -912,7 +935,7 @@ async function fetchUrl(url: string, method: "GET" | "POST", body?: string, raw 
         method,
         body: method === "POST" ? body : undefined,
         signal: controller.signal,
-        headers: { "user-agent": "autarch-agent/1.0" },
+        headers: { "user-agent": "Mozilla/5.0 (compatible; autarch-agent/1.0; +https://github.com/billsargent/autarch)" },
       });
     } catch (err) {
       if (err instanceof RefusedRequest) return { output: `Refused: ${err.message}`, summary: `${method} ${url} refused` };
@@ -920,7 +943,10 @@ async function fetchUrl(url: string, method: "GET" | "POST", body?: string, raw 
     }
     const fetched = await res.text();
     const isHtml = /html/i.test(res.headers.get("content-type") ?? "") || /^\s*<(!doctype html|html)/i.test(fetched);
-    const text = isHtml && !raw ? `(the page's text; ask with raw: true for the HTML)\n\n${htmlToText(fetched)}` : fetched;
+    const linkList = isHtml && links ? pageLinks(fetched, res.url || url) : [];
+    const text =
+      (isHtml && !raw ? `(the page's text; ask with raw: true for the HTML)\n\n${htmlToText(fetched)}` : fetched) +
+      (linkList.length ? `\n\nLINKS ON THE PAGE (the first ${linkList.length}):\n${linkList.join("\n")}` : "");
     const bytes = Buffer.byteLength(text, "utf-8");
     const clipped =
       bytes > MAX_FETCH_BYTES ? Buffer.from(text).subarray(0, MAX_FETCH_BYTES).toString("utf-8") + "\n...[truncated]" : text;
@@ -1310,36 +1336,102 @@ async function downloadFile(args: Record<string, unknown>, workspaceDir: string)
   }
 }
 
-async function webSearch(args: Record<string, unknown>) {
+type SearchHit = { title: string; url: string; description?: string };
+
+// The search engines, tried in turn until one answers (#170): Brave's search
+// API and the owner's own SearXNG when they're set up (Mayor's ledger →
+// Tools), DuckDuckGo, DuckDuckGo's plain HTML page (often still answering
+// when the other refuses), and Wikipedia's own search last. Each result says
+// where it came from.
+export async function webSearch(args: Record<string, unknown>, settings?: Pick<AgentSettingsRow, "searchApiKey" | "searxngUrl">) {
   const query = String(args.query || "").trim();
   if (!query) return { output: "No search query provided.", summary: "web search (empty query)" };
   const maxResults = Math.min(Math.max(Number(args.maxResults) || 5, 1), 10);
-  const show = (items: Array<{ title: string; url: string; description?: string }>, from: string) => ({
+  const show = (items: SearchHit[], from: string) => ({
     output: truncate(`${from} for "${query}":\n\n${items.map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description || "(no description)"}`).join("\n\n")}`),
     summary: `web search "${query}" (${items.length} results)`,
   });
-  let failure: string;
-  try {
-    // Dynamic import so the module doesn't break if duck-duck-scrape isn't installed.
-    const { search } = await import("duck-duck-scrape");
-    const results = await search(query, { safeSearch: 0 });
-    const items = results.results.slice(0, maxResults);
-    if (items.length) return show(items, "Web search results");
-    failure = "no results";
-  } catch (err) {
-    failure = err instanceof Error ? err.message : String(err);
+  const engines: Array<[string, () => Promise<SearchHit[]>]> = [];
+  if (settings?.searchApiKey) engines.push(["Web search results (Brave)", () => braveSearch(query, maxResults, settings.searchApiKey!)]);
+  if (settings?.searxngUrl) engines.push(["Web search results (SearXNG)", () => searxngSearch(query, maxResults, settings.searxngUrl!)]);
+  engines.push(
+    [
+      "Web search results",
+      async () => {
+        // Dynamic import so the module doesn't break if duck-duck-scrape isn't installed.
+        const { search } = await import("duck-duck-scrape");
+        return (await search(query, { safeSearch: 0 })).results;
+      },
+    ],
+    ["Web search results (DuckDuckGo's plain page)", () => duckHtmlSearch(query)],
+    // Said plainly, so the villager knows where the results came from.
+    ["The general web search wasn't available, so these are from Wikipedia's own search", () => wikipediaSearch(query, maxResults)],
+  );
+  const failures: string[] = [];
+  for (const [from, run] of engines) {
+    try {
+      const items = (await run()).filter((r) => r.title && /^https?:/i.test(r.url)).slice(0, maxResults);
+      if (items.length) return show(items, from);
+      failures.push("no results");
+    } catch (err) {
+      failures.push(err instanceof Error ? err.message : String(err));
+    }
   }
-  // DuckDuckGo often refuses automated searches; Wikipedia's own search is a
-  // fallback, said plainly so the villager knows where the results came from (#170).
-  try {
-    const wiki = await wikipediaSearch(query, maxResults);
-    if (wiki.length) return show(wiki, "The general web search wasn't available, so these are from Wikipedia's own search");
-  } catch {
-    /* fall through to the failure */
-  }
-  return failure === "no results"
+  return failures.every((f) => f === "no results")
     ? { output: `No results found for "${query}".`, summary: `web search "${query}" (0 results)` }
-    : { output: `Web search failed: ${failure}`, summary: "web search failed" };
+    : { output: `Web search failed: ${failures.filter((f) => f !== "no results").join("; ")}`, summary: "web search failed" };
+}
+
+const SEARCH_UA = "Mozilla/5.0 (compatible; Autarch village research; +https://github.com/billsargent/autarch)";
+
+// Brave Search's API (a key from api.search.brave.com; the free plan is plenty).
+export async function braveSearch(query: string, max: number, key: string): Promise<SearchHit[]> {
+  const res = await fetch(`https://api.search.brave.com/res/v1/web/search?count=${max}&q=${encodeURIComponent(query)}`, {
+    headers: { accept: "application/json", "x-subscription-token": key },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`Brave answered ${res.status}`);
+  const data = (await res.json()) as { web?: { results?: Array<{ title: string; url: string; description?: string }> } };
+  return (data.web?.results ?? []).map((r) => ({ title: htmlToText(r.title), url: r.url, description: htmlToText(r.description ?? "") }));
+}
+
+// The owner's own SearXNG (its JSON output switched on). The owner sets the
+// address, so it may be on this machine or the local network.
+export async function searxngSearch(query: string, max: number, base: string): Promise<SearchHit[]> {
+  const url = new URL("search", base.endsWith("/") ? base : `${base}/`);
+  url.searchParams.set("q", query);
+  url.searchParams.set("format", "json");
+  const res = await fetch(url, { headers: { accept: "application/json", "user-agent": SEARCH_UA }, signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) throw new Error(`SearXNG answered ${res.status}${res.status === 403 ? " (is its JSON format switched on?)" : ""}`);
+  const data = (await res.json()) as { results?: Array<{ title: string; url: string; content?: string }> };
+  return (data.results ?? []).slice(0, max).map((r) => ({ title: r.title, url: r.url, description: r.content }));
+}
+
+// DuckDuckGo's plain HTML results page; its links go through a redirect that
+// carries the real address (uddg).
+export function parseDuckHtml(html: string): SearchHit[] {
+  const out: SearchHit[] = [];
+  const snippets = [...html.matchAll(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g)].map((m) => htmlToText(m[1]));
+  for (const [i, m] of [...html.matchAll(/<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)].entries()) {
+    let href = m[1].replace(/&amp;/g, "&");
+    const real = /[?&]uddg=([^&]+)/.exec(href)?.[1];
+    if (real) href = decodeURIComponent(real);
+    else if (href.startsWith("//")) href = `https:${href}`;
+    if (/duckduckgo\.com\/y\.js/.test(href)) continue; // an advert
+    out.push({ title: htmlToText(m[2]), url: href, description: snippets[i] });
+  }
+  return out;
+}
+
+async function duckHtmlSearch(query: string): Promise<SearchHit[]> {
+  const res = await fetch("https://html.duckduckgo.com/html/", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", "user-agent": SEARCH_UA },
+    body: `q=${encodeURIComponent(query)}`,
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`DuckDuckGo's plain page answered ${res.status}`);
+  return parseDuckHtml(await res.text());
 }
 
 // Wikipedia's public search API: titles, page addresses and a snippet.

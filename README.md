@@ -301,11 +301,16 @@ and approvals pop up wherever you are. Every page of the app is a place in the v
 
 - **Library:** skills are books on the shelves; new ones are written at the desk. The reading table
   is the document shelf: put your own documents there (PDFs, text, Word files, pictures) to read
-  in the page or download. They're kept next to the database, out of the villagers' workspace;
-  only villagers you tick can read them (`read_document`). The research board on the wall
-  commissions research: the librarians split a topic into questions, search and read the web,
-  and write a report that cites its sources, which goes on the research shelf. Each project has a
-  budget of its own.
+  in the page or download. Markdown opens in a reader that sets it out like a page; pictures fit
+  the viewer at their own proportions. They're kept next to the database, out of the villagers'
+  workspace; only villagers you tick can read them (`read_document`). The research board on the
+  wall commissions research: the librarians split a topic into questions, search and read the
+  web, and write a report that cites its sources, which goes on the research shelf as Markdown,
+  a web page, plain text, a Word document or a PDF. A **deep dive** asks more questions, reads
+  widely (following pages' links to the original sources) and has a second round for the gaps.
+  Each project has a budget of its own. For research across the whole web, add a free Brave
+  Search key or your own SearXNG (Mayor's ledger → Tools): DuckDuckGo often turns automated
+  searches away, and Wikipedia's search is the last resort.
 - **Workshop:** jobs are slips on the job board; new ones are set up at the workbench.
 - **Notice board:** goals pinned by priority, and ideas up for a vote.
 - **Guard tower:** the logbook (activity log), today's tally, and the neighbours' talk (everything

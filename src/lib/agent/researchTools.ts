@@ -58,10 +58,15 @@ export const RESEARCH_TOOLS: Record<string, ResearchTool> = {
       type: "function",
       function: {
         name: "research_write",
-        description: "Lead only, at the end: the report in markdown, citing sources by number like [2]. The sources list is added for you.",
+        description:
+          "Lead only, at the end: the report in markdown, citing sources by number like [2]. The sources list is added for you. A long report can go in parts: send each part with more: true, and the last without it.",
         parameters: {
           type: "object",
-          properties: { title: { type: "string" }, report: { type: "string" } },
+          properties: {
+            title: { type: "string" },
+            report: { type: "string", description: "The report, or this part of it." },
+            more: { type: "boolean", description: "True if more parts follow." },
+          },
           required: ["report"],
         },
       },

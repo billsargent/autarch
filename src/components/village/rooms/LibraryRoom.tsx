@@ -26,8 +26,12 @@ function when(iso: string): string {
 // The reading table opens the document shelf (#169), the research board the
 // research desk (#170); the rest is the skills.
 export default function LibraryRoom(props: RoomProps) {
-  if (props.action === "library.documents") return <DocumentShelf onClose={props.onClose} />;
-  if (props.action === "library.research") return <ResearchDesk onClose={props.onClose} />;
+  // A report opened from the research desk shows in the shelf's reader.
+  const [report, setReport] = useState<string | null>(null);
+  if (props.action === "library.documents" || report) {
+    return <DocumentShelf onClose={props.onClose} initial={report ? { shelf: "research", name: report } : undefined} />;
+  }
+  if (props.action === "library.research") return <ResearchDesk onClose={props.onClose} onRead={setReport} />;
   return <SkillsLibrary {...props} />;
 }
 
