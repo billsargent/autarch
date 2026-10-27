@@ -44,6 +44,8 @@ export const agents = sqliteTable("agents", {
   workShare: integer("work_share"),
   // Where they live (#159): "cottage-1".."cottage-3", or "house-<building id>".
   dwelling: text("dwelling"),
+  // Character traits (#153), from traits.ts: village life only.
+  traits: text("traits", { mode: "json" }),
   // Limits (#60); empty = no cap of its own.
   dailyBudgetUsd: real("daily_budget_usd"),
   maxActionsPerHour: integer("max_actions_per_hour"),
@@ -232,6 +234,8 @@ export const ideas = sqliteTable("ideas", {
   lastVoteAt: integer("last_vote_at", { mode: "timestamp" }),
   goalId: integer("goal_id"),
   decidedBy: text("decided_by"),
+  // A conduct vote (#153): about whom, and what happens if it passes.
+  conduct: text("conduct", { mode: "json" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   decidedAt: integer("decided_at", { mode: "timestamp" }),
 });
@@ -555,6 +559,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   // When the model thinks (#152): "work" (chats and work windows; village
   // talk goes without, at talkTemperature), "all" or "none".
   thinkingFor: text("thinking_for", { enum: ["work", "all", "none"] }).notNull().default("work"),
+  // How many flaws (lazy, light-fingered, shifty) the Mayor may give a newcomer (#153).
+  flawsAllowed: text("flaws_allowed", { enum: ["none", "one", "any"] }).notNull().default("one"),
   talkTemperature: real("talk_temperature").notNull().default(0.7),
   // Hiring (#99): "ask" = every hire waits for the owner; "auto" = the Mayor
   // hires within the caps. And how many villagers the village can hold.

@@ -42,7 +42,13 @@ export function tally(cast: Choice[], active: number): { yes: number; no: number
   return { yes, no, abstain, quorum, outcome };
 }
 
-export async function proposeIdea(title: string, body: string | null, proposedBy: number | null): Promise<IdeaRow> {
+// A conduct vote (#153): about whom, and what happens if it passes.
+export interface Conduct {
+  agentId: number;
+  outcome: "warning" | "keeper" | "dismissal";
+}
+
+export async function proposeIdea(title: string, body: string | null, proposedBy: number | null, conduct: Conduct | null = null): Promise<IdeaRow> {
   const t = title.trim();
   if (!t) throw new IdeaError("An idea needs a title.", 400);
   const open = (sqlite.prepare("SELECT COUNT(*) AS n FROM ideas WHERE status IN ('open', 'voting')").get() as { n: number }).n;
@@ -53,7 +59,7 @@ export async function proposeIdea(title: string, body: string | null, proposedBy
     const mine = (sqlite.prepare("SELECT COUNT(*) AS n FROM ideas WHERE proposed_by = ? AND created_at >= ?").get(proposedBy, since) as { n: number }).n;
     if (mine >= IDEAS_PER_DAY) throw new IdeaError(`you've proposed ${IDEAS_PER_DAY} ideas today. Let the village catch up.`);
   }
-  const [row] = await db.insert(ideas).values({ title: t.slice(0, 120), body: body?.trim().slice(0, 2000) || null, proposedBy }).returning();
+  const [row] = await db.insert(ideas).values({ title: t.slice(0, 120), body: body?.trim().slice(0, 2000) || null, proposedBy, conduct }).returning();
   return row;
 }
 
@@ -94,7 +100,9 @@ async function votesThread(agentId: number): Promise<number> {
 
 async function runRound(idea: IdeaRow) {
   const settings = await getSettings();
-  const voters = await db.select().from(agents).where(eq(agents.status, "active")).orderBy(asc(agents.id));
+  // Nobody votes on their own conduct (#153).
+  const about = (idea.conduct as Conduct | null)?.agentId;
+  const voters = (await db.select().from(agents).where(eq(agents.status, "active")).orderBy(asc(agents.id))).filter((v) => v.id !== about);
   const [proposer] = idea.proposedBy ? await db.select().from(agents).where(eq(agents.id, idea.proposedBy)) : [];
   const threads: number[] = [];
   const spent = () =>
@@ -142,6 +150,7 @@ async function settle(ideaId: number, active: number) {
 }
 
 async function adopt(idea: IdeaRow, by: "vote" | "owner", note: string) {
+  if (idea.conduct) return settleConduct(idea, by, note);
   const [goal] = await db
     .insert(goals)
     .values({ title: idea.title, body: [idea.body, note].filter(Boolean).join("\n\n"), status: "backlog", priority: 3, agentId: null })
@@ -197,4 +206,36 @@ export async function dailyVote(now = new Date()): Promise<number | null> {
   if (!candidate) return null;
   await callVote(candidate.id);
   return candidate.id;
+}
+
+// A conduct vote that passed (#153): a warning, losing a keeper post, or
+// asking the owner to let them go. Dismissal itself stays the owner's.
+async function settleConduct(idea: IdeaRow, by: "vote" | "owner", note: string) {
+  const c = idea.conduct as Conduct;
+  await db.update(ideas).set({ status: "adopted", decidedBy: by, decidedAt: new Date() }).where(eq(ideas.id, idea.id));
+  const [who] = await db.select().from(agents).where(eq(agents.id, c.agentId));
+  if (!who) return;
+  const { logLife } = await import("./life");
+  const mayor = await ensureMayor();
+  if (c.outcome === "warning") {
+    sqlite.prepare("UPDATE villager_life SET company = MAX(0, company - 25), energy = MAX(0, energy - 10) WHERE agent_id = ?").run(who.id);
+    logLife("conduct", who.id, `The village gave ${who.name} a warning about their conduct.`);
+  } else if (c.outcome === "keeper") {
+    const kept = sqlite.prepare("SELECT kind FROM buildings WHERE keeper_id = ?").all(who.id) as Array<{ kind: string }>;
+    sqlite.prepare("UPDATE buildings SET keeper_id = NULL WHERE keeper_id = ?").run(who.id);
+    logLife("conduct", who.id, `The village voted ${who.name} out of keeping the ${kept.map((k) => k.kind).join(" and ") || "building"}.`);
+  } else {
+    logLife("conduct", who.id, `The village voted to ask the owner to let ${who.name} go.`);
+  }
+  await db.insert(notifications).values({
+    kind: "idea",
+    title: c.outcome === "dismissal" ? `The village asks you to let ${who.name} go` : `Conduct: ${who.name}`,
+    body:
+      c.outcome === "dismissal"
+        ? `${note} ${idea.body ?? ""} Letting a villager go is yours alone to decide: the Villagers page, in the Mayor's ledger.`
+        : `${note} ${c.outcome === "warning" ? `${who.name} has been warned.` : `${who.name} no longer keeps a building.`}`,
+    severity: c.outcome === "dismissal" ? "warning" : "info",
+    source: mayor.name,
+    agentId: mayor.id,
+  });
 }

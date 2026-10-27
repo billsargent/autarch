@@ -12,6 +12,7 @@ import { isNight } from "./daynight";
 import { lifeBlock } from "./life";
 import { villageFacts } from "./villageFacts";
 import { builtInPlaybooks } from "./villagePlaybooks";
+import { characterBlock, traitsOf } from "./traits";
 import { villageDate, villageHours } from "./villageClock";
 import type { AgentRow } from "./agents";
 import type { SessionTrigger } from "./triggers";
@@ -45,6 +46,10 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
   const home = agent?.home ? `${settings.workspaceDir}/${agent.home}` : settings.workspaceDir;
   // Work windows carry the job mandate; chat + approval continuations are "focused."
   const isWorkTurn = trigger === "scheduled" || trigger === "report" || Boolean(jobId);
+
+  // Character traits (#153) only in village talk: never in computer work, a
+  // report, a review for the owner, or a chat where they may use the computer.
+  const villageTalk = !isWorkTurn && (scope.toolsAvailable === false || (trigger != null && ["life", "message", "meeting", "vote", "interview"].includes(trigger)));
 
   // Night by the village's own clock (#150), or the owner's.
   const night = villageHours(settings.villageClock, settings.bedtime, settings.wakeTime);
@@ -193,8 +198,9 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
 CURRENT STATE (DYNAMIC — this section updates every turn)
 ${statusNotes}${agent?.status === "paused" ? `\n⏸ ${agent.pausedBy === "mayor" ? "The Mayor" : "The human"} has paused you: you can chat, but your tools are blocked until they let you work again.` : ""}${agent?.isMayor ? `\n${MAYOR_NOTE}` : ""}
 ${neighboursLine}
-${agent ? await villageFacts() : ""}
-${agent ? lifeBlock(agent.id) : ""}
+${agent ? await villageFacts(new Date(), Boolean(agent.isMayor)) : ""}
+${agent ? lifeBlock(agent.id) : ""}${villageTalk && agent ? `
+${characterBlock(traitsOf(agent))}` : ""}
 ${isWorkTurn ? (settings.workWindowPrompt ? fill(settings.workWindowPrompt) : workWindowText) : trigger === "life" ? LIFE_WINDOW_NOTE : (settings.focusedChatPrompt ? fill(settings.focusedChatPrompt) : FOCUSED_CHAT_DEFAULT)}
 
 YOUR GOALS

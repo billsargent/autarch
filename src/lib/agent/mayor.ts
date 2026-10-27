@@ -66,6 +66,8 @@ export async function runMayorTool(tool: string, args: Record<string, unknown>, 
       return callMeetingTool(mayor, args, ctx);
     case "call_vote":
       return callVoteTool(args, ctx);
+    case "call_conduct_vote":
+      return callConductVote(mayor, args, ctx);
     case "propose_building": {
       const busy = notWhileAnswering(ctx);
       if (busy) return busy;
@@ -233,6 +235,33 @@ function notesSummary(agentId: number): string {
 }
 
 // Put an idea to the vote now (#98).
+// A conduct vote (#153): only about what neighbours saw someone do this week.
+const OUTCOMES = { warning: "a warning", keeper: "losing their keeper post", dismissal: "asking the owner to let them go" } as const;
+async function callConductVote(mayor: AgentRow, args: Record<string, unknown>, ctx?: ToolContext): Promise<Result> {
+  const busy = notWhileAnswering(ctx);
+  if (busy) return busy;
+  const target = await findVillager(args.name);
+  if (isResult(target)) return target;
+  if (target.id === mayor.id) return refused("not about yourself.");
+  const outcome = String(args.outcome ?? "") as keyof typeof OUTCOMES;
+  if (!(outcome in OUTCOMES)) return refused("`outcome` is warning, keeper or dismissal.");
+  const reason = String(args.reason ?? "").trim().slice(0, 300);
+  if (!reason) return refused("say what they were seen doing (`reason`).");
+  const since = Math.floor(Date.now() / 1000) - 7 * 86400;
+  const seen = (sqlite.prepare("SELECT COUNT(*) AS n FROM life_events WHERE agent_id = ? AND kind IN ('seen_theft', 'seen_doze') AND created_at >= ?").get(target.id, since) as { n: number }).n;
+  if (!seen) return refused(`nobody has seen ${target.name} do anything wrong this week. A conduct vote is only for what someone saw.`);
+  if (outcome === "keeper" && !(sqlite.prepare("SELECT 1 FROM buildings WHERE keeper_id = ? AND status = 'built'").get(target.id))) return refused(`${target.name} doesn't keep a building.`);
+  const { proposeIdea, callVote, IdeaError } = await import("./ideas");
+  try {
+    const idea = await proposeIdea(`Conduct: ${target.name} (${OUTCOMES[outcome]})`, `${reason}\nSeen by neighbours ${seen} time${seen > 1 ? "s" : ""} this week. If this passes: ${OUTCOMES[outcome]}.`, mayor.id, { agentId: target.id, outcome });
+    await callVote(idea.id);
+    return { output: `The village is voting on ${target.name}'s conduct (idea #${idea.id}). If it passes: ${OUTCOMES[outcome]}.`, summary: `conduct vote #${idea.id}` };
+  } catch (err) {
+    if (err instanceof IdeaError) return refused(err.message.charAt(0).toLowerCase() + err.message.slice(1));
+    throw err;
+  }
+}
+
 async function callVoteTool(args: Record<string, unknown>, ctx?: ToolContext): Promise<Result> {
   const busy = notWhileAnswering(ctx);
   if (busy) return busy;

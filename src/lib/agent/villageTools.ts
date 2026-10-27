@@ -1,4 +1,5 @@
 import { TOWNS } from "./lifeRules";
+import { TRAIT_KEYS } from "./traits";
 import type OpenAI from "openai";
 import type { RiskResult } from "./risk";
 import type { ToolContext } from "./tools";
@@ -231,6 +232,28 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
     risk: { risk: "medium", reason: "The Mayor opening a vote: a short turn for every villager, within the round's cost cap." },
     run: mayor("call_vote"),
   },
+  // Conduct votes (#153): about someone neighbours have seen misbehave.
+  call_conduct_vote: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "call_conduct_vote",
+        description:
+          "Mayor only. When neighbours keep seeing someone take from the village stores or doze through their work (THE VILLAGE TODAY says who), put it to the village. Everyone votes; if it passes: `warning` dents their spirits and is written in the chronicle, `keeper` takes their keeper post away, `dismissal` asks the owner to let them go (the owner decides). Only for what someone was actually seen doing this week.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "The villager." },
+            outcome: { type: "string", enum: ["warning", "keeper", "dismissal"] },
+            reason: { type: "string", description: "What they were seen doing, in a sentence." },
+          },
+          required: ["name", "outcome", "reason"],
+        },
+      },
+    },
+    risk: { risk: "medium", reason: "The Mayor opening a conduct vote: a short turn for every villager; a dismissal still goes to the owner." },
+    run: mayor("call_conduct_vote"),
+  },
   propose_building: {
     definition: {
       type: "function" as const,
@@ -305,7 +328,12 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
               enum: ["farmer", "baker", "fisher", "innkeeper", "gardener", "shopkeeper", "carpenter", "trader", "scholar", "watchman", "helper"],
               description: "What they do in the village: the innkeeper works the tavern, the baker the bakery, and so on.",
             },
-            persona: { type: "string", description: "Their personality in one plain sentence (e.g. \"Cheerful and hardworking; likes an early start.\")." },
+            persona: { type: "string", description: "Their personality in one plain sentence (e.g. \"Likes an early start and a quiet evening.\")." },
+            traits: {
+              type: "array",
+              items: { type: "string", enum: TRAIT_KEYS },
+              description: "Two or three character traits. Lazy, thieving and shifty are flaws: the owner allows at most one unless they say otherwise. Leave out for two good ones.",
+            },
             area: { type: "string", description: "The area they work in. Default: yours." },
             tier: { type: "string", enum: ["worker", "director"], description: "Default worker." },
             tools: { type: "array", items: { type: "string" }, description: "Their tools. Default: yours, minus what a worker can't hold." },

@@ -78,6 +78,7 @@ export interface SettingsRow {
   villageDayHours: number;
   thinkingFor: "work" | "all" | "none";
   talkTemperature: number;
+  flawsAllowed: "none" | "one" | "any";
   wakeTime: string;
   hiringMode: "ask" | "auto";
   maxPopulation: number;
@@ -243,6 +244,8 @@ export interface AgentRow {
   workShare?: number | null;
   // Where they live (#159): "cottage-1".."cottage-3", or "house-<building id>".
   dwelling?: string | null;
+  // Character traits (#153).
+  traits?: string[] | null;
 }
 
 // A villager's life as the village shows it (#132, life.ts lifeSummary).

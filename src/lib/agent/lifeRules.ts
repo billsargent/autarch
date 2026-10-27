@@ -5,6 +5,12 @@ import { TRADES, levelOf, type Good, type TradeKey } from "./trades";
 // village; scripts/life-test.ts tests them.
 
 export const TICK_MINUTES = 10;
+// How often a light-fingered villager pockets a loaf, and a lazy one dozes
+// through a stint, per ten minutes (#153).
+export const STEAL_CHANCE = 0.04;
+export const DOZE_CHANCE = 0.25;
+// How warmly each trait makes friends.
+export const warmthOf = (traits: readonly string[] | null | undefined) => (traits?.includes("cheerful") ? 1.5 : traits?.includes("grumpy") ? 0.5 : 1);
 
 export interface LifeState {
   xp: number;
@@ -28,6 +34,8 @@ export interface TickInput {
   friend: { id: number; name: string } | null;
   // Something they'd like from the shop, if they can spare the coins (#135).
   wish?: { key: string; label: string; price: number } | null;
+  // Their character traits (#153, traits.ts).
+  traits?: readonly string[];
   rng: () => number;
 }
 
@@ -38,6 +46,10 @@ export interface TickResult {
   hungry: boolean;
   spent: number;
   bought: string | null;
+  // Trait doings (#153): a loaf pocketed, a stint dozed through, flowers for a friend.
+  stole?: boolean;
+  skipped?: boolean;
+  gaveTo?: number;
 }
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
@@ -63,7 +75,15 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
   st.fullness = clamp(st.fullness - 2);
   st.company = clamp(st.company - 1);
   const evening = i.hour >= 17 && i.hour < 22;
-  const food: Good | null = (i.stock.bread ?? 0) > 0 ? "bread" : (i.stock.fish ?? 0) > 0 ? "fish" : null;
+  const has = (t: string) => Boolean(i.traits?.includes(t));
+  // Light-fingered (#153): now and then a loaf goes from the stores into a pocket
+  // (and is sold on), whatever else they're doing.
+  if (has("thieving") && (i.stock.bread ?? 0) > 0 && i.rng() < STEAL_CHANCE) {
+    out.used.bread = (out.used.bread ?? 0) + 1;
+    out.stole = true;
+    st.coins += 2;
+  }
+  const food: Good | null = (i.stock.bread ?? 0) - (out.used.bread ?? 0) > 0 ? "bread" : (i.stock.fish ?? 0) > 0 ? "fish" : null;
 
   // Hungry with nothing in the pantry: they still rest when worn out and
   // work their trade by day (or nobody would ever grow the food), and forage
@@ -71,7 +91,7 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
   const hungryNoFood = st.fullness < 35 && !food;
   if (hungryNoFood) out.hungry = true;
   if (st.fullness < 35 && food) {
-    out.used[food] = 1;
+    out.used[food] = (out.used[food] ?? 0) + 1;
     st.fullness = clamp(st.fullness + 45);
     if (evening && i.tavern && st.coins >= 2) {
       st.coins -= 2;
@@ -87,8 +107,16 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
     return out;
   }
   if (i.hour >= 8 && i.hour < 17) {
+    // Lazy (#153): now and then they doze instead.
+    if (has("lazy") && i.rng() < DOZE_CHANCE) {
+      st.energy = clamp(st.energy + 3);
+      out.skipped = true;
+      set("home", "dozing when there's work to do");
+      return out;
+    }
     const t = TRADES[i.trade];
-    st.xp += 2;
+    // Hardworking (#153): they learn their trade faster.
+    st.xp += has("hardworking") ? 3 : 2;
     st.coins += 1;
     const level = levelOf(st.xp);
     let n = t.goods ? 1 + (level >= 5 ? 1 : 0) + (level >= 8 ? 1 : 0) : 0;
@@ -110,8 +138,17 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
     set("plaza", "foraging for berries");
     return out;
   }
-  // Now and then, coins to spare go on something for the cottage.
-  if (evening && i.wish && st.coins >= i.wish.price + 5 && i.rng() < 0.15) {
+  // Generous (#153): flowers for a friend, now and then.
+  if (evening && has("generous") && i.friend && st.coins >= 8 && i.rng() < 0.1) {
+    st.coins -= 4;
+    out.spent = 4;
+    out.gaveTo = i.friend.id;
+    st.company = clamp(st.company + 5);
+    set("visit", `taking flowers to ${i.friend.name}`, i.friend.id);
+    return out;
+  }
+  // Now and then, coins to spare go on something for the cottage (never for the thrifty, #153).
+  if (evening && i.wish && !has("thrifty") && st.coins >= i.wish.price + 5 && i.rng() < 0.15) {
     st.coins -= i.wish.price;
     out.spent = i.wish.price;
     out.bought = i.wish.key;
@@ -119,7 +156,9 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
     set("plaza", `buying ${i.wish.label} at the market`);
     return out;
   }
-  if (evening && (st.company < 60 || i.rng() < 0.4)) {
+  // Chatty folk go out more of an evening, shy ones less (#153).
+  const goOut = has("chatty") ? 0.7 : has("shy") ? 0.15 : 0.4;
+  if (evening && (st.company < (has("shy") ? 40 : 60) || i.rng() < goOut)) {
     if (i.tavern) {
       const drink = st.coins >= 1 && (i.stock.ale ?? 0) > 0;
       if (drink) {
@@ -147,7 +186,8 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
 
 // Villagers in the same place keep each other company and grow closer.
 // Returns the pairs (a < b) and how much closer, by place.
-export function socialise(where: Array<{ id: number; place: string; withId: number | null }>): Array<{ a: number; b: number; by: number }> {
+// `warmth`: how fast each villager makes friends (cheerful 1.5, grumpy 0.5, #153).
+export function socialise(where: Array<{ id: number; place: string; withId: number | null }>, warmth: Map<number, number> = new Map()): Array<{ a: number; b: number; by: number }> {
   const spot = (w: { id: number; place: string; withId: number | null }) => (w.place === "visit" && w.withId ? `visit:${Math.min(w.id, w.withId)}-${Math.max(w.id, w.withId)}` : w.place);
   const groups = new Map<string, number[]>();
   for (const w of where) {
@@ -159,8 +199,13 @@ export function socialise(where: Array<{ id: number; place: string; withId: numb
   for (const w of where) if (w.place === "visit" && w.withId && !where.some((o) => o.id === w.withId && spot(o) === spot(w))) groups.set(spot(w), [w.id, w.withId]);
   const out: Array<{ a: number; b: number; by: number }> = [];
   for (const [k, ids] of groups) {
-    const by = k.startsWith("visit") ? 3 : k === "tavern" ? 2 : 1;
-    for (let x = 0; x < ids.length; x++) for (let y = x + 1; y < ids.length; y++) out.push({ a: Math.min(ids[x], ids[y]), b: Math.max(ids[x], ids[y]), by });
+    const base = k.startsWith("visit") ? 3 : k === "tavern" ? 2 : 1;
+    for (let x = 0; x < ids.length; x++) {
+      for (let y = x + 1; y < ids.length; y++) {
+        const w = ((warmth.get(ids[x]) ?? 1) + (warmth.get(ids[y]) ?? 1)) / 2;
+        out.push({ a: Math.min(ids[x], ids[y]), b: Math.max(ids[x], ids[y]), by: Math.max(1, Math.round(base * w)) });
+      }
+    }
   }
   return out;
 }

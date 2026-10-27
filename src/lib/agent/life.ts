@@ -7,7 +7,14 @@ import { getSettings } from "./settingsStore";
 import { villageDate, villageHours } from "./villageClock";
 import { ABANDONED_AFTER_MS } from "./turnLock";
 import { GOODS, TRADES, levelOf, titleOf, tradeOf, type Good } from "./trades";
-import { FRIEND_AT, TICK_MINUTES, dayKey, hm, lifeTick, nextWindowFor, romanceStep, socialise, statusFor, type Balance } from "./lifeRules";
+import { FRIEND_AT, TICK_MINUTES, dayKey, hm, lifeTick, nextWindowFor, romanceStep, socialise, statusFor, warmthOf, type Balance } from "./lifeRules";
+import { traitsOf } from "./traits";
+
+// How likely a neighbour up and about is to notice a theft or a doze (#153).
+export const NOTICE_CHANCE = 0.12;
+export const NOTICE_GOSSIP = 0.4;
+// Kept private: only the doer's own record, never the chronicle.
+export const PRIVATE_KINDS = ["theft", "doze"];
 import { dailyOrders, deliverOrders } from "./orders";
 import { SHOP, SHOP_KEYS, isShopKey } from "./shop";
 
@@ -93,14 +100,16 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
   const nowSec = Math.floor(now.getTime() / 1000);
   if (!force && eco.last_life_tick && nowSec - eco.last_life_tick < TICK_MINUTES * 60 - 5) return false;
   const settings = await getSettings();
-  const villagers = sqlite.prepare("SELECT id, name, role, trade, is_mayor AS isMayor, status FROM agents WHERE status != 'dismissed'").all() as Array<{
+  const villagers = sqlite.prepare("SELECT id, name, role, trade, is_mayor AS isMayor, status, traits FROM agents WHERE status != 'dismissed'").all() as Array<{
     id: number;
     name: string;
     role: string;
     trade: string | null;
     isMayor: number;
     status: string;
+    traits: string | null;
   }>;
+  const traitsById = new Map(villagers.map((v) => [v.id, traitsOf({ traits: v.traits ? JSON.parse(v.traits) : null })]));
   const busy = new Set(
     // A running turn whose heartbeat went quiet belonged to a process that
     // died: that villager isn't busy (the same test the village uses).
@@ -125,6 +134,8 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
   // Something affordable each villager might like for their cottage (#135).
   const decorKeys = SHOP_KEYS.filter((k) => SHOP[k].kind === "floor" || SHOP[k].kind === "wall");
   const placed: Array<{ id: number; place: string; withId: number | null }> = [];
+  // What a trait led someone to do this tick (#153), for neighbours to notice.
+  const doings: Array<{ id: number; what: "theft" | "doze" }> = [];
   let hungry = 0;
 
   const write = sqlite.transaction(() => {
@@ -147,6 +158,7 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
         tavern: built.has("tavern"),
         friend: f && names.has(f.id) ? { id: f.id, name: names.get(f.id)! } : null,
         wish: wishKey ? { key: wishKey, label: SHOP[wishKey].label, price: SHOP[wishKey].price } : null,
+        traits: traitsById.get(v.id),
         rng,
       });
       if (r.bought && isShopKey(r.bought)) {
@@ -156,6 +168,16 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
       for (const [g, n] of Object.entries(r.used)) stock[g as Good] = Math.max(0, (stock[g as Good] ?? 0) - (n ?? 0));
       for (const [g, n] of Object.entries(r.produced)) stock[g as Good] = Math.min(999, (stock[g as Good] ?? 0) + (n ?? 0));
       if (r.hungry) hungry++;
+      // Trait doings (#153): kept private (the doer's own record) unless someone notices.
+      if (r.stole) {
+        logLife("theft", v.id, `${v.name} pocketed a loaf from the stores.`);
+        doings.push({ id: v.id, what: "theft" });
+      }
+      if (r.skipped) {
+        logLife("doze", v.id, `${v.name} dozed through a stint of work.`);
+        doings.push({ id: v.id, what: "doze" });
+      }
+      if (r.gaveTo != null && names.has(r.gaveTo)) logLife("gift", v.id, `${v.name} took flowers to ${names.get(r.gaveTo)}.`, r.gaveTo);
       const s = r.state;
       sqlite
         .prepare(
@@ -174,7 +196,15 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
     const open = new Map(
       (sqlite.prepare("SELECT agent_id AS id, romance_open AS open FROM villager_life").all() as Array<{ id: number; open: number }>).map((r) => [r.id, Boolean(r.open)]),
     );
-    for (const { a, b, by } of socialise(placed)) {
+    // Someone up and about may notice (#153): a gossip more often.
+    for (const d of doings) {
+      const witnesses = placed.filter((p) => p.id !== d.id && p.place !== "home");
+      const seenBy = witnesses.find((p) => rng() < (traitsById.get(p.id)?.includes("gossip") ? NOTICE_GOSSIP : NOTICE_CHANCE));
+      if (!seenBy) continue;
+      const [who, by] = [names.get(d.id), names.get(seenBy.id)];
+      logLife(d.what === "theft" ? "seen_theft" : "seen_doze", d.id, d.what === "theft" ? `${by} saw ${who} slip a loaf from the village stores.` : `${by} caught ${who} dozing when there was work to do.`, seenBy.id);
+    }
+    for (const { a, b, by } of socialise(placed, new Map(villagers.map((v) => [v.id, warmthOf(traitsById.get(v.id))])))) {
       const cur = (get.get(a, b) as { affinity: number; romance: number; status: string } | undefined) ?? { affinity: 0, romance: 0, status: "acquaintance" };
       const affinity = Math.min(100, cur.affinity + by);
       const love = romanceStep({ ...cur, affinity }, Boolean(open.get(a) && open.get(b)), by, rng);

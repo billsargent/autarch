@@ -1,6 +1,7 @@
 // Village life without a database (#129): the daily tick, friendship, the day
 // split, trades and levels. Run with: npm run test:life
-import { lifeTick, makeOrder, nextWindowFor, readyToWed, romanceStep, socialise, statusFor, type LifeState, type TickInput } from "../src/lib/agent/lifeRules";
+import { lifeTick, makeOrder, nextWindowFor, readyToWed, romanceStep, socialise, statusFor, warmthOf, type LifeState, type TickInput } from "../src/lib/agent/lifeRules";
+import { TRAITS, characterBlock, checkTraits, pickTraits } from "../src/lib/agent/traits";
 import { placeDecor } from "../src/lib/agent/shop";
 import { villageDate, villageHours } from "../src/lib/agent/villageClock";
 import { freeName, VILLAGE_NAMES } from "../src/lib/agent/villageNames";
@@ -159,6 +160,34 @@ check("levels and titles", [levelOf(0), levelOf(20), levelOf(320), levelOf(1000)
   const pulled = assignHomes([{ id: 1, dwelling: "house-9" }], dwellingsFor(3, []));
   check("a home that's gone is replaced", pulled.get(1), "cottage-1");
   check("homes have plain names", [dwellingLabel("cottage-2"), dwellingLabel("house-41"), dwellingLabel(null)], ["the blue cottage", "a house on the plots", null]);
+}
+
+// --- character traits (#153) ---------------------------------------------------------------
+{
+  const lazy = lifeTick(base, at(10, { traits: ["lazy"], rng: () => 0.1 }));
+  check("a lazy villager now and then dozes through a stint", [lazy.skipped, lazy.state.activity, lazy.state.xp], [true, "dozing when there's work to do", 0]);
+  check("…but not every time", lifeTick(base, at(10, { traits: ["lazy"], rng: () => 0.9 })).skipped, undefined);
+  check("a hardworking one learns their trade faster", [lifeTick(base, at(10, { traits: ["hardworking"] })).state.xp, lifeTick(base, at(10)).state.xp], [3, 2]);
+  const thief = lifeTick(base, at(10, { traits: ["thieving"], rng: () => 0.01 }));
+  check("a light-fingered one now and then pockets a loaf (and sells it)", [thief.stole, (thief.used.bread ?? 0) >= 1, thief.state.coins], [true, true, 10 + 1 + 2]);
+  check("…never from an empty pantry", lifeTick(base, at(10, { traits: ["thieving"], rng: () => 0.01, stock: { wheat: 10, bread: 0 } })).stole, undefined);
+  const wish = { key: "painting", label: "a painting", price: 15 };
+  check("a thrifty one doesn't spend on decor", lifeTick({ ...base, coins: 30 }, at(19, { traits: ["thrifty"], wish, rng: () => 0.05 })).bought, null);
+  const gift = lifeTick({ ...base, coins: 20 }, at(19, { traits: ["generous"], rng: () => 0.05 }));
+  check("a generous one takes flowers to a friend", [gift.gaveTo, gift.state.coins, gift.state.activity], [9, 16, "taking flowers to Ann"]);
+  const out = (traits: string[]) => lifeTick({ ...base, company: 80 }, at(19, { traits, rng: () => 0.5 })).state.place;
+  check("chatty folk go out of an evening more than shy ones", [out(["chatty"]), out(["shy"])], ["tavern", "home"]);
+  const warm = (w: number) => socialise([{ id: 1, place: "tavern", withId: null }, { id: 2, place: "tavern", withId: null }], new Map([[1, w], [2, w]]))[0].by;
+  check("cheerful folk make friends faster, grumpy ones slower", [warm(warmthOf(["cheerful"])), warm(1), warm(warmthOf(["grumpy"]))], [3, 2, 1]);
+
+  check("traits come from the list", checkTraits(["cheerful", "sneaky"]).ok, false);
+  check("…at most three", checkTraits(["cheerful", "chatty", "generous", "gossip"]).ok, false);
+  check("…and opposites don't go together", checkTraits(["chatty", "shy"]).ok, false);
+  check("the owner may choose any flaws", checkTraits(["lazy", "thieving"], "any").ok, true);
+  check("…the Mayor's drafts at most one, by default", [checkTraits(["lazy", "thieving"], "one").ok, checkTraits(["lazy", "cheerful"], "one").ok, checkTraits(["lazy"], "none").ok], [false, true, false]);
+  check("a newcomer with none gets two good traits", pickTraits(() => 0).every((t) => !TRAITS[t].flaw) && pickTraits(() => 0).length === 2, true);
+  const block = characterBlock(["shifty", "grumpy"]);
+  check("their character says it's for village life only, and they're honest with the owner", [block.includes("village life only"), block.includes("always diligent and honest")], [true, true]);
 }
 
 if (failures > 0) {

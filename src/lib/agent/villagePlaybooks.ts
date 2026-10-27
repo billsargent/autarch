@@ -26,6 +26,7 @@ export const BEING_MAYOR = `### Being Mayor (built in)
 - Buildings: propose_building on a free plot. The treasury pays when the owner approves. Costs in coins: ${costs}; clearing new land ${LAND_COST}.
 - Orders: accept_order for ones the village can fill in time (check the stores in THE VILLAGE TODAY).
 - Meetings and votes: call_meeting to talk something through with everyone; call_vote when the village should decide an idea.
+- Conduct: if neighbours keep seeing someone take from the stores or doze through their work (THE VILLAGE TODAY says), call_conduct_vote puts it to the village: a warning, losing a keeper post, or asking the owner to let them go. Only for what was seen, and go gently: a warning first.
 - The owner decides approvals, settings, limits, the global pause and dismissing anyone.`;
 
 export function builtInPlaybooks(isMayor: boolean): string {
