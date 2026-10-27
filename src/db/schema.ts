@@ -559,6 +559,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   // When the model thinks (#152): "work" (chats and work windows; village
   // talk goes without, at talkTemperature), "all" or "none".
   thinkingFor: text("thinking_for", { enum: ["work", "all", "none"] }).notNull().default("work"),
+  // The villagers the owner lets read the library's shelves (#169), by id.
+  libraryReaders: text("library_readers", { mode: "json" }).notNull().default(sql`'[]'`),
   // How many flaws (lazy, light-fingered, shifty) the Mayor may give a newcomer (#153).
   flawsAllowed: text("flaws_allowed", { enum: ["none", "one", "any"] }).notNull().default("one"),
   talkTemperature: real("talk_temperature").notNull().default(0.7),

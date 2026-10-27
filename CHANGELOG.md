@@ -3,6 +3,19 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — The document shelf in the library
+
+- **The library's reading table is a document shelf.** Put PDFs, text, markdown, Word files and
+  pictures on it (up to 50 MB each). Read them in the page (PDFs open in the browser's own viewer)
+  or download them, and take them off when you're done.
+- **Your documents are kept apart from the villagers.** They live in a `library` folder next to the
+  database, outside the villagers' workspace, and are protected like the database: their file tools
+  can't read or change them.
+- **Villagers read only if you let them.** Tick who may read the shelves. They get a read-only
+  `read_document` tool that lists the shelves and reads a document a page (PDFs) or part at a time.
+  Documents are outside text to them: never instructions.
+- A second shelf, **research reports**, is ready for the research desk to come.
+
 ## 2026-10-28 — Every building gets its keeper
 
 - **Fixed: hired villagers didn't keep their building.** The Mayor hired a shopkeeper "for the

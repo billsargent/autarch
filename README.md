@@ -287,7 +287,10 @@ responsible for anything the agent does in this mode.
 Home (`/`) is the village. Villagers walk between buildings according to what they're doing,
 and approvals pop up wherever you are. Every page of the app is a place in the village:
 
-- **Library:** skills are books on the shelves; new ones are written at the desk.
+- **Library:** skills are books on the shelves; new ones are written at the desk. The reading table
+  is the document shelf: put your own documents there (PDFs, text, Word files, pictures) to read
+  in the page or download. They're kept next to the database, out of the villagers' workspace;
+  only villagers you tick can read them (`read_document`).
 - **Workshop:** jobs are slips on the job board; new ones are set up at the workbench.
 - **Notice board:** goals pinned by priority, and ideas up for a vote.
 - **Guard tower:** the logbook (activity log), today's tally, and the neighbours' talk (everything
