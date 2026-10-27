@@ -3,6 +3,23 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — Homes for everyone, a closer village, and the countryside
+
+- **Villagers go indoors.** At night they walk to their own front door and go in; a 💤 sign on
+  the door says how many are asleep there (click it to go in). Villagers at home, at the tavern
+  or visiting a friend go in too, under a 🏠, 🍺 or 🫖 sign.
+- **A home for everyone.** Each villager lives in one of the three cottages (their beds match the
+  population setting) or in a house built on the plots, and keeps it. The Villagers page says
+  where, and each villager knows where they live and with whom. A cottage's inside shows its
+  owner, and any friend visiting.
+- **Fixed: the + and − zoom buttons** on the village did nothing (a press on them started a drag
+  that swallowed the click).
+- **A closer village.** It opens zoomed in, around your home; drag to look around, zoom with the
+  buttons, the mouse wheel or a pinch, and ⤢ shows it all.
+- **The countryside.** The empty land north-west of town has a country lane looping from the
+  north road to the west road, a pond and a grove, and the land south of the west road has
+  trees too. None of it touches a building plot.
+
 ## 2026-10-27 — Google Calendar, and simpler email
 
 - **Google Calendar.** Connect it from the wall calendar at home or the post office's calendar
