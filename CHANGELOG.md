@@ -3,6 +3,29 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-27 — Google Calendar, and simpler email
+
+- **Google Calendar.** Connect it from the wall calendar at home or the post office's calendar
+  desk (a one-time setup in your own Google Cloud project; see docs/email-and-calendar.md).
+  - Villagers you tick can read it (`read_calendar`).
+  - A villager proposes an event as a draft (`save_draft`, kind `event`, with a start, an end
+    and a place). It's added to the calendar you pick only when you approve it.
+  - The client secret and Google's tokens stay on this machine; no page or villager can read them.
+  - The private ICS address still works for a read-only calendar.
+- **Fixed: "The draft has no recipient."** Villagers were writing letters to the made-up
+  neighbouring towns (Millbrook and the others), which have no email.
+  - An email draft now needs a real address when it's written.
+  - The villagers are told those towns are answered with `accept_order`.
+- **The outbox:**
+  - you can change an email's **To** and subject before you send it;
+  - **Approve and send** is greyed out until To holds an address;
+  - a draft that couldn't be sent can be fixed and tried again, or discarded;
+  - sent and discarded drafts are tucked away.
+- **Simpler email setup.** Pick Gmail (or iCloud, Yahoo, Fastmail) and you only type your
+  address and the app password, once, for both sending and reading; the server settings are
+  folded away. The Gmail note says plainly that the 16-letter app password goes in the App
+  password box, and that it isn't your Google password or the code from your phone.
+
 ## 2026-10-27 — Inside the tavern, the bakery and the shop
 
 - **The tavern, the bakery and the shop have an inside.** Click one in the village to go in.

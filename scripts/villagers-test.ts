@@ -782,9 +782,11 @@ async function main() {
   const sentRow = (await db.select().from(draftsT).where(eq(draftsT.id, mailDraft)))[0];
   check("an approved email draft is sent over SMTP", [sentRow.status, sentRow.sendResult], ["sent", "Sent to shop@example.com."]);
   check("…with its words, from the owner's address", [received.some((l) => l === "Two sacks, please."), received.some((l) => /^From: owner@example.com/i.test(l)), received.some((l) => /^Subject: Flour/i.test(l))], [true, true, true]);
-  const badDraft = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "nobody", content: "x", why: "A test." }, town, ctxCal)).output)?.[1]);
-  await decideD(badDraft, { action: "approve" });
-  check("a draft to a bad address fails, saying why", (await db.select().from(draftsT).where(eq(draftsT.id, badDraft)))[0].sendResult, '"nobody" isn\'t an email address.');
+  // A bad address is caught when it's written (#142), and when the owner changes it.
+  check("a draft to a bad address is refused when it's written", (await executeTool("save_draft", { kind: "email", to: "nobody", content: "x", why: "A test." }, town, ctxCal)).output.startsWith('Refused: "nobody" isn\'t an email address.'), true);
+  const toFix = Number(/#(\d+)/.exec((await executeTool("save_draft", { kind: "email", to: "shop@example.com", content: "x", why: "A test." }, town, ctxCal)).output)?.[1]);
+  const badEdit = await decideD(toFix, { action: "approve", edits: { target: "the shop" } });
+  check("…and so is approving it with a bad To, saying why", [badEdit.status, ((await badEdit.json()) as { error: string }).error.startsWith('"the shop" isn\'t an email address.'), (await db.select().from(draftsT).where(eq(draftsT.id, toFix)))[0].status], [409, true, "draft"]);
 
   // Who wrote it, why, and how it goes out (#143).
   check("the sent log keeps who wrote it, why and when", [sentRow.agentId, sentRow.why, sentRow.sentAt instanceof Date], [cal.id, "The pantry is low.", true]);

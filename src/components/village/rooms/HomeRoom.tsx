@@ -1,5 +1,6 @@
 "use client";
 
+import GoogleCalendar from "./GoogleCalendar";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentRow } from "@/lib/agent/clientTypes";
@@ -325,7 +326,7 @@ interface CalEvent {
 }
 
 function YourCalendar({ connected }: { connected: boolean }) {
-  const [state, setState] = useState<{ configured: boolean; events: CalEvent[]; error?: string } | null>(null);
+  const [state, setState] = useState<{ configured: boolean; source?: "google" | "ics"; events: CalEvent[]; error?: string } | null>(null);
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const reload = useCallback(async () => {
@@ -360,8 +361,8 @@ function YourCalendar({ connected }: { connected: boolean }) {
       {state && !state.configured && (
         <>
           <p className="mt-0.5 text-[#6b4a2e]">
-            Paste your calendar&apos;s private ICS address (Google, Apple, Outlook and most others have one in their sharing settings).
-            It&apos;s read only, and kept from the villagers.
+            Paste your calendar&apos;s private ICS address (Google, Apple, Outlook and most others have one in their sharing settings) to
+            see it here, read only. Or connect Google Calendar below, so villagers can also propose events.
           </p>
           <div className="mt-1.5 flex gap-1.5">
             <input name="calendarIcsUrl" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… .ics" className="flex-1 rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 py-1" />
@@ -388,12 +389,15 @@ function YourCalendar({ connected }: { connected: boolean }) {
               </li>
             ))}
           </ul>
-          <button onClick={() => void save(null)} className="mt-1.5 text-[11px] underline">
-            Disconnect
-          </button>
+          {state.source === "ics" && (
+            <button onClick={() => void save(null)} className="mt-1.5 text-[11px] underline">
+              Disconnect
+            </button>
+          )}
         </>
       )}
       {error && <p role="alert" className="mt-1 text-[#b3261e]">{error}</p>}
+      <GoogleCalendar onChange={() => void reload()} />
     </div>
   );
 }

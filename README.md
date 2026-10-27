@@ -294,6 +294,10 @@ and approvals pop up wherever you are. Every page of the app is a place in the v
 - **Mailbox:** letters from the villagers.
 - **Your home:** your computer, your desk (approvals, hire requests, letters, the outbox), the
   bookshelves (every diary), the wall calendar, the map table, the pantry and a guitar.
+- **Email and calendar:** your own mail account (Gmail with an app password, and others) and
+  your calendar (a private ICS address, or Google Calendar). Villagers you choose can read them,
+  and they write drafts (emails, events) that go out only when you approve them. Setup:
+  [docs/email-and-calendar.md](docs/email-and-calendar.md).
 
 **Villagers.** Each has their own name, personality, look, model, tools (within the town's tool
 policy), budget and cottage. Add and manage them in the Mayor's ledger → Villagers, or let the

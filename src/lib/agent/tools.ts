@@ -1222,6 +1222,10 @@ async function queryDatabase(args: Record<string, unknown>) {
   if (/mail_?settings/i.test(raw)) {
     return { output: "Queries on the email settings are not allowed.", summary: "query blocked (secret table)" };
   }
+  // So does the calendar connection: Google's client secret and tokens (#142).
+  if (/calendar_?settings/i.test(raw)) {
+    return { output: "Queries on the calendar settings are not allowed.", summary: "query blocked (secret table)" };
+  }
   try {
     const stmt = readOnlyDb().prepare(raw);
     if (!stmt.readonly || !stmt.reader) {

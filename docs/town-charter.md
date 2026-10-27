@@ -61,8 +61,9 @@ manual mode.
 
 **Drafts.** Nothing leaves the machine on a villager's say-so.
 
-- Emails, posts, shop listings and messages to people are only ever saved as **drafts**
-  (`save_draft`) in the owner's outbox, and every draft says **why** it was written.
+- Emails, calendar events, posts, shop listings and messages to people are only ever saved as
+  **drafts** (`save_draft`) in the owner's outbox, and every draft says **why** it was written.
+  An email draft needs a real address; the neighbouring towns of village life have no email.
 - Approved emails go from the owner's own account, under the owner's From name, within a daily cap
   the owner sets; addresses never emailed before are flagged, and the owner can allow only those.
   Every sent email is kept at the post office: who wrote it, why, to whom and when.
@@ -72,8 +73,10 @@ manual mode.
 - No tool sends anything.
 
 **Connectors** (outside services) keep their addresses and credentials as secrets: the agents'
-tools can't read them, `query_database` included. The first is the owner's calendar, read only,
-from its private ICS address, and shown on the wall calendar at home.
+tools can't read them, `query_database` included. They are the owner's email (SMTP and IMAP) and
+calendar: read only from its private ICS address, or Google Calendar, where an event a villager
+proposes is added only when the owner approves it. The owner chooses which villagers may read the
+inbox and the calendar (docs/email-and-calendar.md).
 
 These rules are enforced in code. The tools an agent can call simply don't include them, and the
 server refuses the matching requests from agents.
