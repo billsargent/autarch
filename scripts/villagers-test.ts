@@ -1159,6 +1159,11 @@ async function main() {
   await patchBuilding(Number(/#(\d+)/.exec(prop)?.[1]), { action: "approve" });
   check("approving the Mayor's building pays from the treasury", (lifeDb.prepare("SELECT treasury FROM economy WHERE id = 1").get() as { treasury: number }).treasury, treasuryNow - 25);
 
+  // Everyone has a home (#159), handed out when the village lists its villagers.
+  const housed = ((await (await agentsRoute.GET()).json()).agents as Array<{ name: string; status: string; dwelling: string | null }>).filter((a) => a.status !== "dismissed");
+  check("every villager has a home", housed.filter((a) => !a.dwelling).map((a) => a.name), []);
+  check("…and knows it", life.lifeBlock(cal.id).includes("- You live in the"), true);
+
   // The work cap is per villager (#148), and life windows don't count against it.
   const { checkWorkAllowed } = await import("../src/lib/agent/workCap");
   await updateSettings({ maxSessionsPerDay: 2, minGapMinutes: 0 });

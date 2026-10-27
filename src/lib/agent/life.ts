@@ -1,4 +1,5 @@
 import { db, sqlite } from "@/db";
+import { dwellingLabel } from "./homes";
 import { lifeEvents, villagerLife } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { isNight } from "./daynight";
@@ -241,6 +242,15 @@ export function lifeSummary(agentId: number) {
 }
 
 // For the system prompt: the villager's own life, in a few lines.
+// Where they live, and with whom (#159).
+function homeLine(agentId: number): string {
+  const me = sqlite.prepare("SELECT dwelling FROM agents WHERE id = ?").get(agentId) as { dwelling: string | null } | undefined;
+  const where = dwellingLabel(me?.dwelling);
+  if (!where) return "- You haven't a home of your own yet: the village needs another house.";
+  const mates = (sqlite.prepare("SELECT name FROM agents WHERE dwelling = ? AND id != ? AND status != 'dismissed'").all(me!.dwelling, agentId) as Array<{ name: string }>).map((m) => m.name);
+  return `- You live in ${where}${mates.length ? `, with ${mates.join(" and ")}` : ""}.`;
+}
+
 export function lifeBlock(agentId: number): string {
   const s = lifeSummary(agentId);
   if (!s) return "";
@@ -248,6 +258,7 @@ export function lifeBlock(agentId: number): string {
     "YOUR LIFE IN THE VILLAGE",
     `- You're ${/^[aeiou]/i.test(s.title) ? "an" : "a"} ${s.title.toLowerCase()} (level ${s.level}). Right now you're ${s.activity}.`,
     `- You feel ${s.mood.join(", ")}. You have ${s.coins} coins.`,
+    homeLine(agentId),
     s.friends.length ? `- Friends: ${s.friends.map((f) => `${f.name} (${f.status})`).join(", ")}.` : "- You haven't made close friends yet.",
     s.recent.length ? `- Lately: ${s.recent.slice(0, 3).join(" ")}` : "",
     "- This is your life; talk about it the way a neighbour would.",

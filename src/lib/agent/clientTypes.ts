@@ -241,6 +241,8 @@ export interface AgentRow {
   life?: VillagerLife | null;
   lifeBalance?: "idle" | "hours" | "balanced" | null;
   workShare?: number | null;
+  // Where they live (#159): "cottage-1".."cottage-3", or "house-<building id>".
+  dwelling?: string | null;
 }
 
 // A villager's life as the village shows it (#132, life.ts lifeSummary).

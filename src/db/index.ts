@@ -575,6 +575,7 @@ if (!globalForDb.__agentLabSqlite) {
   for (const [col, def] of [
     ["life_balance", "TEXT"],
     ["work_share", "INTEGER"],
+    ["dwelling", "TEXT"],
   ] as const) {
     if (!existingCols("agents").includes(col)) sqlite.exec(`ALTER TABLE agents ADD COLUMN ${col} ${def}`);
   }

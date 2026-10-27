@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
 import { SPRITE, type Place, type SceneManifest } from "./manifest";
 import { nearestWaypoint, shortestPath } from "./path";
 import type { DayPhase } from "@/lib/agent/daynight";
@@ -37,6 +37,9 @@ export interface VillagerSpec {
   hint?: ReactNode;
   // Sideways nudge (scene px) so villagers at the same spot don't overlap.
   offset?: number;
+  // Gone indoors (#159): asleep at home, at the tavern, at a friend's. They
+  // walk to the door, then aren't seen until they come out.
+  inside?: boolean;
   onClick?: () => void;
 }
 
@@ -66,6 +69,8 @@ interface SceneViewProps {
   children?: ReactNode;
   // Drawn on the scene itself, under the villagers (buildings on plots, #105).
   overlays?: ReactNode;
+  // How far in the view starts, centred on where you start (#160); 1 = the whole scene.
+  startZoom?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -250,6 +255,8 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
   const [walking, setWalking] = useState(false);
   const [frame, setFrame] = useState(0);
   const [spriteReady, setSpriteReady] = useState(false);
+  // The target they last reached, with nowhere left to walk.
+  const [reached, setReached] = useState<string | null>(null);
   const posRef = useRef(pos);
 
   useEffect(() => {
@@ -275,6 +282,7 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
       if (!next) {
         setWalking(false);
         setFacing("down");
+        setReached(v.target);
         return;
       }
       const cur = posRef.current;
@@ -300,8 +308,13 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
     return () => cancelAnimationFrame(raf);
   }, [scene, v.target]);
 
+  const indoors = Boolean(v.inside && reached === v.target);
   return (
-    <div className="absolute transition-[margin] duration-300" style={{ left: pos.x, top: pos.y, marginLeft: v.offset ?? 0, transform: "translate(-50%, -100%)" }}>
+    <div
+      className={`absolute transition-[margin,opacity] duration-300 ${indoors ? "pointer-events-none" : ""}`}
+      aria-hidden={indoors || undefined}
+      style={{ left: pos.x, top: pos.y, marginLeft: v.offset ?? 0, transform: "translate(-50%, -100%)", opacity: indoors ? 0 : 1 }}
+    >
       {v.said && !walking && !v.asleep && (
         <div className="village-bubble absolute bottom-full left-1/2 mb-14 w-max max-w-[420px] -translate-x-1/2 px-3 py-2 text-[20px] leading-snug">
           {v.said}
@@ -374,10 +387,10 @@ function WalkingVillager({ scene, v }: { scene: SceneManifest; v: VillagerSpec }
 
 export type SceneLight = DayPhase | "frozen";
 
-export default function SceneView({ scene, villagers, player, light = "day", labels, onPlace, hints, children, overlays }: SceneViewProps) {
+export default function SceneView({ scene, villagers, player, light = "day", labels, onPlace, hints, children, overlays, startZoom = MIN_ZOOM }: SceneViewProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState({ w: 0, h: 0 });
-  const [zoom, setZoom] = useState(MIN_ZOOM);
+  const [zoom, setZoom] = useState(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, startZoom)));
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinchStart = useRef<{ dist: number; zoom: number } | null>(null);
@@ -575,6 +588,22 @@ export default function SceneView({ scene, villagers, player, light = "day", lab
   }
   const reach = player ? nearestUsable(scene, villagers, me.x, me.y) : null;
 
+  // Starting zoomed in (#160), the view opens on where you stand, once the
+  // stage has a size.
+  const centred = useRef(false);
+  useEffect(() => {
+    if (centred.current || !scale || zoom <= MIN_ZOOM) return;
+    centred.current = true;
+    const t = setTimeout(() => setPan({ x: (scene.width / 2 - startAt.x) * scale, y: (scene.height / 2 - startAt.y) * scale }), 0);
+    return () => clearTimeout(t);
+  }, [scale, zoom, scene.width, scene.height, startAt.x, startAt.y]);
+
+  // The mouse wheel zooms too.
+  function onWheel(e: ReactWheelEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest("[data-scene-overlay]")) return;
+    zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15);
+  }
+
   // Pointer drag to pan, two fingers to pinch-zoom.
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     if ((e.target as HTMLElement).closest("[data-scene-overlay]")) return;
@@ -623,6 +652,7 @@ export default function SceneView({ scene, villagers, player, light = "day", lab
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       onPointerLeave={() => setCursor(null)}
+      onWheel={onWheel}
       style={{ cursor: canPan ? "grab" : "default" }}
     >
       {scale > 0 && (
@@ -664,7 +694,7 @@ export default function SceneView({ scene, villagers, player, light = "day", lab
         </div>
       )}
 
-      <p className="absolute bottom-16 left-3 z-10 rounded bg-[#f4ead5]/80 px-1.5 py-0.5 text-[10px] sm:bottom-3 sm:left-auto sm:right-16">
+      <p data-scene-overlay className="absolute bottom-16 left-3 z-10 rounded bg-[#f4ead5]/80 px-1.5 py-0.5 text-[10px] sm:bottom-3 sm:left-auto sm:right-16">
         Art:{" "}
         <a href="https://limezu.itch.io/serenevillage" target="_blank" rel="noopener noreferrer" className="underline">
           LimeZu
@@ -676,7 +706,9 @@ export default function SceneView({ scene, villagers, player, light = "day", lab
         (CC0)
       </p>
 
-      <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-2">
+      {/* The zoom buttons are overlays: a press on them mustn't start a drag
+          (the drag captures the pointer, and the click would never land, #158). */}
+      <div data-scene-overlay className="absolute bottom-3 right-3 z-10 flex flex-col gap-2">
         <button onClick={() => zoomBy(1.25)} className="village-btn h-9 w-9 text-lg" aria-label="Zoom in">+</button>
         <button onClick={() => zoomBy(0.8)} className="village-btn h-9 w-9 text-lg" aria-label="Zoom out">−</button>
         <button onClick={zoomToFit} className="village-btn h-9 w-9 text-sm" aria-label="Whole view">⤢</button>

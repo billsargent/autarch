@@ -4,6 +4,7 @@ import { lifeTick, makeOrder, nextWindowFor, readyToWed, romanceStep, socialise,
 import { placeDecor } from "../src/lib/agent/shop";
 import { villageDate, villageHours } from "../src/lib/agent/villageClock";
 import { freeName, VILLAGE_NAMES } from "../src/lib/agent/villageNames";
+import { assignHomes, dwellingLabel, dwellingsFor } from "../src/lib/agent/homes";
 import { guessTrade, levelOf, titleOf, tradeOf } from "../src/lib/agent/trades";
 
 let failures = 0;
@@ -141,6 +142,23 @@ check("levels and titles", [levelOf(0), levelOf(20), levelOf(320), levelOf(1000)
 {
   check("a newcomer gets a free name", freeName(["Ada", "agnes"], () => 0), "Alba");
   check("…and none when every name is taken", freeName(VILLAGE_NAMES), null);
+}
+
+// --- homes (#159) ------------------------------------------------------------------------
+{
+  const homes = dwellingsFor(8, []);
+  check("the cottages' beds match the population setting", homes.map((d) => [d.id, d.beds]), [["cottage-1", 3], ["cottage-2", 3], ["cottage-3", 3]]);
+  const six = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, dwelling: null }));
+  const given = assignHomes(six, homes);
+  check("everyone gets a bed, the cottages filling in turn", [...given.values()], ["cottage-1", "cottage-1", "cottage-1", "cottage-2", "cottage-2", "cottage-2"]);
+  const kept = assignHomes([{ id: 1, dwelling: "cottage-3" }, { id: 2, dwelling: null }], homes);
+  check("a villager keeps their home", kept.get(1), "cottage-3");
+  const withHouse = assignHomes([...six, { id: 7, dwelling: null }, { id: 8, dwelling: null }], dwellingsFor(2, [41]));
+  check("a built house takes the overflow", [withHouse.get(3), withHouse.get(4), withHouse.get(5), withHouse.get(6)], ["cottage-3", "house-41", "house-41", null]);
+  check("…and with no bed left, none", withHouse.get(8), null);
+  const pulled = assignHomes([{ id: 1, dwelling: "house-9" }], dwellingsFor(3, []));
+  check("a home that's gone is replaced", pulled.get(1), "cottage-1");
+  check("homes have plain names", [dwellingLabel("cottage-2"), dwellingLabel("house-41"), dwellingLabel(null)], ["the blue cottage", "a house on the plots", null]);
 }
 
 if (failures > 0) {

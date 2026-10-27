@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { createVillager, listVillagers, validateAgentInput, villagerStates } from "@/lib/agent/agents";
+import { createVillager, ensureHomes, listVillagers, validateAgentInput, villagerStates } from "@/lib/agent/agents";
 import { ALL_TOOL_DEFINITIONS } from "@/lib/agent/tools";
 
 export const dynamic = "force-dynamic";
 
 // The villagers (#55), with what each is up to right now.
 export async function GET() {
+  // Everyone has a home (#159), newcomers included.
+  ensureHomes();
   const list = await listVillagers();
   const states = villagerStates(list.map((a) => a.id));
   return NextResponse.json({ agents: list.map((a) => ({ ...a, ...states.get(a.id) })) });

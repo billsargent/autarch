@@ -5,6 +5,7 @@ import type { AgentRow, SettingsRow } from "@/lib/agent/clientTypes";
 import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 import { CHARACTER_GROUPS, CHARACTER_KEYS, CHARACTER_LABELS, VILLAGER_COLORS } from "@/lib/agent/villagerLooks";
 import { TRADES, TRADE_KEYS, guessTrade } from "@/lib/agent/trades";
+import { dwellingLabel } from "@/lib/agent/homes";
 import { tierAllows, type Tier } from "@/lib/agent/mayorTools";
 import { useVillagers, type VillagerInput } from "../../data/useVillagers";
 import { useProviders } from "./ProvidersPage";
@@ -267,7 +268,10 @@ function VillagerEditor({
               </option>
             ))}
           </select>
-          <span className="mt-1 block font-normal text-[11px] text-[#6b4a2e]">What they do with their days, besides helping you.</span>
+          <span className="mt-1 block font-normal text-[11px] text-[#6b4a2e]">
+            What they do with their days, besides helping you.
+            {villager && ` Home: ${dwellingLabel(villager.dwelling) ?? "none yet (the village needs another house)"}.`}
+          </span>
           {fieldError("trade")}
         </label>
         <label className="block text-xs font-semibold">
