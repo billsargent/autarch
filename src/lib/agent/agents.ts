@@ -5,7 +5,7 @@ import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { mailReaders } from "./mailAccess";
 import { isTradeKey } from "./trades";
 import { lifeSummary } from "./life";
-import { CHARACTER_KEYS, isCharacterKey, VILLAGER_COLORS } from "./villagerLooks";
+import { CHARACTER_KEYS, isCharacterKey, TRADE_LOOKS, VILLAGER_COLORS } from "./villagerLooks";
 import { ABANDONED_AFTER_MS } from "./turnLock";
 import { tierAllows } from "./mayorTools";
 
@@ -388,7 +388,13 @@ export async function createVillager(value: NewVillager): Promise<AgentRow> {
       name: value.name!,
       role: value.role ?? "Villager",
       persona: value.persona ?? null,
-      character: value.character ?? CHARACTER_KEYS.find((c) => c !== "master" && !usedLooks.has(c)) ?? "villager",
+      // A look that suits their trade if none was chosen (#138), else a free one.
+      character:
+        value.character ??
+        (value.trade ? TRADE_LOOKS[value.trade]?.find((c) => !usedLooks.has(c)) : undefined) ??
+        CHARACTER_KEYS.find((c) => c !== "master" && !usedLooks.has(c)) ??
+        "villager",
+      trade: value.trade ?? null,
       color: value.color ?? VILLAGER_COLORS.find((c) => !usedColors.has(c)) ?? VILLAGER_COLORS[1],
       model: value.model ?? null,
       enabledTools: value.enabledTools ?? null,

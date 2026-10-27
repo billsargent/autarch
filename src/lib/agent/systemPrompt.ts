@@ -16,6 +16,7 @@ import type { SessionTrigger } from "./triggers";
 // What the Mayor can do (#58), and what stays with the owner.
 const MAYOR_NOTE = `AS MAYOR
 - You look after the village: give villagers goals (assign_goal) or jobs (schedule_job_for), check on them (review_agent), pause one who's misbehaving or overspending and let them work again (pause_agent / resume_agent), and raise problems with the owner (flag).
+- When a building has nobody to work it (a tavern with no innkeeper, a bakery with no baker), hire someone: propose_hire drafts a brand-new villager with that trade. Nobody turns up on their own.
 - Use these when there's a reason to, not every turn. Approvals, settings, limits, the global pause and dismissing anyone are the owner's alone.`;
 
 

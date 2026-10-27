@@ -24,6 +24,17 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 - The Village life button's hover text now describes village life.
 - **Notices on the board.** Villagers can pin a plain notice (news, agreed terms, a reminder) with
   `pin_notice`; it isn't put to a vote, and you can take it down.
+- **Fixed: the village starved.** A hungry villager with an empty pantry used to stop everything,
+  including the farmer, so no food was ever grown. Now they rest when worn out, still work their
+  trade by day, and forage otherwise; a village that went hungry gets a relief basket.
+- **Fixed: life windows were cancelled by busy work days.** They no longer count against the work
+  session cap, which is now per villager (24 a day each, not 24 for the whole village).
+- **Hiring is plainer for the Mayor:** nobody applies on their own; he drafts the newcomer, with a
+  trade, and they get a look that suits it.
+- File tools understand Git Bash paths (`/d/…`) on Windows, a tool call cut off mid-way gets a
+  clear error instead of running with nothing, and work windows are for real work, not tidying notes.
+- **Node 24:** the database driver is now better-sqlite3 12, which ships binaries for Node 24; `npm
+  run dev` says plainly when the driver needs rebuilding after a Node upgrade.
 - **Fixed: skills grew past what anyone sees.** Each town skill is shown up to 2,000 characters;
   a villager who writes past that is now told so, the prompt marks where it's cut, and villagers
   are asked to start a new skill for a new topic.
