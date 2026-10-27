@@ -3,6 +3,23 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-25 — Village life, part 2: love, coins and trade with other towns
+
+- **Friendship and romance.** Villagers grow closer through time together, visits and gifts. Close
+  friends who are both open to it (your toggle on the Villagers page) may start courting and become
+  sweethearts. When they'd like to marry, the chronicle asks for your blessing.
+- **Coins and a market.** Villagers earn coins from their trade and spend them at the tavern and the
+  market. What they buy for their cottage shows up in their room. In their own time they can buy
+  things and give gifts.
+- **A trading post.** The market stall in the town centre is now the trading post. Neighbouring
+  towns send orders for the village's goods; the Mayor, a trader or you take them on, and the cart
+  goes when the stores have enough. That pays the village treasury and raises its good name, so
+  orders get bigger.
+- **The treasury pays for the Mayor's buildings.** Each building has a price in coins, shown at the
+  map table. The Mayor can't propose what the treasury can't cover; what you build yourself is free.
+  Every village starts with 100 coins.
+- The pantry shows every good the village makes, and the treasury.
+
 ## 2026-10-25 — Village life: trades, a day of their own, and new faces
 
 - **Villagers have lives.** Each has a village trade (farmer, baker, fisher, innkeeper, gardener

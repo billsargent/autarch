@@ -1,6 +1,7 @@
 // Village life without a database (#129): the daily tick, friendship, the day
 // split, trades and levels. Run with: npm run test:life
-import { lifeTick, nextWindowFor, socialise, statusFor, type LifeState, type TickInput } from "../src/lib/agent/lifeRules";
+import { lifeTick, makeOrder, nextWindowFor, readyToWed, romanceStep, socialise, statusFor, type LifeState, type TickInput } from "../src/lib/agent/lifeRules";
+import { placeDecor } from "../src/lib/agent/shop";
 import { guessTrade, levelOf, titleOf, tradeOf } from "../src/lib/agent/trades";
 
 let failures = 0;
@@ -85,6 +86,33 @@ const at = (hour: number, more: Partial<TickInput> = {}): TickInput => ({
 check("a trade is guessed from the role", ["Head gardener", "Fisherman", "Librarian", "Night watch", "Baker", "Something else"].map((r) => guessTrade(r)), ["gardener", "fisher", "scholar", "watchman", "baker", "helper"]);
 check("the Mayor's trade is mayor; a chosen trade wins", [guessTrade("Gardener", true), tradeOf({ trade: "baker", role: "Fisherman" }), tradeOf({ trade: "nonsense", role: "Fisherman" })], ["mayor", "baker", "fisher"]);
 check("levels and titles", [levelOf(0), levelOf(20), levelOf(320), levelOf(1000), titleOf("baker", 1), titleOf("baker", 3), titleOf("baker", 9)], [1, 2, 5, 8, "Apprentice baker", "Baker", "Master baker"]);
+
+// --- romance (#134) ---------------------------------------------------------------------
+{
+  const close = { affinity: 70, romance: 0, status: "close friend" };
+  check("close friends both open to it may start courting", romanceStep(close, true, 3, () => 0.1), { romance: 3, status: "close friend", event: "courting" });
+  check("…never if either isn't open to it", romanceStep(close, false, 3, () => 0.1), { romance: 0, status: "close friend", event: null });
+  check("…nor between mere friends", romanceStep({ ...close, affinity: 40 }, true, 3, () => 0.1).romance, 0);
+  check("courting becomes sweethearts", romanceStep({ ...close, romance: 28 }, true, 3, () => 0.1), { romance: 31, status: "sweetheart", event: "sweethearts" });
+  check("…and then they'd like to marry (the owner's to bless)", [romanceStep({ affinity: 90, romance: 78, status: "sweetheart" }, true, 3, () => 0.1).event, readyToWed({ affinity: 90, romance: 81, status: "sweetheart" })], ["ready", true]);
+  check("partners stay partners", romanceStep({ affinity: 90, romance: 90, status: "partner" }, false, 3, () => 0.9).status, "partner");
+}
+
+// --- the shop and cottage decor (#135) ----------------------------------------------------
+{
+  const evening = lifeTick({ ...base, coins: 30 }, at(19, { wish: { key: "painting", label: "a painting", price: 15 }, rng: () => 0.05 }));
+  check("with coins to spare, an evening at the market", [evening.bought, evening.state.coins, evening.state.activity], ["painting", 15, "buying a painting at the market"]);
+  check("…not when they can't afford it", lifeTick({ ...base, coins: 12 }, at(19, { wish: { key: "painting", label: "a painting", price: 15 }, rng: () => 0.05 })).bought, null);
+  check("decor fills the cottage's slots, newest first when they're full", placeDecor(["plant", "painting", "pie", "pot", "chest", "armchair", "candle", "books"]).map((d) => d.item), ["pot", "chest", "armchair", "candle", "books", "painting"]);
+}
+
+// --- orders from other towns (#136) ------------------------------------------------------
+{
+  const small = makeOrder(0, () => 0);
+  const big = makeOrder(10, () => 0);
+  check("an order: a town, a good, a quantity, a reward, three days", [small.town, small.good, small.qty, small.reward, small.days], ["Millbrook", "wheat", 4, 10, 3]);
+  check("a good name brings bigger, better-paid orders", [big.qty > small.qty, big.reward / big.qty > small.reward / small.qty], [true, true]);
+}
 
 if (failures > 0) {
   console.error(`\n${failures} life test(s) FAILED`);

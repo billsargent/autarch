@@ -7,6 +7,9 @@ import { villageFonts } from "./fonts";
 import { OWNER_SPRITE, VILLAGE, interiorManifest, spriteFor } from "./manifest";
 import { MOOD_BADGE, MOOD_PLACE, moodLabel, standOffsets, villagerMood } from "./villagerState";
 import { snapshotOf, useVillageData } from "./useVillageData";
+import StampSprite from "./StampSprite";
+import { CELL, STAMPS, type StampId } from "./scene";
+import { SHOP, placeDecor, type ShopItem } from "@/lib/agent/shop";
 import SceneView, { type VillagerSpec } from "./SceneView";
 import ApprovalPrompt from "./ApprovalPrompt";
 import ParchmentDialog from "./ParchmentDialog";
@@ -47,6 +50,18 @@ function useMeetingLines(on: boolean) {
     };
   }, [on]);
   return state;
+}
+
+// What a villager has bought for their cottage (#135), in its free slots.
+function CottageDecor({ decor }: { decor: string[] }) {
+  return (
+    <>
+      {placeDecor(decor).map((d, i) => {
+        const stamp = (SHOP[d.item] as ShopItem).stamp as StampId | undefined;
+        return stamp && stamp in STAMPS ? <StampSprite key={`${d.item}-${i}`} stamp={stamp} x={d.col * CELL} y={d.row * CELL} /> : null;
+      })}
+    </>
+  );
 }
 
 export default function InteriorView({ sceneId, startAction, agentId }: { sceneId: string; startAction?: string; agentId?: number | null }) {
@@ -136,6 +151,7 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
 
       <SceneView
         scene={scene}
+        overlays={isCottage && owner?.life?.decor?.length ? <CottageDecor decor={owner.life.decor} /> : undefined}
         player={OWNER}
         light={data.paused ? "frozen" : phase}
         labels="hover"

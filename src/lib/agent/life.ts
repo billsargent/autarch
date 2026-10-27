@@ -5,7 +5,9 @@ import { isNight } from "./daynight";
 import { getSettings } from "./settingsStore";
 import { ABANDONED_AFTER_MS } from "./turnLock";
 import { GOODS, TRADES, levelOf, titleOf, tradeOf, type Good } from "./trades";
-import { FRIEND_AT, TICK_MINUTES, dayKey, hm, lifeTick, nextWindowFor, socialise, statusFor, type Balance } from "./lifeRules";
+import { FRIEND_AT, TICK_MINUTES, dayKey, hm, lifeTick, nextWindowFor, romanceStep, socialise, statusFor, type Balance } from "./lifeRules";
+import { dailyOrders, deliverOrders } from "./orders";
+import { SHOP, SHOP_KEYS, isShopKey } from "./shop";
 
 export * from "./lifeRules";
 
@@ -83,6 +85,7 @@ export function logLife(kind: string, agentId: number | null, text: string, othe
 
 // One step of village life for everyone, at most every TICK_MINUTES.
 export async function runLifeTick(now = new Date(), rng: () => number = Math.random, force = false): Promise<boolean> {
+  await (await import("./economy")).getEconomy();
   const eco = sqlite.prepare("SELECT * FROM economy WHERE id = 1").get() as Record<string, number | null> | undefined;
   if (!eco) return false;
   const nowSec = Math.floor(now.getTime() / 1000);
@@ -110,8 +113,12 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
   const stock: Partial<Record<Good, number>> = Object.fromEntries(GOODS.map((g) => [g, Number(eco[g] ?? 0)]));
   const names = new Map(villagers.map((v) => [v.id, v.name]));
   const bestFriend = sqlite.prepare(
-    `SELECT CASE WHEN a_id = ? THEN b_id ELSE a_id END AS id, affinity FROM relationships WHERE (a_id = ? OR b_id = ?) AND affinity >= ${FRIEND_AT} ORDER BY affinity DESC LIMIT 1`,
+    // A partner or sweetheart first, then the closest friend (#134).
+    `SELECT CASE WHEN a_id = ? THEN b_id ELSE a_id END AS id, affinity FROM relationships WHERE (a_id = ? OR b_id = ?) AND affinity >= ${FRIEND_AT}
+     ORDER BY CASE status WHEN 'partner' THEN 2 WHEN 'sweetheart' THEN 1 ELSE 0 END DESC, affinity DESC LIMIT 1`,
   );
+  // Something affordable each villager might like for their cottage (#135).
+  const decorKeys = SHOP_KEYS.filter((k) => SHOP[k].kind === "floor" || SHOP[k].kind === "wall");
   const placed: Array<{ id: number; place: string; withId: number | null }> = [];
   let hungry = 0;
 
@@ -122,6 +129,9 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
       const t = TRADES[trade];
       const f = bestFriend.get(v.id, v.id, v.id) as { id: number } | undefined;
       const before = levelOf(row.xp);
+      const owned = (row.decor as string[] | null) ?? [];
+      const want = decorKeys.filter((k) => !owned.includes(k));
+      const wishKey = want.length ? want[Math.floor(rng() * want.length)] : null;
       const r = lifeTick(row, {
         hour: now.getHours(),
         asleep,
@@ -131,8 +141,13 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
         stock,
         tavern: built.has("tavern"),
         friend: f && names.has(f.id) ? { id: f.id, name: names.get(f.id)! } : null,
+        wish: wishKey ? { key: wishKey, label: SHOP[wishKey].label, price: SHOP[wishKey].price } : null,
         rng,
       });
+      if (r.bought && isShopKey(r.bought)) {
+        sqlite.prepare("UPDATE villager_life SET decor = ? WHERE agent_id = ?").run(JSON.stringify([...owned, r.bought].slice(-12)), v.id);
+        logLife("buy", v.id, `${v.name} bought ${SHOP[r.bought].label} for their cottage.`);
+      }
       for (const [g, n] of Object.entries(r.used)) stock[g as Good] = Math.max(0, (stock[g as Good] ?? 0) - (n ?? 0));
       for (const [g, n] of Object.entries(r.produced)) stock[g as Good] = Math.min(999, (stock[g as Good] ?? 0) + (n ?? 0));
       if (r.hungry) hungry++;
@@ -147,25 +162,36 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
       placed.push({ id: v.id, place: s.place, withId: s.withId });
     }
     // Time together.
-    const get = sqlite.prepare("SELECT affinity, status FROM relationships WHERE a_id = ? AND b_id = ?");
+    const get = sqlite.prepare("SELECT affinity, romance, status FROM relationships WHERE a_id = ? AND b_id = ?");
     const upsert = sqlite.prepare(
-      "INSERT INTO relationships (a_id, b_id, affinity, status) VALUES (?, ?, ?, ?) ON CONFLICT(a_id, b_id) DO UPDATE SET affinity = excluded.affinity, status = CASE WHEN relationships.status IN ('sweetheart', 'partner') THEN relationships.status ELSE excluded.status END, updated_at = unixepoch()",
+      "INSERT INTO relationships (a_id, b_id, affinity, romance, status) VALUES (?, ?, ?, ?, ?) ON CONFLICT(a_id, b_id) DO UPDATE SET affinity = excluded.affinity, romance = excluded.romance, status = excluded.status, updated_at = unixepoch()",
+    );
+    const open = new Map(
+      (sqlite.prepare("SELECT agent_id AS id, romance_open AS open FROM villager_life").all() as Array<{ id: number; open: number }>).map((r) => [r.id, Boolean(r.open)]),
     );
     for (const { a, b, by } of socialise(placed)) {
-      const cur = get.get(a, b) as { affinity: number; status: string } | undefined;
-      const affinity = Math.min(100, (cur?.affinity ?? 0) + by);
-      const status = statusFor(affinity);
-      upsert.run(a, b, affinity, status);
-      if (status !== (cur?.status ?? "acquaintance") && status !== "acquaintance" && !["sweetheart", "partner"].includes(cur?.status ?? "")) {
-        logLife("friend", a, `${names.get(a)} and ${names.get(b)} are ${status === "friend" ? "friends" : "close friends"} now.`, b);
+      const cur = (get.get(a, b) as { affinity: number; romance: number; status: string } | undefined) ?? { affinity: 0, romance: 0, status: "acquaintance" };
+      const affinity = Math.min(100, cur.affinity + by);
+      const love = romanceStep({ ...cur, affinity }, Boolean(open.get(a) && open.get(b)), by, rng);
+      upsert.run(a, b, affinity, love.romance, love.status);
+      const [na, nb] = [names.get(a), names.get(b)];
+      const friendly = statusFor(affinity);
+      if (!["sweetheart", "partner"].includes(love.status) && friendly !== statusFor(cur.affinity) && friendly !== "acquaintance") {
+        logLife("friend", a, `${na} and ${nb} are ${friendly === "friend" ? "friends" : "close friends"} now.`, b);
       }
+      if (love.event === "courting") logLife("romance", a, `${na} and ${nb} have been seen walking out together.`, b);
+      if (love.event === "sweethearts") logLife("romance", a, `${na} and ${nb} are sweethearts.`, b);
+      if (love.event === "ready") logLife("romance", a, `${na} and ${nb} would like to marry, if the owner gives their blessing.`, b);
       sqlite.prepare("UPDATE villager_life SET company = MIN(100, company + 4) WHERE agent_id IN (?, ?)").run(a, b);
     }
+    // The cart goes when an accepted order's goods are in stock (#136).
+    deliverOrders(stock, now);
     sqlite
       .prepare("UPDATE economy SET wheat = ?, bread = ?, fish = ?, flowers = ?, crafts = ?, ale = ?, shortage = shortage + ?, last_life_tick = ? WHERE id = 1")
       .run(stock.wheat ?? 0, stock.bread ?? 0, stock.fish ?? 0, stock.flowers ?? 0, stock.crafts ?? 0, stock.ale ?? 0, hungry, nowSec);
   });
   write();
+  dailyOrders(now, rng);
   return true;
 }
 
@@ -205,6 +231,8 @@ export function lifeSummary(agentId: number) {
     mood: [feel(life.energy, ["rested", "a bit tired", "worn out"]), feel(life.fullness, ["well fed", "peckish", "hungry"]), feel(life.company, ["in good company", "could use a chat", "lonely"])],
     friends,
     recent: recent.map((e) => e.text),
+    decor: (life.decor as string[] | null) ?? [],
+    romanceOpen: Boolean(life.romanceOpen),
   };
 }
 

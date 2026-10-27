@@ -698,6 +698,10 @@ async function main() {
   check("no new land while a plot is free", (await power("propose_building", { kind: "land", reason: "x" })).includes("build on north-2 first"), true);
   const tavern = (await (await buildingsRoute.POST(req("/api/buildings", "POST", { kind: "tavern", plotId: "north-2" }))).json()).building;
   check("the owner builds a tavern", tavern.status, "building");
+  const poor = await power("propose_building", { kind: "land", reason: "x" });
+  check("the Mayor can't propose what the treasury can't pay for", poor, "Refused: the treasury has 60 coins and this needs 120. Orders from the neighbouring towns bring coins in.");
+  const { sqlite: treasuryDb } = await import("../src/db");
+  treasuryDb.prepare("UPDATE economy SET treasury = 500 WHERE id = 1").run();
   const landAsk = await power("propose_building", { kind: "land", reason: "Every plot is spoken for." });
   check("with every plot taken, the Mayor proposes clearing the next ring", landAsk.startsWith("Proposed clearing new land (ring-1"), true);
   check("…once at a time", (await power("propose_building", { kind: "land", reason: "x" })).includes("already being cleared"), true);
@@ -1025,7 +1029,7 @@ async function main() {
   fake.byAgent.Cal = [{ tools: [{ name: "run_shell_command", args: { command: "ls" } }, { name: "do_activity", args: { what: "rest" } }] }, { text: "A quiet afternoon; I put my feet up." }];
   const lifeTurn = await runAgentTurn({ agentId: cal.id, trigger: "life", eventNote: "[VILLAGE LIFE] Your own time." });
   const lifeSaw = [...fake.seen].reverse().find((s) => s.system.startsWith("You are Cal") && s.system.includes("YOUR OWN TIME"))!;
-  check("a life window offers only village life and the diary", [...lifeSaw.tools].sort(), ["do_activity", "update_journal", "visit"]);
+  check("a life window offers only village life and the diary", [...lifeSaw.tools].sort(), ["accept_order", "buy", "do_activity", "gift", "update_journal", "visit"]);
   const lifeMsgs = await msgsOf(lifeTurn.conversationId);
   check("…the computer is off-limits there, whatever the mode", lifeMsgs.find((m) => m.role === "tool" && m.toolName === "run_shell_command")?.content?.startsWith("BLOCKED: This is your own time"), true);
   check("…and village tools change their life", life.lifeSummary(cal.id)!.activity, "having a rest");
@@ -1048,6 +1052,49 @@ async function main() {
   check("a trade must be a real one", (await (await agentRoute.PATCH(req(`/api/agents/${cal.id}`, "PATCH", { trade: "astronaut" }), { params: Promise.resolve({ id: String(cal.id) }) })).json()).error, "trade: isn't one of the village's trades.");
   await agentRoute.PATCH(req(`/api/agents/${cal.id}`, "PATCH", { trade: "baker" }), { params: Promise.resolve({ id: String(cal.id) }) });
   check("…and the owner can change it", life.lifeSummary(cal.id)!.trade, "baker");
+
+  // --- orders from other towns (#136), the shop (#135), friendship and romance (#134) ----
+  const orders = await import("../src/lib/agent/orders");
+  const ordersRoute = await import("../src/app/api/life/orders/route");
+  lifeDb.prepare("UPDATE economy SET last_order_day = NULL, reputation = 0, bread = 0 WHERE id = 1").run();
+  check("a town sends an order each morning (once a day)", [orders.dailyOrders(at(9), () => 0.3), orders.dailyOrders(at(10), () => 0.3)], [true, false]);
+  const order = orders.listOrders()[0];
+  check("…for goods, by a day, for coins", [order.status, order.qty > 0, order.reward > 0], ["open", true, true]);
+  check("a villager who isn't the Mayor or a trader can't take it on", (await executeTool("accept_order", { order: order.id }, town, ctxCal)).output, "Refused: only the Mayor or a trader takes on orders.");
+  check("the Mayor takes it on", (await executeTool("accept_order", { order: order.id }, town, ctxMayor)).output.startsWith("Taken on:"), true);
+  const treasuryBefore = (lifeDb.prepare("SELECT treasury FROM economy WHERE id = 1").get() as { treasury: number }).treasury;
+  const stockFor: Record<string, number> = { [order.good]: order.qty - 1 };
+  check("the cart waits until there's enough", [orders.deliverOrders(stockFor, at(11)), orders.listOrders().find((o) => o.id === order.id)?.status], [0, "accepted"]);
+  stockFor[order.good] = order.qty + 2;
+  check("…then goes, and the treasury is paid", [orders.deliverOrders(stockFor, at(11)), stockFor[order.good]], [order.reward, 2]);
+  check("…and the village's good name grows", [(lifeDb.prepare("SELECT treasury, reputation FROM economy WHERE id = 1").get() as { treasury: number }).treasury - treasuryBefore, (lifeDb.prepare("SELECT reputation FROM economy WHERE id = 1").get() as { reputation: number }).reputation], [order.reward, 1]);
+  const late = orders.listOrders().find((o) => o.status === "open");
+  check("the owner can take an order on too", late ? (await ordersRoute.POST(req("/api/life/orders", "POST", { id: late.id }))).status : 200, 200);
+
+  lifeDb.prepare("UPDATE villager_life SET coins = 40 WHERE agent_id = ?").run(cal.id);
+  check("villagers buy decor for their cottage with their coins", (await executeTool("buy", { item: "painting" }, town, ctxCal)).output, "You bought a painting (15 coins). It's in your cottage now.");
+  check("…it's there, and the coins are spent", [life.lifeSummary(cal.id)!.decor.includes("painting"), life.lifeSummary(cal.id)!.coins], [true, 25]);
+  await executeTool("buy", { item: "painting" }, town, ctxCal);
+  check("…but not what they can't afford", (await executeTool("buy", { item: "painting" }, town, ctxCal)).output, "a painting costs 15 coins, and you have 10.");
+
+  lifeDb.prepare("UPDATE relationships SET affinity = 65, romance = 25, status = 'close friend' WHERE a_id = ? AND b_id = ?").run(lo, hi);
+  lifeDb.prepare("UPDATE villager_life SET coins = 40 WHERE agent_id = ?").run(cal.id);
+  await executeTool("gift", { who: "Dot", item: "flowers" }, town, ctxCal);
+  const bond = () => lifeDb.prepare("SELECT affinity, romance, status FROM relationships WHERE a_id = ? AND b_id = ?").get(lo, hi) as { affinity: number; romance: number; status: string };
+  check("a gift between close friends who are both open to it: sweethearts", [bond().affinity, bond().status], [73, "sweetheart"]);
+  await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { romanceOpen: false }), { params: Promise.resolve({ id: String(dot.id) }) });
+  check("the owner can say a villager isn't open to romance", life.lifeSummary(dot.id)!.romanceOpen, false);
+  await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { romanceOpen: true }), { params: Promise.resolve({ id: String(dot.id) }) });
+  lifeDb.prepare("UPDATE relationships SET romance = 85 WHERE a_id = ? AND b_id = ?").run(lo, hi);
+  const weddings = await import("../src/app/api/life/weddings/route");
+  check("sweethearts deep in love ask to marry", ((await (await weddings.GET()).json()).couples as Array<{ a: number }>).length, 1);
+  await weddings.POST(req("/api/life/weddings", "POST", { a: cal.id, b: dot.id, action: "bless" }));
+  check("…the owner blesses it, and they're partners", [bond().status, life.lifeSummary(cal.id)!.recent.some((t) => /were married/.test(t))], ["partner", true]);
+
+  const prop = await power("propose_building", { kind: "garden", plot: "west-4", reason: "More flowers." });
+  const treasuryNow = (lifeDb.prepare("SELECT treasury FROM economy WHERE id = 1").get() as { treasury: number }).treasury;
+  await patchBuilding(Number(/#(\d+)/.exec(prop)?.[1]), { action: "approve" });
+  check("approving the Mayor's building pays from the treasury", (lifeDb.prepare("SELECT treasury FROM economy WHERE id = 1").get() as { treasury: number }).treasury, treasuryNow - 25);
 
   fake.close();
   try {

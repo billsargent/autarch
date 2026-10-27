@@ -27,6 +27,9 @@ call risk-checked, and anything risky waiting for your approval.
   working their trade (making the village's food and goods), eating, resting, evenings at the
   tavern, friendships. Once a day a villager can get a short life window with village tools
   only, and you choose how their time splits between computer jobs and village life.
+- **Love, coins and trade.** Friendships and opt-in romance (weddings need your blessing), game
+  coins spent at the tavern and the market (their purchases appear in their cottages), and orders
+  from neighbouring towns that fill the treasury that pays for new buildings.
 - **Villagers work on their own.** Each has a goals board, work windows (scheduled jobs) and,
   if you allow it, free time to pursue their own ideas. Their memory is their goals and notes,
   the town's skills (how-to playbooks), and a diary written after each session

@@ -417,6 +417,26 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`);
   sqlite.exec("CREATE INDEX IF NOT EXISTS idx_life_events_agent ON life_events(agent_id, id)");
+  // Orders from the neighbouring towns (#136), and a first purse for the
+  // village treasury (once, for new and existing villages alike).
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS trade_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    town TEXT NOT NULL,
+    good TEXT NOT NULL,
+    qty INTEGER NOT NULL,
+    reward INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    accepted_by INTEGER REFERENCES agents(id) ON DELETE SET NULL,
+    due_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    done_at INTEGER
+  )`);
+  if (!existingCols("economy").includes("seeded")) {
+    sqlite.exec("ALTER TABLE economy ADD COLUMN seeded INTEGER NOT NULL DEFAULT 0");
+    sqlite.exec("ALTER TABLE economy ADD COLUMN last_order_day TEXT");
+  }
+  sqlite.exec("INSERT OR IGNORE INTO economy (id, treasury, seeded) VALUES (1, 100, 1)");
+  sqlite.exec("UPDATE economy SET treasury = treasury + 100, seeded = 1 WHERE seeded = 0");
   sqlite.exec(`CREATE TABLE IF NOT EXISTS buildings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kind TEXT NOT NULL,

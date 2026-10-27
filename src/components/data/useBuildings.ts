@@ -21,9 +21,10 @@ export interface BuildingRow {
 
 export interface BuildingsState {
   plots: string[];
-  kinds: Record<BuildingKind, { label: string; beds: number; stamp: string; morale: number }>;
+  kinds: Record<BuildingKind, { label: string; beds: number; stamp: string; morale: number; cost: number }>;
   buildings: BuildingRow[];
-  economy: { wheat: number; bread: number; shortage: number; lastTickDay: string | null };
+  // The stores (#106, #132) and the treasury and good name (#136).
+  economy: { wheat: number; bread: number; fish: number; flowers: number; crafts: number; ale: number; treasury: number; reputation: number; shortage: number; lastTickDay: string | null };
   keepers: Record<string, string>;
   room: number;
   // How far the land reaches (0 = the first ring), and why the next ring

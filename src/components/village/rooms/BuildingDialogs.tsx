@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useBuildings, type BuildingKind, type BuildingRow } from "../../data/useBuildings";
+import { useBuildings, type BuildingKind, type BuildingRow, type BuildingsState } from "../../data/useBuildings";
+import { GOODS, GOOD_ICON, GOOD_LABEL } from "@/lib/agent/trades";
 import { useVillagers } from "../../data/useVillagers";
 import ParchmentDialog from "../ParchmentDialog";
 
@@ -31,11 +32,18 @@ function plotLabel(plot: string) {
 }
 const until = (iso: string | null) => (iso ? new Date(iso).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "soon");
 
-function Stores({ economy }: { economy: { wheat: number; bread: number; shortage: number } }) {
+function Stores({ economy }: { economy: BuildingsState["economy"] }) {
   return (
-    <p className="rounded border-2 border-[#d8c49a] p-2 text-xs">
-      🌾 <strong>{economy.wheat}</strong> wheat · 🍞 <strong>{economy.bread}</strong> loaves
-      {economy.shortage > 0 && <span className="text-[#b3261e]"> · yesterday the village was {economy.shortage} loaves short</span>}
+    <p className="flex flex-wrap gap-x-3 gap-y-1 rounded border-2 border-[#d8c49a] p-2 text-xs">
+      {GOODS.map((g) => (
+        <span key={g}>
+          {GOOD_ICON[g]} <strong>{economy[g] ?? 0}</strong> {GOOD_LABEL[g]}
+        </span>
+      ))}
+      <span>
+        🪙 <strong>{economy.treasury ?? 0}</strong> in the treasury
+      </span>
+      {economy.shortage > 0 && <span className="text-[#b3261e]">someone went hungry today</span>}
     </p>
   );
 }
@@ -105,7 +113,8 @@ export function MapTable({ onClose }: { onClose: () => void }) {
     <ParchmentDialog kicker="Your home" title="The map table" onClose={onClose} wide>
       <p className="mb-3 text-xs text-[#6b4a2e]">
         The land north and west of town, with a plot on each side of the roads. The Mayor proposes buildings and you decide,
-        or build something yourself. A building takes half a day. Each house makes room for two more villagers (room now: {state.room}).
+        or build something yourself. A building takes half a day. Each house makes room for two more villagers (room now: {state.room}). The
+        Mayor&apos;s proposals are paid from the village treasury (🪙 {state.economy.treasury ?? 0} now); what you build yourself is on you.
       </p>
       <div className="mb-3 rounded border-2 border-[#d8c49a] p-2 text-xs">
         <p className="font-semibold">
@@ -185,7 +194,7 @@ export function MapTable({ onClose }: { onClose: () => void }) {
         <div className="mt-1 flex flex-wrap gap-1.5" role="radiogroup">
           {(Object.keys(state.kinds) as BuildingKind[]).map((k) => (
             <button key={k} role="radio" aria-checked={kind === k} onClick={() => setKind(k)} className={`village-btn px-2.5 py-1 text-[11px] ${kind === k ? "village-btn-go" : ""}`}>
-              {ICON[k]} {state.kinds[k].label}
+              {ICON[k]} {state.kinds[k].label} · 🪙{state.kinds[k].cost}
             </button>
           ))}
         </div>
@@ -208,9 +217,9 @@ export function Pantry({ onClose }: { onClose: () => void }) {
           <Stores economy={state.economy} />
           <p className="mt-2 text-xs text-[#6b4a2e]">
             {farms || bakeries
-              ? `${farms} farm${farms === 1 ? "" : "s"} and ${bakeries} ${bakeries === 1 ? "bakery" : "bakeries"}. Each day the farms grow, the bakeries bake, and every villager eats a loaf.`
-              : "No farm or bakery yet. Build them on the map table, and give each a keeper."}{" "}
-            Running short makes the village grumpy, but nobody stops working.
+              ? `${farms} farm${farms === 1 ? "" : "s"} and ${bakeries} ${bakeries === 1 ? "bakery" : "bakeries"}. The farmers and bakers fill the stores by working their trade, and villagers eat when they're hungry.`
+              : "No farm or bakery yet. Build them on the map table; villagers with that trade will work there."}{" "}
+            If someone goes hungry the village gets grumpy, but nobody stops working. Spare goods go to other towns from the trading post.
           </p>
         </>
       )}
