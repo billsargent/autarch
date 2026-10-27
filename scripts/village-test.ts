@@ -81,7 +81,7 @@ check(
 );
 check(
   "every furniture action has a room UI that handles it",
-  ALL_SCENES.flatMap((l) => l.places.filter((p) => p.action && !ROOM_ACTIONS[l.id]?.includes(p.action)).map((p) => `${l.id}/${p.id}:${p.action}`)),
+  ALL_SCENES.flatMap((l) => l.places.filter((p) => p.action && !ROOM_ACTIONS[l.id.replace(/-\d+$/, "")]?.includes(p.action)).map((p) => `${l.id}/${p.id}:${p.action}`)),
   [],
 );
 check(

@@ -26,7 +26,7 @@ export default function MeetingTable({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const { villagers } = useVillagers(15000);
-  const bottom = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -44,9 +44,14 @@ export default function MeetingTable({ onClose }: { onClose: () => void }) {
     };
   }, [reload, view?.busy]);
   useLive(["meeting", "message"], reload, { debounceMs: 300 });
+  // Keep the newest answer in view by scrolling the transcript itself; never
+  // scrollIntoView, which also scrolls the dialog and the village behind it.
+  // Only while you're at the bottom: reading back isn't interrupted.
+  const atBottom = useRef(true);
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "end" });
-  }, [view?.transcript?.length]);
+    const el = scroller.current;
+    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
+  }, [view?.transcript?.length, view?.meeting?.speakingAgentId]);
 
   async function send(url: string, method: string, body: unknown) {
     setSending(true);
@@ -133,7 +138,7 @@ export default function MeetingTable({ onClose }: { onClose: () => void }) {
         </div>
       }
     >
-      <div className="mb-2 flex flex-wrap items-center gap-1.5" aria-label="At the meeting">
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b-2 border-[#d8c49a] px-4 py-2" aria-label="At the meeting">
         {m.participants.map((id) => {
           const v = villagers.find((x) => x.id === id);
           if (!v) return null;
@@ -146,6 +151,14 @@ export default function MeetingTable({ onClose }: { onClose: () => void }) {
           );
         })}
       </div>
+      <div
+        ref={scroller}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+        }}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-3"
+      >
       <ul className="space-y-2">
         {(view.transcript ?? []).map((t) => {
           const v = byName(t.who);
@@ -162,9 +175,9 @@ export default function MeetingTable({ onClose }: { onClose: () => void }) {
         })}
         {speaking && <li className="text-xs italic text-[#6b4a2e]">{speaking.name} is speaking…</li>}
       </ul>
-      <div ref={bottom} />
+      </div>
       <form
-        className="mt-3 flex gap-2"
+        className="flex shrink-0 gap-2 border-t-2 border-[#d8c49a] px-4 py-2"
         onSubmit={async (e) => {
           e.preventDefault();
           const text = draft.trim();
@@ -184,7 +197,7 @@ export default function MeetingTable({ onClose }: { onClose: () => void }) {
           Ask
         </button>
       </form>
-      {error && <p role="alert" className="mt-2 text-xs text-[#b3261e]">{error}</p>}
+      {error && <p role="alert" className="shrink-0 px-4 pb-2 text-xs text-[#b3261e]">{error}</p>}
     </ParchmentDialog>
   );
 }

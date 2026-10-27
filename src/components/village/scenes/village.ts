@@ -134,53 +134,102 @@ const ORIGINAL: SceneLayout = {
   hangouts: ["c", "nb", "cot", "tc", "wg", "ng", "obs", "lib", "gt"],
 };
 
-// Land to the north and west (#105): the village moved 7 tiles right and 6
-// down, the roads out of town carried on to the new edges, and four plots
-// beside them, two along each road.
-const DC = 7;
-const DR = 6;
-const moved = shiftLayout(ORIGINAL, DC, DR);
-const NORTH_ROAD: Rect = { col: 27 + DC, row: 0, w: 2, h: DR };
-const WEST_ROAD: Rect = { col: 0, row: 9 + DR, w: DC, h: 2 };
+// Land to the north and west (#105), in rings. Level 0 is the first ring: the
+// village moved 7 tiles right and 6 down, the roads out of town carried on to
+// the new edges, and four plots beside them, two along each road. Each level
+// after that clears another ring (8 more columns west, 6 more rows north) with
+// four more plots. The map is drawn once per level (npm run village:map); the
+// village shows the level that's been cleared.
+export const MAX_VILLAGE_LEVEL = 3;
+const RING_ROWS = 6;
+const ringCols = (r: number) => (r === 0 ? 7 : 8);
 
-export const VILLAGE_SCENE: SceneLayout = {
-  ...moved,
-  paths: { ...moved.paths!, rects: [...moved.paths!.rects, NORTH_ROAD, WEST_ROAD] },
-  walkable: [...moved.walkable, NORTH_ROAD, WEST_ROAD],
-  decor: [
-    ...moved.decor,
-    { stamp: "svTree", col: 10, row: 1 },
-    { stamp: "roundTree", col: 21, row: 2 },
-    { stamp: "pineTree", col: 44, row: 1 },
-    { stamp: "svTree", col: 1, row: 5 },
-    { stamp: "leafyTree", col: 1, row: 25 },
-    // A sign on each empty plot.
-    { stamp: "svSign", col: 29, row: 4 },
-    { stamp: "svSign", col: 40, row: 4 },
-    { stamp: "svSign", col: 4, row: 13 },
-    { stamp: "svSign", col: 4, row: 21 },
-  ],
-  waypoints: [
-    // The gates move out to the new edges.
-    ...moved.waypoints.map((w) => (w.id === "ng" ? { ...w, y: 0.6 } : w.id === "wg" ? { ...w, x: 0.6 } : w)),
-    { id: "nrl", x: 34.5, y: 3.5 }, // north road, by the plots
-    { id: "nrr", x: 35.5, y: 3.5 },
-    { id: "wrt", x: 3.5, y: 15.4 }, // west road, by the plots
-    { id: "wrb", x: 3.5, y: 16.6 },
-  ],
-  edges: [
-    ...moved.edges.filter(([a, b]) => !(a === "ng" && b === "nj") && !(a === "wg" && b === "tl")),
-    ["ng", "nrl"],
-    ["nrl", "nrr"],
-    ["nrr", "nj"],
-    ["wg", "wrt"],
-    ["wrt", "wrb"],
-    ["wrb", "tl"],
-  ],
-  plots: [
-    { id: "north-1", col: 29, row: 1, w: 4, h: 4, door: "nrl" },
-    { id: "north-2", col: 37, row: 1, w: 4, h: 4, door: "nrr" },
-    { id: "west-1", col: 1, row: 10, w: 4, h: 4, door: "wrt" },
-    { id: "west-2", col: 1, row: 18, w: 4, h: 4, door: "wrb" },
-  ],
-};
+// The plot ids of one ring: the first ring keeps its original names.
+export function ringPlotIds(r: number): string[] {
+  return [`north-${2 * r + 1}`, `north-${2 * r + 2}`, `west-${2 * r + 1}`, `west-${2 * r + 2}`];
+}
+
+function villageAtLevel(level: number): SceneLayout {
+  let dc = 0;
+  for (let r = 0; r <= level; r++) dc += ringCols(r);
+  const dr = RING_ROWS * (level + 1);
+  const moved = shiftLayout(ORIGINAL, dc, dr);
+  const roadCol = 27 + dc; // the north road
+  const roadRow = 9 + dr; // the west road
+  const NORTH_ROAD: Rect = { col: roadCol, row: 0, w: 2, h: dr };
+  const WEST_ROAD: Rect = { col: 0, row: roadRow, w: dc, h: 2 };
+
+  const plots: NonNullable<SceneLayout["plots"]> = [];
+  const waypoints: SceneLayout["waypoints"] = [];
+  const decor: SceneLayout["decor"] = [];
+  const northChain: string[] = [];
+  const westChain: string[] = [];
+  let inner = 0;
+  for (let r = 0; r <= level; r++) {
+    const [n1, n2, w1, w2] = ringPlotIds(r);
+    // Door waypoint ids: the first ring keeps its original ones.
+    const ids = r === 0 ? ["nrl", "nrr", "wrt", "wrb"] : [`nr${r}l`, `nr${r}r`, `wr${r}t`, `wr${r}b`];
+    const top = dr - RING_ROWS * (r + 1);
+    const left = dc - inner - ringCols(r);
+    inner += ringCols(r);
+    plots.push(
+      { id: n1, col: roadCol - 5, row: top + 1, w: 4, h: 4, door: ids[0] },
+      { id: n2, col: roadCol + 3, row: top + 1, w: 4, h: 4, door: ids[1] },
+      { id: w1, col: left + 1, row: roadRow - 5, w: 4, h: 4, door: ids[2] },
+      { id: w2, col: left + 1, row: roadRow + 3, w: 4, h: 4, door: ids[3] },
+    );
+    waypoints.push(
+      { id: ids[0], x: roadCol + 0.5, y: top + 3.5 },
+      { id: ids[1], x: roadCol + 1.5, y: top + 3.5 },
+      { id: ids[2], x: left + 3.5, y: roadRow + 0.4 },
+      { id: ids[3], x: left + 3.5, y: roadRow + 1.6 },
+    );
+    // Outermost first, towards town.
+    northChain.unshift(ids[0], ids[1]);
+    westChain.unshift(ids[2], ids[3]);
+    // Trees on the new land, clear of the plots and roads.
+    if (r === 0) {
+      const sx = dc - 7;
+      const sy = dr - 6;
+      decor.push(
+        { stamp: "svTree", col: 10 + sx, row: 1 + sy },
+        { stamp: "roundTree", col: 21 + sx, row: 2 + sy },
+        { stamp: "pineTree", col: 44 + sx, row: 1 + sy },
+        { stamp: "svTree", col: 1 + sx, row: 5 + sy },
+        { stamp: "leafyTree", col: 1 + sx, row: 25 + sy },
+      );
+    } else {
+      decor.push(
+        { stamp: r % 2 ? "pineTree" : "svTree", col: roadCol - 13, row: top + 1 },
+        { stamp: "roundTree", col: roadCol - 24, row: top + 2 },
+        { stamp: r % 2 ? "leafyTree" : "pineTree", col: roadCol + 10, row: top + 1 },
+        { stamp: "svTree", col: left + 2, row: roadRow + 10 },
+      );
+    }
+  }
+  // A sign on each empty plot (a building drawn there covers it).
+  for (const p of plots) decor.push({ stamp: "svSign", col: p.col + 3, row: p.row + 3 });
+
+  return {
+    ...moved,
+    id: level === 0 ? "village" : `village-${level}`,
+    paths: { ...moved.paths!, rects: [...moved.paths!.rects, NORTH_ROAD, WEST_ROAD] },
+    walkable: [...moved.walkable, NORTH_ROAD, WEST_ROAD],
+    decor: [...moved.decor, ...decor],
+    waypoints: [
+      // The gates move out to the new edges.
+      ...moved.waypoints.map((w) => (w.id === "ng" ? { ...w, y: 0.6 } : w.id === "wg" ? { ...w, x: 0.6 } : w)),
+      ...waypoints,
+    ],
+    edges: [
+      ...moved.edges.filter(([a, b]) => !(a === "ng" && b === "nj") && !(a === "wg" && b === "tl")),
+      ...["ng", ...northChain, "nj"].slice(1).map((b, i, arr) => [i === 0 ? "ng" : arr[i - 1], b] as const),
+      ...["wg", ...westChain, "tl"].slice(1).map((b, i, arr) => [i === 0 ? "wg" : arr[i - 1], b] as const),
+    ],
+    plots,
+  };
+}
+
+// Every level of the village, 0 (the first ring) to MAX_VILLAGE_LEVEL.
+export const VILLAGE_LEVELS: SceneLayout[] = Array.from({ length: MAX_VILLAGE_LEVEL + 1 }, (_, l) => villageAtLevel(l));
+export const VILLAGE_SCENE: SceneLayout = VILLAGE_LEVELS[0];

@@ -196,12 +196,12 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
       function: {
         name: "propose_building",
         description:
-          "Mayor only. Propose a new building on one of the empty plots north and west of town: a house (beds for two more villagers), a farm, a bakery or a workshop. The owner approves it; then it takes about half a day to build.",
+          "Mayor only. Propose a new building on one of the empty plots north and west of town: a house (beds for two more villagers), a farm, a bakery, a workshop, a tavern, a shop or a garden (the last three cheer everyone up). The owner approves it; then it takes about half a day to build. When every plot is taken, propose `land` instead: it clears the next ring of land around the village, with four new plots, and takes a day.",
         parameters: {
           type: "object",
           properties: {
-            kind: { type: "string", enum: ["house", "farm", "bakery", "workshop"] },
-            plot: { type: "string", enum: ["north-1", "north-2", "west-1", "west-2"], description: "Optional; default the first free plot." },
+            kind: { type: "string", enum: ["house", "farm", "bakery", "workshop", "tavern", "shop", "garden", "land"] },
+            plot: { type: "string", description: "Optional, for a building: a free plot such as north-1 or west-2; default the first free plot." },
             reason: { type: "string", description: "Why the village needs it, for the owner." },
           },
           required: ["kind", "reason"],

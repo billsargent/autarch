@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "predev": "node -e \"require('fs').rmSync('.next/dev/node_modules',{recursive:true,force:true})\"",
-    "dev": "next dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",

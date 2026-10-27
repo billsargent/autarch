@@ -93,3 +93,60 @@ async function deliver(threadId: number, toName: string, fromName: string, quest
     await post(`[${toName} couldn't answer] ${err instanceof Error ? err.message : String(err)}`).catch(() => {});
   }
 }
+
+// What villagers have asked each other, newest first, for the guard tower's
+// "neighbours' talk" log. Each question is an "[X asks]" note in the asked
+// villager's thread with X; the answer is their next reply in that thread.
+export interface NeighbourExchange {
+  id: number; // the question's message id
+  conversationId: number;
+  fromId: number | null; // who asked
+  toId: number | null; // who was asked
+  question: string;
+  askedAt: number; // ms
+  answer: string | null; // null = not answered (yet)
+  answeredAt: number | null;
+}
+
+export function neighbourTalk(limit = 100): NeighbourExchange[] {
+  // One query: each ask with the next ask in its thread (LEAD), and the last
+  // reply between the two.
+  const rows = sqlite
+    .prepare(
+      `WITH asks AS (
+         SELECT m.id, m.conversation_id AS conversationId, m.content, m.created_at AS at, c.agent_id AS toId, c.partner_agent_id AS fromId,
+                LEAD(m.id) OVER (PARTITION BY m.conversation_id ORDER BY m.id) AS nextId
+         FROM messages m JOIN conversations c ON c.id = m.conversation_id
+         WHERE c.partner_agent_id IS NOT NULL AND m.role = 'event' AND m.content LIKE '[% asks] %'
+       ),
+       recent AS (SELECT * FROM asks ORDER BY id DESC LIMIT ?)
+       SELECT a.*, r.content AS answer, r.created_at AS answeredAt
+       FROM recent a
+       LEFT JOIN messages r ON r.id = (
+         SELECT MAX(x.id) FROM messages x
+         WHERE x.conversation_id = a.conversationId AND x.id > a.id AND x.id < COALESCE(a.nextId, 1e18)
+           AND x.role = 'assistant' AND TRIM(COALESCE(x.content, '')) <> ''
+       )
+       ORDER BY a.id DESC`,
+    )
+    .all(limit) as Array<{
+    id: number;
+    conversationId: number;
+    content: string;
+    at: number;
+    toId: number | null;
+    fromId: number | null;
+    answer: string | null;
+    answeredAt: number | null;
+  }>;
+  return rows.map((a) => ({
+    id: a.id,
+    conversationId: a.conversationId,
+    fromId: a.fromId,
+    toId: a.toId,
+    question: a.content.replace(/^\[[^\]]* asks\]\s*/, ""),
+    askedAt: a.at * 1000,
+    answer: a.answer?.trim() ?? null,
+    answeredAt: a.answeredAt != null ? a.answeredAt * 1000 : null,
+  }));
+}

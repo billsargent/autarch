@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { gitBashPath } from "./host";
 import {
   HARD_PROTECTED_PATHS,
   SECRET_PATH_PATTERNS,
@@ -209,6 +210,23 @@ const BLOCKED_RULES: ShellRule[] = [
   { test: /\bkill(all)?\s+.*\b(-9\s+)?1\b/, risk: "blocked", reason: "Killing PID 1 (init) would crash the machine." },
   { test: />\s*\/etc\/passwd|>\s*\/etc\/shadow/i, risk: "blocked", reason: "Overwriting the system auth database." },
   { test: /\bnode_modules\b.*\brm\b|\brm\b.*\bnode_modules\b/i, risk: "blocked", reason: "Deleting node_modules would break this framework's own runtime." },
+  // Windows (PowerShell, cmd and Git Bash).
+  { test: /\b(Format-Volume|Clear-Disk|Initialize-Disk|diskpart)\b|\bformat(\.com)?\s+[a-z]:/i, risk: "blocked", reason: "Formatting or wiping a disk would destroy data irrecoverably." },
+  // A recursive delete anywhere in the command, and a bare drive (C:\, C:\*)
+  // anywhere in it, in any order: `Remove-Item C:\ -Recurse`, `gci C:\ | ri -r`.
+  {
+    test: /^(?=[\s\S]*\b(Remove-Item|ri|del|erase|rd|rmdir)\b)(?=[\s\S]*\s(-r\w*|\/s)\b)(?=[\s\S]*(^|[\s=:,])["']?[a-z]:[\\/]?\*?["']?(\s|$|;|&|\|))/i,
+    risk: "blocked",
+    reason: "Recursive delete of a whole drive.",
+  },
+  // Git Bash's drives are /c, /d …: `rm -rf /c`. (Only with rm, so a cmd
+  // switch like `/q` is never taken for a drive.)
+  {
+    test: /^(?=[\s\S]*\brm\b)(?=[\s\S]*\s-\w*r)(?=[\s\S]*\s["']?\/[a-z]\/?\*?["']?(\s|$|;|&|\|))/i,
+    risk: "blocked",
+    reason: "Recursive delete of a whole drive.",
+  },
+  { test: /\b(Remove-Item|ri|del|erase|rd|rmdir)\b.*\bnode_modules\b/i, risk: "blocked", reason: "Deleting node_modules would break this framework's own runtime." },
 ];
 
 const CRITICAL_RULES: ShellRule[] = [
@@ -225,6 +243,43 @@ const CRITICAL_RULES: ShellRule[] = [
   { test: /curl[^|]*\|\s*(sudo\s+)?(bash|sh)\b|wget[^|]*\|\s*(sudo\s+)?(bash|sh)\b/i, risk: "critical", reason: "Piping a remote script directly into a shell requires human approval." },
   { test: /\bcrontab\b/i, risk: "critical", reason: "Modifying scheduled jobs requires human approval." },
   { test: /\bsystemctl\s+(stop|disable|mask)\b/i, risk: "critical", reason: "Stopping/disabling a system service requires human approval." },
+  // Windows equivalents.
+  { test: /\bStart-Process\b.*-Verb\s+RunAs\b|\brunas\b/i, risk: "critical", reason: "Running as administrator always requires human approval." },
+  { test: /\b(Restart-Computer|Stop-Computer)\b/i, risk: "critical", reason: "Power state changes require human approval." },
+  { test: /\b(Stop-Process|spps|taskkill)\b/i, risk: "critical", reason: "Terminating processes requires human approval." },
+  {
+    test: /\b(Stop-Service|Remove-Service|Suspend-Service)\b|\bSet-Service\b.*\b(Disabled|Stopped)\b|\bsc(\.exe)?\s+(stop|delete|config)\b|\bnet\s+stop\b/i,
+    risk: "critical",
+    reason: "Stopping/disabling a system service requires human approval.",
+  },
+  { test: /\b(winget|choco|scoop)\s+(uninstall|remove)\b|\b(Uninstall-Package|Remove-AppxPackage|Uninstall-Module)\b/i, risk: "critical", reason: "Removing software requires human approval." },
+  {
+    test: /\b(New-LocalUser|Remove-LocalUser|Set-LocalUser|Add-LocalGroupMember|Remove-LocalGroupMember)\b|\bnet\s+(user|localgroup)\b.*\s\/(add|delete)\b/i,
+    risk: "critical",
+    reason: "User account changes require human approval.",
+  },
+  {
+    test: /\b(netsh|New-NetFirewallRule|Set-NetFirewallRule|Remove-NetFirewallRule|Set-NetFirewallProfile|Disable-NetFirewallRule)\b/i,
+    risk: "critical",
+    reason: "Firewall/network rule changes require human approval.",
+  },
+  { test: /\b(schtasks|Register-ScheduledTask|Unregister-ScheduledTask|Set-ScheduledTask)\b/i, risk: "critical", reason: "Modifying scheduled tasks requires human approval." },
+  {
+    test: /\breg(\.exe)?\s+(add|delete|import|load|restore)\b|\b(Set-ItemProperty|New-ItemProperty|Remove-ItemProperty|Remove-Item)\b.*\bHK(LM|CU|CR|U|CC)\b|\bRegistry::/i,
+    risk: "critical",
+    reason: "Changing the Windows registry requires human approval.",
+  },
+  {
+    test: /\b(Set-ExecutionPolicy|bcdedit|Set-MpPreference|Add-MpPreference|Disable-WindowsOptionalFeature|Enable-WindowsOptionalFeature|Disable-ComputerRestore)\b/i,
+    risk: "critical",
+    reason: "System security or boot settings require human approval.",
+  },
+  { test: /\b(takeown|icacls)\b.*\/(grant|setowner|reset|remove)|\bSet-Acl\b/i, risk: "critical", reason: "Ownership/permission changes require human approval." },
+  {
+    test: /\b(iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^|]*\|\s*(iex|Invoke-Expression)\b|\b(iex|Invoke-Expression)\b.*\b(iwr|irm|Invoke-WebRequest|Invoke-RestMethod|DownloadString)\b/i,
+    risk: "critical",
+    reason: "Running a downloaded script directly requires human approval.",
+  },
 ];
 
 const HIGH_RULES: ShellRule[] = [
@@ -232,6 +287,8 @@ const HIGH_RULES: ShellRule[] = [
   { test: /\bsystemctl\s+(start|restart|enable|reload)\b/i, risk: "high", reason: "Starting/restarting a system service requires approval unless autonomy allows it." },
   { test: /\bnpm\s+(un)?install\s+-g|\byarn\s+global\b|\bpip3?\s+install\b.*--user\b/i, risk: "high", reason: "Global package installs affect the whole system." },
   { test: /\bdocker\b/i, risk: "high", reason: "Container operations can consume significant resources or change system state." },
+  { test: /\b(winget|choco|scoop)\s+(install|upgrade|update)\b|\b(Install-Package|Install-Module|Update-Module)\b/i, risk: "high", reason: "Installing/upgrading software requires approval unless autonomy allows it." },
+  { test: /\b(Start-Service|Restart-Service|Set-Service)\b|\bsc(\.exe)?\s+start\b|\bnet\s+start\b/i, risk: "high", reason: "Starting/restarting a system service requires approval unless autonomy allows it." },
 ];
 
 const MEDIUM_RULES: ShellRule[] = [
@@ -242,15 +299,33 @@ const MEDIUM_RULES: ShellRule[] = [
   { test: /\bpip3?\s+install\b/i, risk: "medium", reason: "Installing a Python package." },
   { test: /\bgit\s+(clone|commit|add|checkout|merge|pull|push|reset)\b/i, risk: "medium", reason: "Git write operation." },
   { test: /\b(curl|wget)\b/i, risk: "medium", reason: "Outbound network request." },
+  // PowerShell's full names anywhere; short aliases and cmd verbs (which are
+  // also ordinary words) only where a command starts.
+  {
+    test: /\b(New-Item|Copy-Item|Move-Item|Rename-Item|Set-Content|Add-Content|Out-File|Expand-Archive|Compress-Archive|xcopy|robocopy)\b|(^|[;&|]\s*)(ni|cpi|mi|copy|move|ren|md)\s/i,
+    risk: "medium",
+    reason: "File-modifying command.",
+  },
+  { test: /\b(Remove-Item|Clear-Content)\b|(^|[;&|]\s*)(ri|del|erase|rd)\s/i, risk: "medium", reason: "Deleting files." },
+  { test: /\b(Invoke-WebRequest|iwr|Invoke-RestMethod|irm|Start-BitsTransfer)\b/i, risk: "medium", reason: "Outbound network request." },
+  // Running code on what a read-only command finds (`Get-Process | % { $_.Kill() }`,
+  // `find . -delete`) isn't read-only, however the command starts.
+  {
+    test: /\b(ForEach-Object|Invoke-Expression|iex|Invoke-Command|Invoke-Item)\b|\|\s*%\s*\{|\$_\.\w+\s*\(|\[[\w.]+\]::\w+\s*\(|\bfind\b.*\s-(delete|exec|execdir|ok)\b|\bxargs\b/i,
+    risk: "medium",
+    reason: "Runs code or commands on what it finds.",
+  },
 ];
 
 const LOW_PREFIXES: RegExp[] = [
   /^\s*(ls|pwd|whoami|id|uname|df|du|free|uptime|date|hostname|cat|head|tail|grep|find|which|env|printenv|echo|ps|top|htop|lscpu|lsblk|lsusb|lspci|node\s+-v|npm\s+-v|python3?\s+-{1,2}v|git\s+(status|log|diff|show|branch)|man|help)\b/i,
+  // Windows: PowerShell's Get-* and the read-only cmd tools.
+  /^\s*(dir|type|Get-[A-Za-z]+|gci|gc|Select-String|sls|Test-Path|Resolve-Path|Measure-Object|systeminfo|ver|tasklist|where(\.exe)?|ipconfig|winget\s+(list|search|show))\b/i,
 ];
 
 // Read-capable shell verbs used by the secret exfiltration guard.
 const READ_VERB =
-  /\b(cat|less|more|head|tail|strings|base64|xxd|od|sed|awk|grep|find|cp|scp|dd|nano|vi|vim|view|openssl|tar|unzip|sort|uniq|wc)\b/i;
+  /\b(cat|less|more|head|tail|strings|base64|xxd|od|sed|awk|grep|find|cp|scp|dd|nano|vi|vim|view|openssl|tar|unzip|sort|uniq|wc|type|Get-Content|gc|Select-String|sls|Copy-Item|cpi|copy|xcopy|robocopy|notepad|certutil|Compress-Archive)\b/i;
 
 // True if the command references a path-like token that matches a secret pattern
 // (skipping glob tokens like "*.pem" so discovery commands like `find -name`
@@ -279,6 +354,20 @@ export function classifyShellCommand(command: string, overrides?: SuperviseOverr
     return { risk: "blocked", reason: "Commands that connect to the dashboard on this machine are blocked." };
   }
 
+  // `powershell -Command "…"` and `cmd /c …` are judged by the command inside
+  // them, so a wrapped Get-ChildItem is as low as a bare one and a wrapped
+  // Stop-Process as critical. A command that can't be read can't be judged.
+  if (/^\s*(powershell|pwsh)(\.exe)?\b[^|;&]*\s-(e|ec|enc|encodedcommand)\s/i.test(cmd)) {
+    return { risk: "critical", reason: "An encoded PowerShell command hides what it runs; it needs human approval." };
+  }
+  const wrapped =
+    /^\s*(?:powershell|pwsh)(?:\.exe)?(?:\s+-(?!c\b|command\b)\w+(?:\s+(?!-)[\w.]+)?)*\s+-(?:c|command)\s+([\s\S]+)$/i.exec(cmd) ??
+    /^\s*cmd(?:\.exe)?\s+\/[ck]\s+([\s\S]+)$/i.exec(cmd);
+  if (wrapped) {
+    const inner = wrapped[1].trim().replace(/^(["'])([\s\S]*)\1$/, "$2");
+    if (inner && inner !== cmd) return classifyShellCommand(inner, overrides);
+  }
+
   for (const rule of BLOCKED_RULES) {
     if (rule.test.test(cmd)) {
       return liftBlock({ risk: rule.risk, reason: rule.reason }, anyOverride(overrides, ["allowDestructiveShell"]));
@@ -303,8 +392,13 @@ export function classifyShellCommand(command: string, overrides?: SuperviseOverr
   // package.json, src/db...) as whole path tokens — not as substrings, so
   // "/tmp/mysrc" doesn't match "src".
   const tokens = cmd.split(/[\s;|&()<>"'`]+/).filter(Boolean);
+  // On Windows an absolute path can be written D:\x, D:/x or (Git Bash) /d/x,
+  // in any case.
+  const win = process.platform === "win32";
+  const pathForms = (p: string) => (win ? [p, p.replace(/\\/g, "/"), gitBashPath(p)].map((f) => f.toLowerCase()) : [p]);
+  const cmdForm = win ? cmd.toLowerCase() : cmd;
   const touchesHardProtected =
-    HARD_PROTECTED_PATHS.some((p) => cmd.includes(p)) ||
+    HARD_PROTECTED_PATHS.some((p) => pathForms(p).some((f) => cmdForm.includes(f))) ||
     HARD_PROTECTED_PATHS.some((p) => {
       const rel = path.relative(PROJECT_ROOT, p).split(path.sep).join("/");
       if (!rel) return false;
@@ -313,7 +407,10 @@ export function classifyShellCommand(command: string, overrides?: SuperviseOverr
         return tok === rel || tok.startsWith(`${rel}/`);
       });
     });
-  const destructiveVerb = /\b(rm|mv|dd|truncate|>|>>|sed\s+-i)\b/i.test(cmd);
+  // Short cmd verbs and aliases (del, move, ren …) are also ordinary words, so
+  // they only count where a command starts.
+  const destructiveVerb =
+    /\b(rm|mv|dd|truncate|>|>>|sed\s+-i|Remove-Item|rmdir|Move-Item|Set-Content|Out-File|Clear-Content|Rename-Item)\b|(^|[;&|]\s*)(ri|mi|del|erase|rd|move|ren)\s/i.test(cmd);
   if (touchesHardProtected && destructiveVerb) {
     return liftBlock(
       {

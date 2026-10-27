@@ -29,7 +29,7 @@ export const TILESETS = {
   camp: { image: "village/tiles/ninja-camp.png", columns: 23, rows: 9 },
   bed: { image: "village/tiles/ninja-bed.png", columns: 14, rows: 12 },
   // Drawn for this project (scripts/build-custom-tiles.ts).
-  custom: { image: "village/tiles/autarch-custom.png", columns: 8, rows: 3 },
+  custom: { image: "village/tiles/autarch-custom.png", columns: 12, rows: 3 },
 } as const satisfies Record<string, Tileset>;
 
 export type TilesetId = keyof typeof TILESETS;
@@ -146,6 +146,8 @@ export const STAMPS = {
   wallCalendar: s("custom", 3, 0),
   // The village farm's wheat field (#106).
   wheatField: s("custom", 4, 0, 4, 3),
+  // The village garden.
+  garden: s("custom", 8, 0, 4, 3),
   plankFloor: s("floor", 17, 4),
   rimCornerBL: s("wall", 5, 4),
   rimCornerBR: s("wall", 9, 4),

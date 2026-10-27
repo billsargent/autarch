@@ -3,7 +3,7 @@
 // from), so hotspots always sit on the art. Open any scene with ?edit=1 to see
 // the outlines. Coordinates are in scene pixels.
 import { CELL, STAMPS, stampRect, unionRect, type SceneLayout } from "./scene";
-import { INTERIORS, VILLAGE_SCENE } from "./scenes";
+import { INTERIORS, VILLAGE_LEVELS, VILLAGE_SCENE } from "./scenes";
 import type { Edge, Waypoint } from "./path";
 import { CHARACTER_KEYS, isCharacterKey, type CharacterKey } from "@/lib/agent/villagerLooks";
 
@@ -80,6 +80,8 @@ export function sceneManifest(layout: SceneLayout): SceneManifest {
 }
 
 export const VILLAGE: SceneManifest = sceneManifest(VILLAGE_SCENE);
+// The village at each level of land (#105): ring 1, 2, … cleared.
+export const VILLAGE_MANIFESTS: SceneManifest[] = VILLAGE_LEVELS.map(sceneManifest);
 
 export function interiorManifest(id: string): SceneManifest | null {
   const layout = INTERIORS[id];

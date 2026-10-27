@@ -211,6 +211,35 @@ check(
   ],
 );
 
+// A villager's own post written during a tool call goes out right after the
+// tool's answer (not at the end), and in thinking mode DeepSeek wants the
+// reasoning field on every assistant message, so plain ones carry an empty one.
+{
+  const rows = [
+    row({ role: "user", content: "work" }),
+    row({ role: "assistant", content: "", reasoning: "think", toolCalls: [call("call_p", "post_message")] }),
+    row({ role: "assistant", content: "posted mid-call" }),
+    row({ role: "tool", toolCallId: "call_p", content: "ok" }),
+    row({ role: "assistant", content: "done", reasoning: "" }),
+    row({ role: "event", content: "later" }),
+  ];
+  check("a post written mid-call stays in order", rows, [
+    { role: "user", content: "work" },
+    { role: "assistant", tool_calls: [call("call_p")], reasoning_content: "think" },
+    { role: "tool", tool_call_id: "call_p", content: "ok" },
+    { role: "assistant", content: "posted mid-call" },
+    { role: "assistant", content: "done" },
+    { role: "user", content: "[SYSTEM EVENT] later" },
+  ]);
+  const got = historyToApiMessages(rows) as unknown as Msg[];
+  const bare = got.filter((m) => m.role === "assistant" && m.reasoning_content === undefined).length;
+  const other = (historyToApiMessages(rows, false) as unknown as Msg[]).filter((m) => m.reasoning_content !== undefined).length;
+  if (bare || other) {
+    console.error(`✗ reasoning field: ${bare} DeepSeek assistant message(s) without it, ${other} other-provider message(s) with it`);
+    failures++;
+  } else console.log("✓ every DeepSeek assistant message carries the reasoning field, others none");
+}
+
 if (failures > 0) {
   console.error(`\n${failures} sanitizer test(s) FAILED`);
   process.exit(1);

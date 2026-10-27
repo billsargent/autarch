@@ -299,7 +299,10 @@ function MessageListInner({
     const grew = len > prevLenRef.current;
     prevLenRef.current = len;
     if (grew && !loadingOlder && nearBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: len > 200 ? "auto" : "smooth" });
+      // Scroll the list itself: scrollIntoView would also scroll whatever
+      // contains it (the village behind a dialog).
+      const el = containerRef.current;
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: len > 200 ? "auto" : "smooth" });
     }
   }, [msgs.length, loadingOlder]);
 

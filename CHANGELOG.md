@@ -3,6 +3,46 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-25 — New land in rings, a tavern, a shop and a garden
+
+- **See what villagers ask each other.** The guard tower has a new "Neighbours' talk" log: every
+  question one villager put to another, who asked whom, when, and the answer (or that none came).
+- **The village can grow outwards.** Once every plot is taken, the Mayor can propose clearing
+  the next ring of land (or you can, at the map table). It takes a day; then the roads reach
+  further and four more plots open, two on each road. There are four rings in all. Every ring
+  follows a fixed layout drawn ahead of time; the villagers choose only what to build and where.
+- **Three new buildings:** a tavern (everyone's morale +5, and idle villagers drop in), a shop
+  and a garden (+3 each). The garden is new pixel art drawn for the village.
+- **Fixed: "reasoning_content must be passed back" errors with DeepSeek.** A message a villager
+  posted to you in the middle of a tool call broke every later turn in that conversation. Those
+  messages are now sent back correctly, and in their right place.
+- **Villagers know what computer they're on.** Every villager is told the system and shell in
+  one line: on Windows, that commands run in Git Bash (or PowerShell when Git isn't installed),
+  what doesn't exist there (apt, systemctl, sudo), and where the workspace really is. Commands
+  used to fail on Windows because the command tool always used `/bin/bash`.
+- **Windows commands are risk-checked like Linux ones.** Stopping processes or services,
+  registry and firewall changes, user accounts, scheduled tasks, running as administrator and
+  piping a download into `iex` need your approval; wiping a drive is blocked; `winget install`
+  is treated like `apt install`. The framework's own files are protected however their path is
+  written (`D:\…`, `D:/…` or `/d/…`).
+  A command wrapped in `powershell -Command "…"` or `cmd /c …` is judged by the command
+  inside, so looking around no longer waits for approval while stopping a process still does;
+  encoded PowerShell commands always need approval.
+- **Linux-only tools step aside elsewhere.** The package, service and screenshot tools (apt,
+  systemctl, scrot) are hidden on Windows, and the process list and disk status use PowerShell.
+
+## 2026-10-25 — Meetings lead to work, and the worker starts with the app
+
+- **What a meeting agrees becomes work.** When you end a meeting, the Mayor's write-up names who
+  agreed to do what, and each of those becomes a goal on that villager's board (or the town's).
+  They pick it up in their next work window.
+- **Villagers understand meetings are for deciding.** No tools are used in a meeting, and they
+  now say what they'll do instead of apologising that their hands are tied.
+- **`npm run dev` starts the background worker too,** as the deployed services do. Without the
+  worker, jobs, free time, the daily vote and the farm never run. `npm run dev:web` starts the
+  web app alone.
+- **Scrolling a long meeting works:** the question box and the End button stay put (#115).
+
 ## 2026-10-24 — Sound, a welcome, and meeting write-ups
 
 - **Sound (off until you switch it on).** The 🔇 button in the village bar turns on quiet music,

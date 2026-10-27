@@ -258,6 +258,15 @@ async function main() {
   await waitFor(calChat, "[Reply from Dot] Also in the shed.");
   const onward = (await msgsOf(thread.id)).find((m) => m.role === "tool" && m.toolName === "ask_villager");
   check("someone answering can't send questions onward", onward?.content?.startsWith("Refused: you're answering a neighbour"), true);
+  const talk = (await import("../src/lib/agent/messaging")).neighbourTalk();
+  check(
+    "the guard tower lists who asked whom, and each answer (newest first)",
+    talk.slice(0, 2).map((x) => [x.fromId, x.toId, x.question, x.answer]),
+    [
+      [cal.id, dot.id, "And the oars?", "Also in the shed."],
+      [cal.id, dot.id, "Where are the nets?", "In the shed by the pond."],
+    ],
+  );
 
   // The pair limit, and the other refusals (called directly: no model needed).
   const ctxCal = { agentId: cal.id, agentName: "Cal", conversationId: calChat };
@@ -677,6 +686,26 @@ async function main() {
   check("keepers spend their spare time at their building", (await econ.keeperDoors())[gus.id], "west-1");
   check("when the village runs short, morale dips", (await (await import("../src/lib/agent/morale")).villageMorale()).every((m) => m.reasons.includes("the village ran short of bread (−10)")), after.shortage > 0);
 
+  // --- new land, in rings (#105), and the tavern, shop and garden ---------------------------
+  check("the first ring has four plots", bld.plotsForLevel(0), ["north-1", "north-2", "west-1", "west-2"]);
+  check("no new land while a plot is free", (await power("propose_building", { kind: "land", reason: "x" })).includes("build on north-2 first"), true);
+  const tavern = (await (await buildingsRoute.POST(req("/api/buildings", "POST", { kind: "tavern", plotId: "north-2" }))).json()).building;
+  check("the owner builds a tavern", tavern.status, "building");
+  const landAsk = await power("propose_building", { kind: "land", reason: "Every plot is spoken for." });
+  check("with every plot taken, the Mayor proposes clearing the next ring", landAsk.startsWith("Proposed clearing new land (ring-1"), true);
+  check("…once at a time", (await power("propose_building", { kind: "land", reason: "x" })).includes("already being cleared"), true);
+  const landId = Number(/#(\d+)/.exec(landAsk)?.[1]);
+  await patchBuilding(landId, { action: "approve" });
+  check("approved, clearing takes a day", (await bld.listBuildings(new Date(Date.now() + 13 * 3600_000))).find((b) => b.id === landId)?.status, "building");
+  const dayLater = new Date(Date.now() + 25 * 3600_000);
+  await bld.listBuildings(dayLater);
+  const landState = await (await buildingsRoute.GET()).json();
+  check("…then the village reaches further, with four more plots", [landState.level, landState.plots.length, landState.plots.includes("north-3")], [1, 8, true]);
+  check("the second ring has its own plots", (await power("propose_building", { kind: "garden", plot: "west-3", reason: "Flowers." })).startsWith("Proposed a garden on the west-3 plot"), true);
+  const morale = await (await import("../src/lib/agent/morale")).villageMorale();
+  check("a tavern cheers everyone up", morale.every((m) => m.reasons.includes("the village has a tavern (+5)")), true);
+  check("every level of land has its map", (await import("../src/components/village/scenes")).VILLAGE_LEVELS.length, bld.MAX_VILLAGE_LEVEL + 1);
+
   // --- the outbox (#107) and the owner's calendar (#108) ---------------------------------
   const { drafts: draftsT } = await import("../src/db/schema");
   const draftRoute = await import("../src/app/api/drafts/[id]/route");
@@ -881,11 +910,14 @@ async function main() {
   await patchMeeting(echoMeet.meeting.id, { action: "ask", message: "Agreed?" });
   const echoed = await roundDone(echoMeet.meeting.id);
   check("a villager's echoed name is taken off their meeting answer", echoed.transcript.slice(1).every((t: { text: string }) => t.text === "I agree."), true);
-  fake.byAgent["Mayor Ada"] = [{ text: "We all agreed, briefly.\nIDEA: Paint the bridge red" }];
+  fake.byAgent["Mayor Ada"] = [{ text: "We all agreed, briefly.\nACTION: Cal: Fix the bridge rail\nACTION: Nobody: Count the lanterns\nIDEA: Paint the bridge red" }];
   await patchMeeting(echoMeet.meeting.id, { action: "close" });
   await settleTurns(echoMeet.meeting.id);
   const written = (await db.select().from(meetingsT).where(eq(meetingsT.id, echoMeet.meeting.id)))[0];
   check("when a meeting ends the Mayor writes it up for the records", written.summary, "We all agreed, briefly.");
+  check("…turns what was agreed into goals, on the villager's own board", (await db.select().from(goals).where(eq(goals.title, "Fix the bridge rail")))[0]?.agentId, cal.id);
+  check("…or the town's, if nobody by that name lives here", (await db.select().from(goals).where(eq(goals.title, "Count the lanterns")))[0]?.agentId, null);
+  check("…and keeps those lines out of the summary", written.summary?.includes("ACTION"), false);
   check("…and pins the ideas it raised", (await ideasLib.listIdeas()).some((i) => i.title === "Paint the bridge red" && i.proposedBy === mayor.id), true);
   check("past meetings show at the long table", (await (await meetingsRoute.GET()).json()).past.some((p: { summary: string | null }) => p.summary === "We all agreed, briefly."), true);
   await updateSettings({ bedtime: "22:00", wakeTime: "07:00" });
