@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { NextResponse } from "next/server";
 import { normalizeWorkspace, workspaceProblem } from "@/lib/agent/settingsValidation";
+import { networkDriveLetters } from "@/lib/agent/drives";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +24,15 @@ function listing(dir: string) {
     .slice(0, MAX_FOLDERS);
   const parent = path.dirname(dir);
   // The drives on Windows, so the owner can move between them.
-  const drives = process.platform === "win32" ? "CDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((l) => `${l}:\\`).filter((d) => fs.existsSync(d)) : [];
+  // Network drives are left out: they're never a workspace.
+  const network = networkDriveLetters();
+  const drives = process.platform === "win32" ? "CDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter((l) => !network.has(l)).map((l) => `${l}:\\`).filter((d) => fs.existsSync(d)) : [];
   return { path: dir, parent: parent === dir ? null : parent, folders, drives, home: os.homedir(), problem: workspaceProblem(dir), sep: path.sep };
 }
 
 function pathFrom(raw: string | null): string | { error: string } {
   const p = normalizeWorkspace(raw?.trim() || os.homedir());
-  if (remote(p)) return { error: "Network and device paths can't be browsed here." };
+  if (remote(p) || networkDriveLetters().has(p[0]?.toUpperCase())) return { error: "Network drives and paths can't be browsed here." };
   if (!path.isAbsolute(p)) return { error: "Give a full path." };
   return path.resolve(p);
 }

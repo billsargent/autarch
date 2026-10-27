@@ -2,6 +2,7 @@ import os from "node:os";
 import { parseHM } from "./daynight";
 import path from "node:path";
 import { PROJECT_ROOT } from "./config";
+import { networkDriveLetters } from "./drives";
 
 // Server-side checks for PUT /api/settings (#11). Every field has a type and a
 // range or allowed values, and the workspace must be a sensible folder: a
@@ -105,9 +106,10 @@ export function normalizeWorkspace(dir: string, platform: NodeJS.Platform = proc
 // Windows rules (#157): a drive path, not a drive's root, not inside the
 // system folders, not C:\Users itself or the home folder itself, and never a
 // network or device path. Case doesn't matter on Windows.
-function windowsWorkspaceProblem(dir: string, projectRoot: string, home: string): string | null {
+function windowsWorkspaceProblem(dir: string, projectRoot: string, home: string, network: Set<string>): string | null {
   const P = path.win32;
   if (!/^[a-zA-Z]:[\\/]/.test(dir)) return "On Windows, use a full drive path like D:\\agent-workspace.";
+  if (network.has(dir[0].toUpperCase())) return `${dir[0].toUpperCase()}: is a network drive; use a folder on a drive of this computer.`;
   const p = P.resolve(dir);
   const lower = p.toLowerCase();
   const rest = lower.slice(2);
@@ -127,7 +129,14 @@ function windowsWorkspaceProblem(dir: string, projectRoot: string, home: string)
   return null;
 }
 
-export function workspaceProblem(dir: string, projectRoot = PROJECT_ROOT, home = os.homedir(), platform: NodeJS.Platform = process.platform): string | null {
+// `network`: the drive letters that are network drives (drives.ts).
+export function workspaceProblem(
+  dir: string,
+  projectRoot = PROJECT_ROOT,
+  home = os.homedir(),
+  platform: NodeJS.Platform = process.platform,
+  network: Set<string> = networkDriveLetters(platform),
+): string | null {
   if (!dir.trim()) return "The workspace folder can't be empty.";
   dir = normalizeWorkspace(dir, platform);
   // Network and device paths (\\server\share, \\?\C:\, //server) never are.
@@ -135,7 +144,7 @@ export function workspaceProblem(dir: string, projectRoot = PROJECT_ROOT, home =
   // A drive path, or anything at all on Windows, is checked with the Windows
   // rules (#157). On Windows a path starting with / means "the current drive",
   // so it has to be written out.
-  if (platform === "win32" || /^[a-zA-Z]:/.test(dir)) return windowsWorkspaceProblem(dir, projectRoot, home);
+  if (platform === "win32" || /^[a-zA-Z]:/.test(dir)) return windowsWorkspaceProblem(dir, projectRoot, home, network);
   // Linux and macOS: the Linux rules.
   const P = dir.startsWith("/") ? path.posix : path;
   const within = (parent: string, child: string) => {

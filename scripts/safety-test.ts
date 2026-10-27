@@ -282,8 +282,9 @@ async function main() {
     check("workspace inside the framework is rejected", linux("/srv/autarch/ws") !== null);
     check("the default workspace is accepted", linux("/root/agent-workspace") === null);
     // Windows (#157): the same idea, with Windows' own system folders.
-    const win = (dir: string) => workspaceProblem(dir, String.raw`D:\Projects\autarch`, String.raw`C:\Users\owner`, "win32");
+    const win = (dir: string) => workspaceProblem(dir, String.raw`D:\Projects\autarch`, String.raw`C:\Users\owner`, "win32", new Set(["Z"]));
     const r = String.raw;
+    check("windows: a mapped network drive is rejected", win(r`Z:\agent-workspace`)?.includes("network drive") === true);
     check("windows: a drive's root is rejected", [win("C:\\"), win("D:/")].every((p) => p !== null));
     check("windows: system folders are rejected, any drive, any case", [win(r`C:\Windows\agent`), win("c:/program files/agent"), win(r`E:\Program Files (x86)`), win(r`C:\ProgramData\x`)].every((p) => p !== null));
     check("windows: C:\\Users itself and the home folder itself are rejected", [win(r`C:\Users`), win(r`c:\users\OWNER`)].every((p) => p !== null));
