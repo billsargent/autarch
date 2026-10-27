@@ -271,15 +271,47 @@ async function main() {
 
   // --- #11: settings are validated --------------------------------------------
   {
-    const { validateSettingsPatch, workspaceProblem } = await import("../src/lib/agent/settingsValidation");
+    const { validateSettingsPatch, workspaceProblem, normalizeWorkspace } = await import("../src/lib/agent/settingsValidation");
     const tools = ["read_file", "write_file"];
     const bad = (patch: Record<string, unknown>) => !validateSettingsPatch(patch, tools).ok;
-    check("workspace '/' is rejected (#11)", workspaceProblem("/", "/srv/autarch", "/root") !== null);
-    check("workspace inside /etc is rejected", workspaceProblem("/etc/agent", "/srv/autarch", "/root") !== null);
-    check("workspace = /root itself is rejected", workspaceProblem("/root", "/srv/autarch", "/root") !== null);
-    check("workspace containing the framework is rejected", workspaceProblem("/srv", "/srv/autarch", "/root") !== null);
-    check("workspace inside the framework is rejected", workspaceProblem("/srv/autarch/ws", "/srv/autarch", "/root") !== null);
-    check("the default workspace is accepted", workspaceProblem("/root/agent-workspace", "/srv/autarch", "/root") === null);
+    const linux = (dir: string) => workspaceProblem(dir, "/srv/autarch", "/root", "linux");
+    check("workspace '/' is rejected (#11)", linux("/") !== null);
+    check("workspace inside /etc is rejected", linux("/etc/agent") !== null);
+    check("workspace = /root itself is rejected", linux("/root") !== null);
+    check("workspace containing the framework is rejected", linux("/srv") !== null);
+    check("workspace inside the framework is rejected", linux("/srv/autarch/ws") !== null);
+    check("the default workspace is accepted", linux("/root/agent-workspace") === null);
+    // Windows (#157): the same idea, with Windows' own system folders.
+    const win = (dir: string) => workspaceProblem(dir, String.raw`D:\Projects\autarch`, String.raw`C:\Users\owner`, "win32", new Set(["Z"]));
+    const r = String.raw;
+    check("windows: a mapped network drive is rejected", win(r`Z:\agent-workspace`)?.includes("network drive") === true);
+    check("windows: a drive's root is rejected", [win("C:\\"), win("D:/")].every((p) => p !== null));
+    check("windows: system folders are rejected, any drive, any case", [win(r`C:\Windows\agent`), win("c:/program files/agent"), win(r`E:\Program Files (x86)`), win(r`C:\ProgramData\x`)].every((p) => p !== null));
+    check("windows: C:\\Users itself and the home folder itself are rejected", [win(r`C:\Users`), win(r`c:\users\OWNER`)].every((p) => p !== null));
+    check("windows: network and device paths are rejected", [win(r`\\server\share\ws`), win("//server/share"), win(r`\\?\C:\ws`)].every((p) => p !== null));
+    check("windows: the framework's own folder is off limits", [win(r`D:\Projects`), win(r`d:\projects\autarch\ws`)].every((p) => p !== null));
+    check("windows: a path starting with / must name its drive", win("/root/agent-workspace") !== null);
+    check("windows: a folder in the home folder, or on another drive, is fine", [win(r`C:\Users\owner\autarch-workspace`), win(r`D:\agent-workspace`)].every((p) => p === null));
+    check(
+      "windows: a Git Bash path is a drive path",
+      JSON.stringify([normalizeWorkspace("/d/agent-workspace", "win32"), win("/d/agent-workspace"), normalizeWorkspace("d:/ws/x", "win32")]) === JSON.stringify([r`D:\agent-workspace`, null, r`D:\ws\x`]),
+    );
+    check("…and nothing changes on Linux", normalizeWorkspace(" /d/agent-workspace ", "linux") === "/d/agent-workspace");
+
+    // The folder picker (#157): folder names only, never files; no network paths;
+    // a new folder only with a plain name, and only where a workspace could be.
+    const folders = await import("../src/app/api/fs/folders/route");
+    const pick = path.join(tmp, "picker");
+    fs.mkdirSync(path.join(pick, "alpha"), { recursive: true });
+    fs.writeFileSync(path.join(pick, "secret.txt"), "not for listing");
+    const seen = await (await folders.GET(new Request(`http://t/api/fs/folders?path=${encodeURIComponent(pick)}`))).json();
+    check("the picker lists folders, never files", JSON.stringify(seen.folders) === JSON.stringify(["alpha"]) && !JSON.stringify(seen).includes("secret"));
+    check("…and won't browse a network path", (await folders.GET(new Request(`http://t/api/fs/folders?path=${encodeURIComponent("//server/share")}`))).status === 400);
+    const mk = (body: unknown) => folders.POST(new Request("http://t/api/fs/folders", { method: "POST", body: JSON.stringify(body) }));
+    check("a new folder needs a plain name", (await mk({ path: pick, name: "../escape" })).status === 400 && !fs.existsSync(path.join(tmp, "escape")));
+    const made = await mk({ path: pick, name: "ws" });
+    check("…and is made where a workspace can be", made.status === 200 && fs.existsSync(path.join(pick, "ws")));
+    check("…but never inside the framework's own folder", (await mk({ path: process.cwd(), name: "ws-test" })).status === 400 && !fs.existsSync(path.join(process.cwd(), "ws-test")));
     check("negative step limits are rejected", bad({ maxAgentSteps: -1 }));
     check("unknown autonomy modes are rejected", bad({ autonomyMode: "godmode" }));
     check("unknown tools are rejected", bad({ enabledTools: ["read_file", "rm_rf"] }));

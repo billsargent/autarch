@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
 import { DEFAULT_ENABLED_TOOLS, DEFAULT_WORKSPACE_DIR, PROJECT_ROOT } from "./config";
+import { normalizeWorkspace } from "./settingsValidation";
 import { HIRING_TOOLS, MAYOR_TOOLS } from "./mayorTools";
 
 export type AgentSettingsRow = typeof agentSettings.$inferSelect;
@@ -69,6 +70,17 @@ export async function getSettings(): Promise<AgentSettingsRow> {
         .returning();
       cachedId = updated[0].id;
       migrateSkillsDirOnce(DEFAULT_WORKSPACE_DIR);
+      return ensureMessagingEnabled(updated[0]);
+    }
+    // On Windows, a workspace written Linux-style (/root/agent-workspace)
+    // meant that folder on the app's own drive: write it out as a drive path,
+    // the same folder (#157).
+    if (process.platform === "win32" && row.workspaceDir.startsWith("/")) {
+      const bash = normalizeWorkspace(row.workspaceDir, "win32");
+      const dir = bash.startsWith("/") ? path.resolve(row.workspaceDir) : bash;
+      const updated = await db.update(agentSettings).set({ workspaceDir: dir, updatedAt: new Date() }).where(eq(agentSettings.id, row.id)).returning();
+      cachedId = updated[0].id;
+      migrateSkillsDirOnce(dir);
       return ensureMessagingEnabled(updated[0]);
     }
     cachedId = row.id;
