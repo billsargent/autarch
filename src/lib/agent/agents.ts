@@ -3,6 +3,7 @@ import { agents, jobs } from "@/db/schema";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { calendarReaders, mailReaders } from "./mailAccess";
+import { assignHomes, dwellingsFor } from "./homes";
 import { isTradeKey } from "./trades";
 import { lifeSummary } from "./life";
 import { CHARACTER_KEYS, isCharacterKey, TRADE_LOOKS, VILLAGER_COLORS } from "./villagerLooks";
@@ -470,3 +471,19 @@ export async function budgetAlerts(now = new Date()): Promise<string[]> {
   }
   return sent;
 }
+
+// Gives everyone a home, storing only what changed. Cheap: the village calls
+// it whenever it lists the villagers.
+export function ensureHomes(): void {
+  try {
+    const max = (sqlite.prepare("SELECT max_population AS n FROM agent_settings LIMIT 1").get() as { n: number } | undefined)?.n ?? 8;
+    const houses = (sqlite.prepare("SELECT id FROM buildings WHERE kind = 'house' AND status = 'built' ORDER BY id").all() as Array<{ id: number }>).map((h) => h.id);
+    const villagers = sqlite.prepare("SELECT id, dwelling FROM agents WHERE status != 'dismissed'").all() as Array<{ id: number; dwelling: string | null }>;
+    const homes = assignHomes(villagers, dwellingsFor(max, houses));
+    const set = sqlite.prepare("UPDATE agents SET dwelling = ? WHERE id = ?");
+    for (const v of villagers) if ((homes.get(v.id) ?? null) !== v.dwelling) set.run(homes.get(v.id) ?? null, v.id);
+  } catch {
+    /* before the tables exist */
+  }
+}
+

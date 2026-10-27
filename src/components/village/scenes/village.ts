@@ -2,7 +2,7 @@
 // villagers walk to; buildings with a room open it, outdoor things (the notice
 // board) open their dialogs in place, and the rest link to their Command
 // Center page until their room is built.
-import { shiftLayout, type Rect, type SceneLayout } from "../scene";
+import { isPath, objectPlacements, shiftLayout, stampRect, type Rect, type SceneLayout, type StampId } from "../scene";
 
 // Roads are two tiles wide so the path edges render cleanly.
 const ROADS: Rect[] = [
@@ -109,6 +109,10 @@ const ORIGINAL: SceneLayout = {
     { id: "c", x: 20, y: 13.5 },
     { id: "bl", x: 3, y: 17 },
     { id: "cot", x: 7, y: 17 },
+    // Each cottage's own front path (#159): where its villagers go in.
+    { id: "cot1", x: 6, y: 17.6 },
+    { id: "cot2", x: 11, y: 17.6 },
+    { id: "cot3", x: 15.5, y: 17.6 },
     { id: "bc", x: 20, y: 17 },
     { id: "gt", x: 22.5, y: 17 },
     { id: "vlt", x: 29, y: 17 },
@@ -132,6 +136,9 @@ const ORIGINAL: SceneLayout = {
     ["tr", "br"],
     ["bl", "cot"],
     ["cot", "bc"],
+    ["cot", "cot1"],
+    ["cot", "cot2"],
+    ["cot2", "cot3"],
     ["bc", "gt"],
     ["gt", "vlt"],
     ["vlt", "obs"],
@@ -217,7 +224,7 @@ function villageAtLevel(level: number): SceneLayout {
   // Each plot's sign is drawn live by the village (#146): clickable, and gone
   // once something is built there.
 
-  return {
+  return countryside({
     ...moved,
     id: level === 0 ? "village" : `village-${level}`,
     paths: { ...moved.paths!, rects: [...moved.paths!.rects, NORTH_ROAD, WEST_ROAD] },
@@ -234,7 +241,83 @@ function villageAtLevel(level: number): SceneLayout {
       ...["wg", ...westChain, "tl"].slice(1).map((b, i, arr) => [i === 0 ? "wg" : arr[i - 1], b] as const),
     ],
     plots,
+  }, level, roadCol, roadRow, dr, dc);
+}
+
+// The countryside (#160): the land north-west of town, between the roads and
+// away from the plots, was bare grass. A lane loops through it from the north
+// road to the west road (between the rings of plots, so it never crosses
+// one), with a pond and a grove around it. Placed from a fixed seed, so the
+// art is the same every time it's built.
+function countryside(layout: SceneLayout, level: number, roadCol: number, roadRow: number, dr: number, dc: number): SceneLayout {
+  // The north-west corner, and the strip below the west road's plots.
+  const corner: Rect = { col: 0, row: 0, w: roadCol - 6, h: roadRow - 6 };
+  const south: Rect = { col: 0, row: roadRow + 8, w: dc - 1, h: layout.rows - roadRow - 8 };
+  const paths = [...layout.paths!.rects];
+  const walkable = [...layout.walkable];
+  if (level >= 1) {
+    // The free rows and columns between two rings of plots.
+    const r = Math.max(1, Math.ceil(level / 2));
+    const laneRow = dr - RING_ROWS * (r + 1) + 5;
+    let left = dc;
+    for (let i = 0; i <= r; i++) left -= ringCols(i);
+    const laneCol = left + 6;
+    const across: Rect = { col: laneCol, row: laneRow, w: roadCol - laneCol, h: 2 };
+    const down: Rect = { col: laneCol, row: laneRow, w: 2, h: roadRow - laneRow };
+    paths.push(across, down);
+    walkable.push(across, down);
+  }
+  const withLane: SceneLayout = { ...layout, paths: { ...layout.paths!, rects: paths }, walkable };
+
+  // Every tile already spoken for: scenery, buildings, roads, plots (and a
+  // tile round each), and the waypoints villagers stand on.
+  const taken = new Set<string>();
+  const mark = (r: Rect, pad = 0) => {
+    for (let c = r.col - pad; c < r.col + r.w + pad; c++) for (let row = r.row - pad; row < r.row + r.h + pad; row++) taken.add(`${c},${row}`);
   };
+  for (const { p } of objectPlacements(withLane)) mark(stampRect(p));
+  for (const pl of withLane.plots ?? []) mark(pl, 1);
+  for (const w of withLane.waypoints) taken.add(`${Math.floor(w.x)},${Math.floor(w.y)}`);
+  const within = (r: Rect, a: Rect) => r.col >= a.col && r.row >= a.row && r.col + r.w <= a.col + a.w && r.row + r.h <= a.row + a.h;
+  const free = (r: Rect) => {
+    if (!within(r, corner) && !within(r, south)) return false;
+    for (let c = r.col; c < r.col + r.w; c++) for (let row = r.row; row < r.row + r.h; row++) if (taken.has(`${c},${row}`) || isPath(withLane, c, row)) return false;
+    return true;
+  };
+  let seed = 160 + level * 7919;
+  const rng = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const extra: NonNullable<SceneLayout["decor"]> = [];
+  const place = (stamp: StampId, col: number, row: number) => {
+    const p = { stamp, col, row };
+    const r = stampRect(p);
+    if (!free(r)) return false;
+    mark(r, stamp === "svPond" ? 1 : 0);
+    extra.push(p);
+    return true;
+  };
+  // A pond, somewhere near the middle of the corner.
+  const mid = { col: Math.floor(corner.w / 3), row: Math.floor(corner.h / 3) };
+  for (let i = 0; i < 40 && !place("svPond", mid.col + Math.floor(rng() * 8) - 4, mid.row + Math.floor(rng() * 6) - 3); i++);
+  // The grove: trees on a loose grid, flowers and bushes between.
+  const trees: StampId[] = ["svTree", "pineTree", "roundTree", "leafyTree", "pineTree"];
+  for (const [area, density] of [[corner, 0.42], [south, 0.3]] as const) {
+    for (let row = area.row; row < area.row + area.h; row += 3) {
+      for (let col = area.col; col < area.col + area.w; col += 3) {
+        const roll = rng();
+        const c = col + Math.floor(rng() * 2);
+        const r = row + Math.floor(rng() * 2);
+        if (roll < density) place(trees[Math.floor(rng() * trees.length)], c, r);
+        else if (roll < density + 0.1) place("svFlowersPatch", c, r);
+        else if (roll < density + 0.18) place("svBush", c, r);
+      }
+    }
+  }
+  return { ...withLane, decor: [...(withLane.decor ?? []), ...extra] };
 }
 
 // Every level of the village, 0 (the first ring) to MAX_VILLAGE_LEVEL.

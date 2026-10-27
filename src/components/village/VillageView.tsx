@@ -183,6 +183,8 @@ export default function VillageView() {
   }
 
   // Where each villager is headed, and what the village shows of them.
+  // Each villager's own front door (#159): their cottage, or their house on the plots.
+  const doorOf = (dwelling: string | null | undefined) => dwellingDoor(dwelling, scene, buildings.state);
   const plans = villagers.map((v) => {
     const mood = villagerMood(snapshotOf(v, data.paused, night));
     const home = scene.places.find((p) => p.id === MOOD_PLACE[mood]) ?? scene.places[0];
@@ -190,8 +192,18 @@ export default function VillageView() {
     // them (#132): at work, the tavern, the plaza, a friend's, or home.
     const living = mood === "idle" && v.life ? lifeSpot(v.life, scene, buildings.state) : null;
     const stroll = mood === "idle" && !v.life ? strolls[v.id] : null;
-    const target = living ?? stroll ?? home.door;
-    return { v, mood, target, strolling: mood === "idle" && !v.life && target !== home.door };
+    // Asleep or at home, they go in at their own door; at the tavern or a
+    // friend's, in at that door (#159).
+    const place = mood === "idle" ? v.life?.place : null;
+    const friend = place === "visit" && v.life?.withId != null ? villagers.find((o) => o.id === v.life!.withId) : null;
+    const indoors =
+      mood === "asleep" || place === "home"
+        ? doorOf(v.dwelling)
+        : place === "visit"
+          ? doorOf(friend?.dwelling)
+          : place === "tavern" && plotDoor("tavern", scene, buildings.state);
+    const target = indoors || living || stroll || home.door;
+    return { v, mood, target, inside: Boolean(indoors), strolling: mood === "idle" && !v.life && target !== home.door };
   });
   // A villager asking a neighbour something walks over to them (#57).
   for (const p of plans) {
@@ -199,6 +211,7 @@ export default function VillageView() {
     if (other && !p.v.working && p.mood !== "asleep") {
       p.target = other.target;
       p.strolling = false;
+      p.inside = other.inside;
     }
   }
   const offsets = standOffsets(plans.map((p) => p.target));
@@ -206,13 +219,13 @@ export default function VillageView() {
   // shown over the first of them (#132).
   const lifeLine = (i: number): string | null => {
     const { v, mood, target } = plans[i];
-    if (mood !== "idle" || !v.life || v.life.place === "home") return null;
+    if (mood !== "idle" || !v.life || v.life.place === "home" || plans[i].inside) return null;
     const group = plans.filter((p) => p.mood === "idle" && p.target === target && p.v.life && p.v.life.place === v.life!.place);
     if (group[0].v.id !== v.id) return null;
     const icon = PLACE_ICON[v.life.place] ?? v.life.icon;
     return group.length > 1 ? `${icon} ${group.length} ${PLACE_GROUP[v.life.place] ?? `together: ${v.life.activity}`}` : `${icon} ${v.life.activity}`;
   };
-  const specs: VillagerSpec[] = plans.map(({ v, mood, target, strolling }, i) => ({
+  const specs: VillagerSpec[] = plans.map(({ v, mood, target, strolling, inside }, i) => ({
     id: `agent-${v.id}`,
     name: v.name,
     color: v.color,
@@ -231,6 +244,7 @@ export default function VillageView() {
             ? `👋 Hello! I'm ${v.name}, new in town.`
             : lifeLine(i),
     asleep: mood === "asleep",
+    inside,
     hint:
       v.id === talkKeyTarget ? (
         <>
@@ -243,7 +257,7 @@ export default function VillageView() {
   const summary = data.paused
     ? "❄ Everyone is paused — nothing runs until you resume."
     : night && plans.every((p) => p.mood === "asleep")
-      ? `🌙 The village is asleep until ${data.wakeTime}. You can still knock and talk.`
+      ? `🌙 The village is asleep until ${data.villageClock === "own" ? "morning" : data.wakeTime}. You can still knock and talk.`
       : plans.length === 0
       ? "The village is quiet."
       : plans.length === 1
@@ -279,11 +293,13 @@ export default function VillageView() {
         key={scene.id}
         scene={scene}
         player={player}
+        startZoom={1.6}
         overlays={
           <>
             <PlotBuildings scene={scene} state={buildings.state} onOpen={openBuilding} />
             <Animals animals={villageAnimals(scene, buildings.state)} />
             <PlotSigns scene={scene} state={buildings.state} onOpen={(id) => openAction(`plot.${id}`)} />
+            <IndoorBadges scene={scene} plans={plans} onOpen={(href) => router.push(href)} tavernDoor={plotDoor("tavern", scene, buildings.state)} />
             {(phase === "dusk" || phase === "night") && !data.paused && <LitWindows level={level} scene={scene} plots={buildings.state} />}
           </>
         }
@@ -373,6 +389,72 @@ function lifeSummaryLine(vs: Array<{ name: string; life?: VillagerLife | null }>
     })
     .join(" · ");
 }
+// The door of a villager's home (#159): a cottage's front path, or the door of
+// their house on the plots.
+function dwellingDoor(dwelling: string | null | undefined, scene: SceneManifest, state: ReturnType<typeof useBuildings>["state"]): string | null {
+  if (!dwelling) return null;
+  const cottage = /^cottage-(\d+)$/.exec(dwelling);
+  if (cottage) return scene.waypoints.some((w) => w.id === `cot${cottage[1]}`) ? `cot${cottage[1]}` : null;
+  const house = /^house-(\d+)$/.exec(dwelling);
+  const b = house ? state?.buildings.find((x) => x.id === Number(house[1]) && x.status === "built") : undefined;
+  return b ? (scene.plots.find((p) => p.id === b.plotId)?.door ?? null) : null;
+}
+
+// The door of a standing building on the plots, by kind.
+function plotDoor(kind: string, scene: SceneManifest, state: ReturnType<typeof useBuildings>["state"]): string | null {
+  const b = state?.buildings.find((x) => x.kind === kind && x.status === "built");
+  return b ? (scene.plots.find((p) => p.id === b.plotId)?.door ?? null) : null;
+}
+
+// Who's gone in at each door (#159), on a small sign there: 💤 at home, 🍺 at
+// the tavern, 🫖 visiting. Click it to go in.
+function IndoorBadges({
+  scene,
+  plans,
+  tavernDoor,
+  onOpen,
+}: {
+  scene: SceneManifest;
+  plans: Array<{ v: { id: number; name: string; dwelling?: string | null; life?: VillagerLife | null }; mood: string; target: string; inside: boolean }>;
+  tavernDoor: string | null;
+  onOpen: (href: string) => void;
+}) {
+  const doors = new Map<string, typeof plans>();
+  for (const p of plans) if (p.inside) doors.set(p.target, [...(doors.get(p.target) ?? []), p]);
+  return (
+    <>
+      {[...doors.entries()].map(([door, here]) => {
+        const w = scene.waypoints.find((x) => x.id === door);
+        if (!w) return null;
+        const tavern = door === tavernDoor;
+        const asleep = here.every((p) => p.mood === "asleep");
+        const icon = tavern ? "🍺" : asleep ? "💤" : here.some((p) => p.v.life?.place === "visit") ? "🫖" : "🏠";
+        const names = here.map((p) => p.v.name).join(", ");
+        // A cottage's or house's door leads to the home of whoever lives there.
+        const resident = here.find((p) => p.mood === "asleep" || p.v.life?.place === "home") ?? here[0];
+        const host = resident.v.life?.place === "visit" && resident.v.life.withId != null ? resident.v.life.withId : resident.v.id;
+        const href = tavern ? "/village/tavern" : `/village/cottage?agent=${host}`;
+        return (
+          <button
+            key={door}
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen(href);
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            title={`${tavern ? "At the tavern" : asleep ? "Asleep inside" : "Indoors"}: ${names}`}
+            aria-label={`${tavern ? "At the tavern" : asleep ? "Asleep inside" : "Indoors"}: ${names}`}
+            className="village-sign absolute -translate-x-1/2 -translate-y-full px-2 py-0.5 text-[22px]"
+            style={{ left: w.x, top: w.y - 8 }}
+          >
+            {icon} {here.length}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
 function lifeSpot(life: VillagerLife, scene: SceneManifest, state: ReturnType<typeof useBuildings>["state"]): string | null {
   const has = (w: string) => scene.waypoints.some((p) => p.id === w);
   const doorOf = (kind: string | null) => {

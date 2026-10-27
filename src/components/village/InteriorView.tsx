@@ -94,7 +94,14 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
   const plot = plotKind ? plots?.buildings.find((b) => b.kind === plotKind && b.status === "built") : undefined;
   const here = plotKind
     ? moods.filter(({ v, mood }) => mood === "idle" && insidePlot(plotKind, v.life))
-    : moods.filter(({ v, mood }) => building && MOOD_PLACE[mood] === building.id && (!isCottage || v.id === owner?.id));
+    : isCottage
+      ? // At home (#159): its owner asleep or at home, and any friend visiting them.
+        moods.filter(
+          ({ v, mood }) =>
+            (v.id === owner?.id && (mood === "asleep" || (mood === "idle" && (!v.life || v.life.place === "home")))) ||
+            (mood === "idle" && v.life?.place === "visit" && v.life.withId === owner?.id),
+        )
+      : moods.filter(({ v, mood }) => building && MOOD_PLACE[mood] === building.id);
   const atWork = (life: VillagerLife | null | undefined) => Boolean(plotKind && life?.place === "work" && WORK_SPOT[plotKind]);
   const away = owner && !here.some((h) => h.v.id === owner.id) ? moods.find((m) => m.v.id === owner.id) : null;
 

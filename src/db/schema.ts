@@ -42,6 +42,8 @@ export const agents = sqliteTable("agents", {
   // Their own day split (#130); empty = the town's.
   lifeBalance: text("life_balance", { enum: ["idle", "hours", "balanced"] }),
   workShare: integer("work_share"),
+  // Where they live (#159): "cottage-1".."cottage-3", or "house-<building id>".
+  dwelling: text("dwelling"),
   // Limits (#60); empty = no cap of its own.
   dailyBudgetUsd: real("daily_budget_usd"),
   maxActionsPerHour: integer("max_actions_per_hour"),
