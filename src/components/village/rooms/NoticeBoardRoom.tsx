@@ -10,6 +10,7 @@ import type { AgentRow } from "@/lib/agent/clientTypes";
 import IdeasBoard from "./IdeasBoard";
 import MoraleBoard from "./MoraleBoard";
 import Chronicle from "./Chronicle";
+import { ComingUp } from "./VillageCalendar";
 import type { RoomProps } from "./types";
 
 // The notice board in the village square: goals are notes pinned to it.
@@ -172,6 +173,7 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
         </>
       }
     >
+      <ComingUp />
       <Notices byId={byId} />
       <p className="mb-3 text-xs text-[#6b4a2e]">
         Goals the agent works toward. It reads the board at the start of every work window and picks what to do from it,

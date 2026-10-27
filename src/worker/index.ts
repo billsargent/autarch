@@ -157,6 +157,18 @@ async function runDueJobs() {
     console.error(`[worker] the day's economy failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  // The village calendar (#173): a meeting held when its time comes, and the
+  // copy on the owner's Google calendar kept up to date.
+  try {
+    const cal = await import("@/lib/agent/villageCalendar");
+    const met = await cal.calendarTick();
+    if (met) console.log(`[worker] the village meets, as the calendar says: ${met}`);
+    const synced = await cal.syncToGoogle();
+    if (synced) console.log(`[worker] ${synced} calendar change(s) copied to Google`);
+  } catch (err) {
+    console.error(`[worker] calendar round failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // Once a day, the village votes on the oldest open idea (#98).
   try {
     const voted = await (await import("@/lib/agent/ideas")).dailyVote();

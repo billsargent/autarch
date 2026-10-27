@@ -98,6 +98,7 @@ export async function PUT(req: Request) {
     "spendCeilingUsd",
     "searchApiKey",
     "searxngUrl",
+    "marketDay",
     "bedtime",
     "wakeTime",
     "hiringMode",
@@ -123,6 +124,9 @@ export async function PUT(req: Request) {
   }
   if (checked.ok && typeof checked.patch.searxngUrl === "string" && checked.patch.searxngUrl && !/^https?:\/\//i.test(checked.patch.searxngUrl)) {
     return NextResponse.json({ error: "searxngUrl: must be an http:// or https:// address." }, { status: 400 });
+  }
+  if (checked.ok && checked.patch.marketDay != null && !Number.isInteger(checked.patch.marketDay)) {
+    return NextResponse.json({ error: "marketDay: a day of the week, 0 (Sunday) to 6 (Saturday)." }, { status: 400 });
   }
   if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
   // Going away starts the away-mode spend count afresh (#102).

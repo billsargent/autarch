@@ -2,6 +2,7 @@ import { sqlite } from "@/db";
 import { BUILDING_KINDS, isBuildingKind, listBuildings } from "./buildings";
 import { getEconomy } from "./economy";
 import { listOrders } from "./orders";
+import { calendarLines } from "./villageCalendar";
 import { GOOD_LABEL, GOODS, TRADES, tradeOf } from "./trades";
 
 // THE VILLAGE TODAY (#151): the plain facts about the village, in every
@@ -58,6 +59,7 @@ export async function villageFacts(now = new Date(), mayor = false): Promise<str
     `- In the stores: ${goods}. Treasury: ${stock.treasury} coins.`,
     `- Orders from other towns: ${orderText.length ? orderText.join("; ") : "none open"}.`,
     news.length ? `- Lately: ${news.join(" ")}` : "",
+    ...calendarLines(now),
     mayor ? conductLine(now) : "",
     "- If something isn't listed here, the village doesn't have it. Don't invent prices, dates, harvests, suppliers or trade the village doesn't have; say you don't know.",
   ]

@@ -13,6 +13,8 @@ interface GoogleState {
   googleConnected: boolean;
   googleAccount: string;
   googleCalendarId: string;
+  villageCalendarId: string;
+  villageCalendarName: string;
   googleCalendarName: string;
   readers: number[];
   redirectUri: string;
@@ -82,6 +84,28 @@ export default function GoogleCalendar({ onChange }: { onChange: () => void }) {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="mt-1.5 block font-semibold">
+            Copy the village calendar to
+            <select
+              name="villageCalendarId"
+              value={g.villageCalendarId}
+              onChange={(e) => void call("PUT", { villageCalendarId: e.target.value, villageCalendarName: g.calendars.find((k) => k.id === e.target.value)?.summary ?? "" })}
+              className={input}
+            >
+              <option value="">Don&apos;t copy it</option>
+              {g.villageCalendarId && !g.calendars.some((k) => k.id === g.villageCalendarId) && <option value={g.villageCalendarId}>{g.villageCalendarName || g.villageCalendarId}</option>}
+              {g.calendars.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.summary}
+                  {k.primary ? " (your main calendar)" : ""}
+                </option>
+              ))}
+            </select>
+            <span className="mt-0.5 block font-normal text-[#6b4a2e]">
+              Festivals, meetings and the rest are added there as they&apos;re planned, and taken off when cancelled. Make a calendar called
+              &quot;Village&quot; in Google Calendar first if you&apos;d like them kept apart from your own.
+            </span>
           </label>
           <button onClick={() => void call("DELETE")} className="mt-1.5 text-[11px] underline">
             Disconnect Google

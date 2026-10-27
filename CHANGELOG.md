@@ -3,6 +3,27 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — The village calendar
+
+- **A shared calendar** of what's coming up: market days, meetings, festivals, work days, votes
+  and deliveries. It keeps your real dates and times, so it lines up with your own calendar.
+- **Where events come from:**
+  - **The Mayor:** `add_event` and `cancel_event`, a few a day.
+  - **Adopted ideas:** an idea can carry a date (`propose_idea` with `when`). Adopted, it goes on
+    the calendar; your veto takes it off.
+  - **You:** add and remove events on the wall calendar.
+  - **By themselves:** a weekly market day (Saturday unless you choose another day or none) and
+    the deliveries due on accepted orders.
+- **A meeting on the calendar is held by itself** when its time comes, as if the Mayor called it.
+  One missed by hours (the app was off) is let go.
+- **Everyone knows:** THE VILLAGE TODAY now says today's date and the week ahead, and every
+  villager has `village_calendar` to read further (added once to villagers with a tool list of
+  their own).
+- **Where it shows:** the wall calendar in your home (the whole calendar, adding, removing and the
+  market day) and the notice board ("Coming up this week"). A dated idea shows its date there.
+- **Google, if you like:** at the post office's calendar desk, choose a Google calendar to copy it
+  to. New events are added there and cancelled ones taken off, one way, by the worker.
+
 ## 2026-10-28 — Deep dives, report formats, a markdown reader, and pictures that fit
 
 - **A deep dive** at the research desk: 6–8 questions, twice the steps for each, and a second round

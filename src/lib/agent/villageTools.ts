@@ -20,6 +20,19 @@ export interface VillageTool {
 const mayor = (tool: string) => async (args: Record<string, unknown>, ctx?: ToolContext) => (await import("./mayor")).runMayorTool(tool, args, ctx);
 
 export const VILLAGE_TOOLS: Record<string, VillageTool> = {
+  // The village calendar (#173): anyone can read it.
+  village_calendar: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "village_calendar",
+        description: "Read the village calendar: market days, meetings, festivals, work days, votes and deliveries coming up. THE VILLAGE TODAY already shows the next week.",
+        parameters: { type: "object", properties: { days: { type: "number", description: "How many days ahead (1-60). Default 14." } } },
+      },
+    },
+    risk: { risk: "low", reason: "Reads the village calendar." },
+    run: async (args) => (await import("./villageCalendar")).villageCalendarTool(args),
+  },
   // Talking to neighbours (#57).
   ask_villager: {
     definition: {
@@ -272,6 +285,43 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
     risk: { risk: "medium", reason: "The Mayor calling a town meeting: a turn for every villager, within the meeting's cost cap." },
     run: mayor("call_meeting"),
   },
+  // The village calendar (#173): the Mayor adds and takes off events.
+  add_event: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "add_event",
+        description:
+          "Mayor only. Put an event on the village calendar: a festival, a work day, a vote, or a meeting planned for later (the village meets by itself at that time). Everyone sees the week ahead. Dates are the owner's (see THE VILLAGE TODAY for today's).",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "What it is, in a few words." },
+            kind: { type: "string", enum: ["meeting", "vote", "festival", "workday", "other"] },
+            when: { type: "string", description: 'A date, "2026-11-07" (all day), or a date and time, "2026-11-07 10:00". "tomorrow 10:00" works too. A meeting needs a time.' },
+            end: { type: "string", description: "Optional: when it ends, in the same form." },
+            place: { type: "string", description: "Optional: where, e.g. the town hall or the square." },
+            notes: { type: "string", description: "Optional: a sentence about it; for a meeting, what it's about." },
+          },
+          required: ["title", "kind", "when"],
+        },
+      },
+    },
+    risk: { risk: "low", reason: "Adds an event to the village calendar; nothing leaves the village unless the owner copies it to Google." },
+    run: mayor("add_event"),
+  },
+  cancel_event: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "cancel_event",
+        description: "Mayor only. Take an event off the village calendar, by its number. Not one the village voted for.",
+        parameters: { type: "object", properties: { event: { type: "number", description: "The event's number." } }, required: ["event"] },
+      },
+    },
+    risk: { risk: "low", reason: "Takes an event off the village calendar." },
+    run: mayor("cancel_event"),
+  },
   call_vote: {
     definition: {
       type: "function" as const,
@@ -437,6 +487,7 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
           properties: {
             title: { type: "string", description: "The idea, in a few words." },
             body: { type: "string", description: "Why it's worth doing and roughly how, in a few sentences." },
+            when: { type: "string", description: 'For an event (a festival, a work day, a fair): when, as "2026-11-07" or "2026-11-07 18:00". If adopted, it goes on the village calendar.' },
           },
           required: ["title"],
         },

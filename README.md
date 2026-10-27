@@ -40,6 +40,10 @@ call risk-checked, and anything risky waiting for your approval.
 - **Villagers talk to each other.** A villager can ask a neighbour a question or hand off a
   job; the neighbour answers in their own time and on their own budget. Every exchange is
   listed in the guard tower.
+- **A village calendar.** Market days, meetings, festivals, work days and deliveries, shared by
+  everyone: the Mayor adds events, dated ideas go on it when adopted, and a meeting on it is held
+  by itself when its time comes. It's on your wall calendar and the notice board, every villager
+  sees the week ahead, and it can be copied to a Google calendar of your choice.
 - **Letters.** Villagers write each other letters for things that can wait. A letter waits in
   the neighbour's mailbox until they read and answer it in their own time. You can read every
   letter at the post office's letter rack, or one villager's in their cottage.
@@ -168,6 +172,7 @@ tools each villager has is set in the Mayor's ledger, within the town's tool pol
 | `manage_goal` / `list_goals` | Their goals board and notes | low |
 | `message_owner` | A letter to you (in your mailbox) | low |
 | `ask_villager` | Ask a neighbour something | low |
+| `village_calendar` | Read the village calendar (everyone); the Mayor also has `add_event` / `cancel_event` | low |
 | `write_letter` / `read_letters` | Write a neighbour a letter / open their own mailbox (also in their own time) | low |
 | `read_email` | Read your inbox, read-only (only villagers you pick, Mayor's ledger → Email) | low |
 | `propose_idea` / `save_draft` / `note_about` | Pin an idea for a vote / draft outward work for you to send / a note about a neighbour | low |

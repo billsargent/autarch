@@ -236,6 +236,9 @@ export const ideas = sqliteTable("ideas", {
   decidedBy: text("decided_by"),
   // A conduct vote (#153): about whom, and what happens if it passes.
   conduct: text("conduct", { mode: "json" }),
+  // An idea that's an event (#173): when; adopted, it goes on the calendar.
+  eventAt: integer("event_at", { mode: "timestamp" }),
+  eventAllDay: integer("event_all_day", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   decidedAt: integer("decided_at", { mode: "timestamp" }),
 });
@@ -351,6 +354,9 @@ export const calendarSettings = sqliteTable("calendar_settings", {
   googleAccount: text("google_account"),
   googleCalendarId: text("google_calendar_id"),
   googleCalendarName: text("google_calendar_name"),
+  // Where the village calendar is copied (#173), one way; empty = not copied.
+  villageCalendarId: text("village_calendar_id"),
+  villageCalendarName: text("village_calendar_name"),
   readers: text("readers", { mode: "json" }).notNull().default(sql`'[]'`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
 });
@@ -550,6 +556,9 @@ export const agentSettings = sqliteTable("agent_settings", {
   // the page or the model) and the owner's own SearXNG address.
   searchApiKey: text("search_api_key"),
   searxngUrl: text("searxng_url"),
+  // The weekly market day on the village calendar (#173): 0 = Sunday … 6 =
+  // Saturday; empty = none.
+  marketDay: integer("market_day").default(6),
   // Day and night (#100): local "HH:MM". At night no autonomous work starts.
   bedtime: text("bedtime").notNull().default("22:00"),
   // How the day splits between computer work and village life (#130):

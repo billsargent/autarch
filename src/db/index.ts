@@ -444,6 +444,9 @@ if (!globalForDb.__agentLabSqlite) {
     readers TEXT NOT NULL DEFAULT '[]',
     updated_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`);
+  for (const col of ["village_calendar_id", "village_calendar_name"]) {
+    if (!existingCols("calendar_settings").includes(col)) sqlite.exec(`ALTER TABLE calendar_settings ADD COLUMN ${col} TEXT`);
+  }
   for (const [col, def] of [
     ["from_name", "TEXT"],
     ["footer", "INTEGER NOT NULL DEFAULT 0"],
@@ -500,6 +503,9 @@ if (!globalForDb.__agentLabSqlite) {
   )`);
   // A conduct vote's subject and outcome (#153).
   if (!existingCols("ideas").includes("conduct")) sqlite.exec("ALTER TABLE ideas ADD COLUMN conduct TEXT");
+  // An idea that's an event (#173).
+  if (!existingCols("ideas").includes("event_at")) sqlite.exec("ALTER TABLE ideas ADD COLUMN event_at INTEGER");
+  if (!existingCols("ideas").includes("event_all_day")) sqlite.exec("ALTER TABLE ideas ADD COLUMN event_all_day INTEGER NOT NULL DEFAULT 0");
   // Ideas a meeting's write-up pinned were once recorded as the Mayor's (#147).
   sqlite.exec("UPDATE ideas SET proposed_by = NULL WHERE body LIKE 'Raised at town meeting%' AND proposed_by IS NOT NULL");
   sqlite.exec(`CREATE TABLE IF NOT EXISTS votes (
@@ -579,6 +585,7 @@ if (!globalForDb.__agentLabSqlite) {
     ["spend_ceiling_usd", "REAL"],
     ["search_api_key", "TEXT"],
     ["searxng_url", "TEXT"],
+    ["market_day", "INTEGER DEFAULT 6"],
   ] as const) {
     if (!existingCols("agent_settings").includes(col)) sqlite.exec(`ALTER TABLE agent_settings ADD COLUMN ${col} ${def}`);
   }
