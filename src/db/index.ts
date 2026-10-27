@@ -574,6 +574,7 @@ if (!globalForDb.__agentLabSqlite) {
     ["thinking_for", "TEXT NOT NULL DEFAULT 'work'"],
     ["talk_temperature", "REAL NOT NULL DEFAULT 0.7"],
     ["flaws_allowed", "TEXT NOT NULL DEFAULT 'one'"],
+    ["library_readers", "TEXT NOT NULL DEFAULT '[]'"],
   ] as const) {
     if (!existingCols("agent_settings").includes(col)) sqlite.exec(`ALTER TABLE agent_settings ADD COLUMN ${col} ${def}`);
   }

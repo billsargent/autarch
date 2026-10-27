@@ -12,3 +12,7 @@ export const DB_FILES = [DB_PATH, `${DB_PATH}-wal`, `${DB_PATH}-shm`];
 
 // The dashboard password hash and session secret (src/lib/auth.ts).
 export const AUTH_FILE = path.join(path.dirname(DB_PATH), "auth.json");
+
+// The library's shelves (#169): next to the database, outside the villagers'
+// workspace, and protected like it.
+export const LIBRARY_DIR = path.join(path.dirname(DB_PATH), "library");

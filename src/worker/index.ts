@@ -165,6 +165,19 @@ async function runDueJobs() {
     console.error(`[worker] daily vote failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  // The research desk (#170): one turn of a commissioned project at a time,
+  // only while nothing else is running; its own budget, not the daily caps.
+  try {
+    const idle = !(await db.select({ id: workSessions.id }).from(workSessions).where(eq(workSessions.status, "running")).limit(1)).length;
+    if (idle) {
+      const { researchTick } = await import("@/lib/agent/research");
+      const { runAgentTurn } = await import("@/lib/agent/runner");
+      if (await researchTick((o) => runAgentTurn(o))) console.log("[worker] the research desk took a step");
+    }
+  } catch (err) {
+    console.error(`[worker] research failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // Jobs of villagers who are resting (paused) or have left wait.
   const working = new Set(
     (await db.select({ id: agents.id }).from(agents).where(eq(agents.status, "active"))).map((a) => a.id),

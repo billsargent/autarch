@@ -1,6 +1,6 @@
 // What starts a turn: the one list (schema, runner, turn lock, prompt and the
 // browser all use it). Add a new kind of turn here only.
-export const SESSION_TRIGGERS = ["chat", "approval", "scheduled", "report", "message", "interview", "meeting", "review", "vote", "life"] as const;
+export const SESSION_TRIGGERS = ["chat", "approval", "scheduled", "report", "message", "interview", "meeting", "review", "vote", "life", "research"] as const;
 
 export type SessionTrigger = (typeof SESSION_TRIGGERS)[number];
 

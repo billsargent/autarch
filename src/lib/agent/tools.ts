@@ -12,6 +12,7 @@ import { DB_PATH } from "@/db/path";
 import { agents, journalEntries, jobs, goals, notifications, conversations, messages } from "@/db/schema";
 import { VILLAGE_TOOLS } from "./villageTools";
 import { LIFE_TOOLS, LIFE_TOOL_NAMES } from "./lifeTools";
+import { RESEARCH_TOOLS, RESEARCH_TOOL_NAMES } from "./researchTools";
 import { IS_WINDOWS, SHELL, SHELL_NAME, notOnThisSystem, toolWorksHere } from "./host";
 import { eq, asc, desc, and, or, isNull, ne, sql as dsql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
@@ -410,6 +411,11 @@ export function lifeToolDefinitions() {
   return [...Object.values(LIFE_TOOLS).map((t) => t.definition), ...CORE_TOOL_DEFINITIONS.filter((t) => LIFE_TOOL_NAMES.includes(t.function.name))];
 }
 
+// A research turn (#170): searching, reading pages and the research desk's tools.
+export function researchToolDefinitions() {
+  return [...Object.values(RESEARCH_TOOLS).map((t) => t.definition), ...CORE_TOOL_DEFINITIONS.filter((t) => RESEARCH_TOOL_NAMES.includes(t.function.name))];
+}
+
 // Linux-only tools (apt, systemctl, scrot) are left out on other systems.
 export function getEnabledToolDefinitions(enabledTools: string[]) {
   return ALL_TOOL_DEFINITIONS.filter((t) => enabledTools.includes(t.function.name) && toolWorksHere(t.function.name));
@@ -427,7 +433,7 @@ export function evaluateToolRisk(
   const extraProtected = (settings.extraProtectedPaths as string[]) || [];
   const overrides = buildOverrides(settings);
   // The village's own tools carry their risk with them (villageTools.ts).
-  const village = VILLAGE_TOOLS[tool] ?? LIFE_TOOLS[tool];
+  const village = VILLAGE_TOOLS[tool] ?? LIFE_TOOLS[tool] ?? RESEARCH_TOOLS[tool];
   if (village) return village.risk;
   switch (tool) {
     case "run_shell_command":
@@ -541,7 +547,7 @@ export async function executeTool(
   ensureWorkspace(path.join(settings.workspaceDir, "screenshots"));
   ensureWorkspace(path.join(settings.workspaceDir, "notes"));
 
-  const village = VILLAGE_TOOLS[tool] ?? LIFE_TOOLS[tool];
+  const village = VILLAGE_TOOLS[tool] ?? LIFE_TOOLS[tool] ?? RESEARCH_TOOLS[tool];
   if (village) return village.run(args, ctx);
   switch (tool) {
     case "run_shell_command":
@@ -1308,28 +1314,45 @@ async function webSearch(args: Record<string, unknown>) {
   const query = String(args.query || "").trim();
   if (!query) return { output: "No search query provided.", summary: "web search (empty query)" };
   const maxResults = Math.min(Math.max(Number(args.maxResults) || 5, 1), 10);
+  const show = (items: Array<{ title: string; url: string; description?: string }>, from: string) => ({
+    output: truncate(`${from} for "${query}":\n\n${items.map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description || "(no description)"}`).join("\n\n")}`),
+    summary: `web search "${query}" (${items.length} results)`,
+  });
+  let failure: string;
   try {
     // Dynamic import so the module doesn't break if duck-duck-scrape isn't installed.
     const { search } = await import("duck-duck-scrape");
     const results = await search(query, { safeSearch: 0 });
     const items = results.results.slice(0, maxResults);
-    if (!items.length) {
-      return { output: `No results found for "${query}".`, summary: `web search "${query}" (0 results)` };
-    }
-    const formatted = items
-      .map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}\n   ${r.description || "(no description)"}`)
-      .join("\n\n");
-    return {
-      output: truncate(`Web search results for "${query}":\n\n${formatted}`),
-      summary: `web search "${query}" (${items.length} results)`,
-    };
+    if (items.length) return show(items, "Web search results");
+    failure = "no results";
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      output: `Web search failed: ${msg}`,
-      summary: "web search failed",
-    };
+    failure = err instanceof Error ? err.message : String(err);
   }
+  // DuckDuckGo often refuses automated searches; Wikipedia's own search is a
+  // fallback, said plainly so the villager knows where the results came from (#170).
+  try {
+    const wiki = await wikipediaSearch(query, maxResults);
+    if (wiki.length) return show(wiki, "The general web search wasn't available, so these are from Wikipedia's own search");
+  } catch {
+    /* fall through to the failure */
+  }
+  return failure === "no results"
+    ? { output: `No results found for "${query}".`, summary: `web search "${query}" (0 results)` }
+    : { output: `Web search failed: ${failure}`, summary: "web search failed" };
+}
+
+// Wikipedia's public search API: titles, page addresses and a snippet.
+export async function wikipediaSearch(query: string, max: number): Promise<Array<{ title: string; url: string; description: string }>> {
+  const api = `https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&utf8=1&srlimit=${max}&srsearch=${encodeURIComponent(query)}`;
+  const res = await fetch(api, { headers: { "user-agent": "Autarch village research (https://github.com/billsargent/autarch)" }, signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`Wikipedia answered ${res.status}`);
+  const data = (await res.json()) as { query?: { search?: Array<{ title: string; snippet?: string }> } };
+  return (data.query?.search ?? []).map((s) => ({
+    title: s.title,
+    url: `https://en.wikipedia.org/wiki/${encodeURIComponent(s.title.replace(/ /g, "_"))}`,
+    description: (s.snippet ?? "").replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&amp;/g, "&").trim(),
+  }));
 }
 
 async function takeScreenshot(args: Record<string, unknown>, workspaceDir: string) {

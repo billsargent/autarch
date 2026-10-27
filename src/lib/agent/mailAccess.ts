@@ -31,3 +31,14 @@ export function calendarReaders(): number[] {
     return [];
   }
 }
+
+// The villagers allowed to read the library's shelves (#169).
+export function libraryReaders(): number[] {
+  try {
+    const row = sqlite.prepare("SELECT library_readers AS readers FROM agent_settings LIMIT 1").get() as { readers: string } | undefined;
+    const ids = JSON.parse(row?.readers ?? "[]");
+    return Array.isArray(ids) ? ids.filter((n) => Number.isInteger(n)) : [];
+  } catch {
+    return [];
+  }
+}

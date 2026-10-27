@@ -24,7 +24,8 @@
     "test:villagers": "tsx scripts/villagers-test.ts",
     "test:life": "tsx scripts/life-test.ts",
     "test:calendar": "tsx scripts/calendar-test.ts",
-    "test": "npm run test:sanitizer && npm run test:compact && npm run test:chatmode && npm run test:village && npm run test:safety && npm run test:jobs && npm run test:turns && npm run test:villagers && npm run test:life && npm run test:calendar",
+    "test:library": "tsx scripts/library-test.ts",
+    "test": "npm run test:sanitizer && npm run test:compact && npm run test:chatmode && npm run test:village && npm run test:safety && npm run test:jobs && npm run test:turns && npm run test:villagers && npm run test:life && npm run test:calendar && npm run test:library",
     "pixelate": "tsx scripts/pixelate.ts",
     "village:map": "tsx scripts/build-village-map.ts",
     "village:custom-art": "tsx scripts/build-custom-tiles.ts",
@@ -46,7 +47,8 @@
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-breaks": "^4.0.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "unpdf": "1.8.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.17",

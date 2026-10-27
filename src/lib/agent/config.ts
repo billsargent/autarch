@@ -6,7 +6,7 @@
 
 import os from "node:os";
 import path from "node:path";
-import { AUTH_FILE, DB_FILES } from "../../db/path";
+import { AUTH_FILE, DB_FILES, LIBRARY_DIR } from "../../db/path";
 
 export const PROJECT_ROOT = /*turbopackIgnore: true*/ process.cwd();
 
@@ -43,6 +43,8 @@ export const HARD_PROTECTED_PATHS: string[] = [
   // ...and wherever AUTARCH_DB_PATH points it.
   ...DB_FILES,
   AUTH_FILE,
+  // The library's shelves (#169): only the owner and read_document reach them.
+  LIBRARY_DIR,
 ];
 
 // Any path (anywhere on disk) matching these patterns is treated as a secret
@@ -63,6 +65,8 @@ export const SECRET_PATH_PATTERNS: RegExp[] = [
   // including a custom AUTARCH_DB_PATH location.
   /app\.db(-wal|-shm)?$/i,
   ...[...DB_FILES, AUTH_FILE].map((f) => new RegExp(`^${f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")),
+  // Anything on the library's shelves (#169), however its path is written.
+  ...[LIBRARY_DIR, LIBRARY_DIR.replace(/\\/g, "/")].map((d) => new RegExp(`^${d.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([\\\\/]|$)`, "i")),
 ];
 
 // System directories that require CRITICAL (always human-approved) risk for

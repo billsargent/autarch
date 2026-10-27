@@ -2,7 +2,7 @@
 // so the village tests can check every clickable thing does something.
 export const ROOM_ACTIONS: Record<string, string[]> = {
   village: ["goals.board", "goals.new", "mail.open", "trade.post", "signs.directions"],
-  library: ["skills.browse", "skills.new"],
+  library: ["skills.browse", "skills.new", "library.documents", "library.research"],
   workshop: ["jobs.board", "jobs.new"],
   guardtower: ["activity.log", "activity.today"],
   observatory: ["monitor.charts"],

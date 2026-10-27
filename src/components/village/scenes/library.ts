@@ -1,5 +1,6 @@
 // The library: the agent's skills (markdown playbooks) live on the shelves,
-// and new ones are written at the desk.
+// and new ones are written at the desk. The reading table is the document
+// shelf (#169): the owner's documents and the village's research.
 import { interior } from "./shell";
 
 export const LIBRARY_SCENE = interior({
@@ -32,9 +33,24 @@ export const LIBRARY_SCENE = interior({
       action: "skills.new",
       parts: [{ stamp: "writingDesk", col: 2, row: 6 }],
     },
+    {
+      id: "reading",
+      label: "Reading table",
+      role: "The document shelf: your documents and the village's research",
+      door: "table",
+      action: "library.documents",
+      parts: [{ stamp: "readingTable", col: 11, row: 6 }],
+    },
+    {
+      id: "board",
+      label: "Research board",
+      role: "The research desk: commission research from the librarians",
+      door: "board",
+      action: "library.research",
+      parts: [{ stamp: "jobBoard", col: 10, row: 4 }],
+    },
   ],
   decor: [
-    { stamp: "readingTable", col: 11, row: 6 },
     { stamp: "chairRed", col: 10, row: 6 },
     { stamp: "chairBlue", col: 13, row: 6 },
     { stamp: "pottedPlant", col: 1, row: 4 },
@@ -44,10 +60,12 @@ export const LIBRARY_SCENE = interior({
     { id: "shelf", x: 8, y: 4.6 },
     { id: "desk", x: 3, y: 8.6 },
     { id: "table", x: 12, y: 8.6 },
+    { id: "board", x: 11.5, y: 5.6 },
   ],
   edges: [
     ["center", "shelf"],
     ["center", "desk"],
     ["center", "table"],
+    ["center", "board"],
   ],
 });

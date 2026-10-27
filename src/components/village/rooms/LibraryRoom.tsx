@@ -6,6 +6,8 @@ import { SKILLS_IN_PROMPT } from "@/lib/agent/limits";
 import { STARTER_SKILLS } from "@/lib/agent/starterSkills";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
 import type { RoomProps } from "./types";
+import DocumentShelf from "./DocumentShelf";
+import ResearchDesk from "./ResearchDesk";
 
 // The library: skills are books on the shelves; new ones are written at the
 // desk. Same data and actions as the Skills page (useSkills).
@@ -21,7 +23,15 @@ function when(iso: string): string {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 }
 
-export default function LibraryRoom({ action, onClose }: RoomProps) {
+// The reading table opens the document shelf (#169), the research board the
+// research desk (#170); the rest is the skills.
+export default function LibraryRoom(props: RoomProps) {
+  if (props.action === "library.documents") return <DocumentShelf onClose={props.onClose} />;
+  if (props.action === "library.research") return <ResearchDesk onClose={props.onClose} />;
+  return <SkillsLibrary {...props} />;
+}
+
+function SkillsLibrary({ action, onClose }: RoomProps) {
   const { skills, loaded, save, remove } = useSkills();
   const [view, setView] = useState<View>(() => initialView(action));
   const [adding, setAdding] = useState<string | null>(null);
