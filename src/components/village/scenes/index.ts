@@ -10,6 +10,9 @@ import { VILLAGE_LEVELS, VILLAGE_SCENE } from "./village";
 import { WORKSHOP_SCENE } from "./workshop";
 import { STOREHOUSE_SCENE } from "./storehouse";
 import { POSTOFFICE_SCENE } from "./postoffice";
+import { TAVERN_SCENE } from "./tavern";
+import { BAKERY_SCENE } from "./bakery";
+import { SHOP_SCENE } from "./shop";
 
 export { MAX_VILLAGE_LEVEL, VILLAGE_LEVELS, VILLAGE_SCENE, ringPlotIds } from "./village";
 
@@ -25,6 +28,12 @@ export const INTERIORS: Record<string, SceneLayout> = {
   home: HOME_SCENE,
   storehouse: STOREHOUSE_SCENE,
   postoffice: POSTOFFICE_SCENE,
+  tavern: TAVERN_SCENE,
+  bakery: BAKERY_SCENE,
+  shop: SHOP_SCENE,
 };
+
+// Buildings on the plots (#154) whose door leads inside, by building kind.
+export const PLOT_INTERIORS = ["tavern", "bakery", "shop"] as const;
 
 export const ALL_SCENES: SceneLayout[] = [...VILLAGE_LEVELS, ...Object.values(INTERIORS)];

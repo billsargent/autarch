@@ -16,6 +16,10 @@ import ParchmentDialog from "./ParchmentDialog";
 import { ROOMS } from "./rooms";
 import { useDeferredApprovals } from "./useDeferredApprovals";
 import { useVillageClock } from "./useVillageClock";
+import { PLOT_INTERIORS } from "./scenes";
+import { useBuildings } from "../data/useBuildings";
+import { TRADES, type TradeKey } from "@/lib/agent/trades";
+import type { VillagerLife } from "@/lib/agent/clientTypes";
 
 // A building's interior: the room's art, its furniture as hotspots, and the
 // room's dialogs. Villagers are shown here only when what they're really doing
@@ -23,6 +27,16 @@ import { useVillageClock } from "./useVillageClock";
 // its dialogs are theirs, and it's where they relax.
 // You, standing in the doorway (#109).
 const OWNER = { name: "You", color: "#3b2716", sprite: OWNER_SPRITE, start: "door" };
+
+// Inside a building on the plots (#154), villagers are there by their
+// village life: at work in it, or (the tavern) spending the evening. Whoever
+// works there stands at their spot.
+const WORK_SPOT: Record<string, string> = { tavern: "bar", bakery: "oven", shop: "counter" };
+function insidePlot(kind: string, life: VillagerLife | null | undefined): boolean {
+  if (!life) return false;
+  if (kind === "tavern" && life.place === "tavern") return true;
+  return life.place === "work" && TRADES[life.trade as TradeKey]?.building === kind;
+}
 
 // The last thing each villager said at the meeting going on, and who's
 // speaking now (#83). Only polls while there's a meeting.
@@ -75,7 +89,13 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
 
   const { phase, night } = useVillageClock(data.bedtime, data.wakeTime, data.villageClock, data.villageDayHours);
   const moods = data.villagers.map((v) => ({ v, mood: villagerMood(snapshotOf(v, data.paused, night)) }));
-  const here = moods.filter(({ v, mood }) => building && MOOD_PLACE[mood] === building.id && (!isCottage || v.id === owner?.id));
+  const plotKind = (PLOT_INTERIORS as readonly string[]).includes(sceneId) ? sceneId : null;
+  const plots = useBuildings().state;
+  const plot = plotKind ? plots?.buildings.find((b) => b.kind === plotKind && b.status === "built") : undefined;
+  const here = plotKind
+    ? moods.filter(({ v, mood }) => mood === "idle" && insidePlot(plotKind, v.life))
+    : moods.filter(({ v, mood }) => building && MOOD_PLACE[mood] === building.id && (!isCottage || v.id === owner?.id));
+  const atWork = (life: VillagerLife | null | undefined) => Boolean(plotKind && life?.place === "work" && WORK_SPOT[plotKind]);
   const away = owner && !here.some((h) => h.v.id === owner.id) ? moods.find((m) => m.v.id === owner.id) : null;
 
   // Which furniture's dialogs are open; `opened` remounts the room UI each time.
@@ -109,9 +129,9 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
     color: v.color,
     sprite: spriteFor(v.character),
     // Asleep at home, they're in bed (#111); at a meeting, at the table (#83).
-    target: isCottage && mood === "asleep" ? "bed" : mood === "meeting" && seated.indexOf(v.id) < 6 ? `seat-${seated.indexOf(v.id) + 1}` : center,
-    offset: (isCottage && mood === "asleep") || (mood === "meeting" && seated.indexOf(v.id) < 6) ? 0 : offsets[i],
-    said: mood === "meeting" ? (meeting.speaking === v.id ? "💬 …" : meeting.lines[v.name] ?? null) : null,
+    target: isCottage && mood === "asleep" ? "bed" : mood === "meeting" && seated.indexOf(v.id) < 6 ? `seat-${seated.indexOf(v.id) + 1}` : atWork(v.life) ? WORK_SPOT[plotKind!] : center,
+    offset: (isCottage && mood === "asleep") || (mood === "meeting" && seated.indexOf(v.id) < 6) || atWork(v.life) ? 0 : offsets[i],
+    said: mood === "meeting" ? (meeting.speaking === v.id ? "💬 …" : meeting.lines[v.name] ?? null) : plotKind && v.life ? v.life.activity : null,
     badge: MOOD_BADGE[mood],
     vest: v.tier === "worker",
     title: moodLabel(mood, v.name),
@@ -128,12 +148,14 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
       ? `${away.v.name} isn't home — ${awayWhere ? `they're at the ${awayWhere.label.toLowerCase()}` : "they're out"}.`
       : sceneId === "home"
         ? "Home sweet home. It's quiet."
+        : plotKind && plots && !plot
+          ? `There's no ${scene.title.replace(/^The /, "").toLowerCase()} standing in the village yet.`
         : "Nobody's here right now.";
 
   return (
     <div className={`${villageFonts} village-root flex h-full w-full flex-col`}>
       <div className="village-hud relative z-20 flex items-center gap-2 px-3 py-2">
-        <Link href={building ? `/?from=${building.id}` : "/"} className="village-btn px-3 py-1.5 text-xs" aria-label="Leave and go back to the village">
+        <Link href={building ? `/?from=${building.id}` : plot ? `/?from=${plot.plotId}` : "/"} className="village-btn px-3 py-1.5 text-xs" aria-label="Leave and go back to the village">
           ← Leave
         </Link>
         <h1 className="village-pixel min-w-0 flex-1 truncate text-sm text-[#fff6e0]">{title}</h1>
