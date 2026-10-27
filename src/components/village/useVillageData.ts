@@ -10,6 +10,9 @@ export interface VillageData {
   paused: boolean;
   bedtime: string;
   wakeTime: string;
+  // The village's own clock (#150).
+  villageClock: "own" | "real";
+  villageDayHours: number;
   // The villagers and what each is up to (#55).
   villagers: AgentRow[];
   pending: ToolExecutionRow[];
@@ -23,6 +26,8 @@ const EMPTY: VillageData = {
   paused: false,
   bedtime: "22:00",
   wakeTime: "07:00",
+  villageClock: "own",
+  villageDayHours: 4,
   villagers: [],
   pending: [],
   spentToday: 0,
@@ -48,7 +53,7 @@ export function useVillageData() {
       const [agents, approvals, settings, stats, goals, notifs] = await Promise.all([
         getJson<{ agents: AgentRow[] }>("/api/agents"),
         getJson<{ pending: ToolExecutionRow[] }>("/api/approvals"),
-        getJson<{ settings: { paused: boolean; bedtime: string; wakeTime: string } }>("/api/settings"),
+        getJson<{ settings: { paused: boolean; bedtime: string; wakeTime: string; villageClock?: "own" | "real"; villageDayHours?: number } }>("/api/settings"),
         getJson<{ today: { costUsd: number } }>("/api/stats"),
         getJson<{ goals: Array<{ status: string }> }>("/api/goals"),
         getJson<{ unread: unknown[] }>("/api/notifications"),
@@ -58,6 +63,8 @@ export function useVillageData() {
         paused: Boolean(settings.settings?.paused),
         bedtime: settings.settings?.bedtime ?? "22:00",
         wakeTime: settings.settings?.wakeTime ?? "07:00",
+        villageClock: settings.settings?.villageClock ?? "own",
+        villageDayHours: settings.settings?.villageDayHours ?? 4,
         villagers: agents.agents ?? [],
         pending: approvals.pending ?? [],
         spentToday: Number(stats.today?.costUsd ?? 0),

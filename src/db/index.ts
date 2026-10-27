@@ -549,6 +549,11 @@ if (!globalForDb.__agentLabSqlite) {
     ["work_end", "TEXT NOT NULL DEFAULT '15:00'"],
     ["work_share", "INTEGER NOT NULL DEFAULT 60"],
     ["life_budget_usd", "REAL NOT NULL DEFAULT 0.02"],
+    // The village's own clock (#150), and talk without thinking (#152).
+    ["village_clock", "TEXT NOT NULL DEFAULT 'own'"],
+    ["village_day_hours", "INTEGER NOT NULL DEFAULT 4"],
+    ["thinking_for", "TEXT NOT NULL DEFAULT 'work'"],
+    ["talk_temperature", "REAL NOT NULL DEFAULT 0.7"],
   ] as const) {
     if (!existingCols("agent_settings").includes(col)) sqlite.exec(`ALTER TABLE agent_settings ADD COLUMN ${col} ${def}`);
   }

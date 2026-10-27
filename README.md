@@ -42,8 +42,12 @@ call risk-checked, and anything risky waiting for your approval.
   listed in the guard tower.
 - **Meetings and votes.** Call a meeting at the town hall to talk something through; what's
   agreed becomes goals afterwards. Ideas go on the notice board and the villagers vote.
-- **Day and night.** The village follows your clock: lights come on at dusk and villagers go
-  to bed at night (nothing runs while they sleep).
+- **Day and night.** The village keeps its own clock (a village day every 4 real hours by
+  default, or your own clock): villagers work, spend their evenings and sleep whenever the app
+  runs. Computer jobs keep to your own bedtime and wake-up.
+- **Villagers know their village and talk plainly.** Every prompt carries the village's facts
+  (who lives here, what stands, the stores and orders), and village talk goes without the model's
+  thinking, at a talk temperature: short, plain answers.
 - **A small economy.** Farms grow wheat, bakeries bake bread and everyone eats. Houses add beds
   for more villagers; a tavern, a shop and a garden lift everyone's morale. When every plot is
   taken, the village can clear the next ring of land (four rings in all, each laid out ahead of

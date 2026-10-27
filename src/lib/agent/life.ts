@@ -3,6 +3,7 @@ import { lifeEvents, villagerLife } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { isNight } from "./daynight";
 import { getSettings } from "./settingsStore";
+import { villageDate, villageHours } from "./villageClock";
 import { ABANDONED_AFTER_MS } from "./turnLock";
 import { GOODS, TRADES, levelOf, titleOf, tradeOf, type Good } from "./trades";
 import { FRIEND_AT, TICK_MINUTES, dayKey, hm, lifeTick, nextWindowFor, romanceStep, socialise, statusFor, type Balance } from "./lifeRules";
@@ -109,7 +110,10 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
     ).map((r) => r.id),
   );
   const built = new Set((sqlite.prepare("SELECT DISTINCT kind FROM buildings WHERE status = 'built'").all() as Array<{ kind: string }>).map((r) => r.kind));
-  const asleep = isNight(now, settings.bedtime, settings.wakeTime);
+  // The village's own clock (#150), or the owner's.
+  const vnow = villageDate(now, settings.villageClock, settings.villageDayHours);
+  const vh = villageHours(settings.villageClock, settings.bedtime, settings.wakeTime);
+  const asleep = isNight(vnow, vh.bedtime, vh.wakeTime);
   const stock: Partial<Record<Good, number>> = Object.fromEntries(GOODS.map((g) => [g, Number(eco[g] ?? 0)]));
   const names = new Map(villagers.map((v) => [v.id, v.name]));
   const bestFriend = sqlite.prepare(
@@ -133,7 +137,7 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
       const want = decorKeys.filter((k) => !owned.includes(k));
       const wishKey = want.length ? want[Math.floor(rng() * want.length)] : null;
       const r = lifeTick(row, {
-        hour: now.getHours(),
+        hour: vnow.getHours(),
         asleep,
         busy: busy.has(v.id),
         trade,

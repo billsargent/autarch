@@ -3,6 +3,31 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-27 — The village keeps its own clock, knows its facts, and talks plainly
+
+- **The village keeps its own clock.** A village day lasts 4 real hours by default (1–24, in
+  Settings → Day and night), so whenever the app is running the villagers work their trades,
+  spend their evenings and sleep. Before, village life followed your clock, so a village that ran
+  only in your evenings never had a working day and nobody grew or baked anything. You can switch
+  back to the computer's clock. Bedtime and wake-up still decide when computer jobs may run.
+- **The villagers know their village.** Every prompt has a short "THE VILLAGE TODAY": who lives
+  here and their trades, what stands and who works it, the stores, the treasury, open orders and
+  recent news. The facts win over notes and neighbours, and they're told not to invent prices,
+  dates or harvests.
+- **Built-in playbooks.** "How the village works" (trades run by themselves; what each makes; food,
+  orders and the treasury) for everyone, and "Being Mayor" for the Mayor. The app keeps them
+  current.
+- **Plain speech.** Answers come first and in a few sentences; no sayings, catchphrases or
+  record-keeping talk; meeting turns are two or three sentences.
+- **Thinking only for work** (Identity & model): chats without tools, meetings, votes,
+  interviews, life windows and villager messages answer without the model's thinking, at a talk
+  temperature (0.7 by default). Work keeps thinking. Cheaper and faster, too.
+- **Hiring without a name.** The Mayor can leave a newcomer's name out and the village picks a
+  free one; the budget defaults to his own.
+- **`scripts/village-shakedown.ts`** asks the villagers set questions with the real model on a
+  copy of a village and scores the answers. On a copy of a real village: replies 84 → 50 words on
+  average, catchphrases 14 → 0, checks 6/7 → 7/7.
+
 ## 2026-10-25 — The storehouse, the post office, signs, and why every email is written
 
 - **The two empty buildings found a use.**

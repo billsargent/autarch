@@ -81,9 +81,9 @@ export default function VillageView() {
   const router = useRouter();
   const { data, refresh, mayor } = useVillageData();
   const villagers = data.villagers;
-  // Real local time sets the light and puts villagers to bed (#100); the
-  // same tick fades speech bubbles.
-  const { now: clock, time, phase, night } = useVillageClock(data.bedtime, data.wakeTime);
+  // The village clock sets the light and puts villagers to bed (#100, #150);
+  // the same tick fades speech bubbles.
+  const { now: clock, time, phase, night } = useVillageClock(data.bedtime, data.wakeTime, data.villageClock, data.villageDayHours);
   const sound = useVillageSound(phase, data.pending.length, data.unread);
 
   // Idle villagers stroll between hangouts (plaza, market, gates, home…), each

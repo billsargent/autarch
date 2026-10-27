@@ -2,6 +2,8 @@
 // split, trades and levels. Run with: npm run test:life
 import { lifeTick, makeOrder, nextWindowFor, readyToWed, romanceStep, socialise, statusFor, type LifeState, type TickInput } from "../src/lib/agent/lifeRules";
 import { placeDecor } from "../src/lib/agent/shop";
+import { villageDate, villageHours } from "../src/lib/agent/villageClock";
+import { freeName, VILLAGE_NAMES } from "../src/lib/agent/villageNames";
 import { guessTrade, levelOf, titleOf, tradeOf } from "../src/lib/agent/trades";
 
 let failures = 0;
@@ -118,6 +120,27 @@ check("levels and titles", [levelOf(0), levelOf(20), levelOf(320), levelOf(1000)
   const big = makeOrder(10, () => 0);
   check("an order: a town, a good, a quantity, a reward, three days", [small.town, small.good, small.qty, small.reward, small.days], ["Millbrook", "wheat", 4, 10, 3]);
   check("a good name brings bigger, better-paid orders", [big.qty > small.qty, big.reward / big.qty > small.reward / small.qty], [true, true]);
+}
+
+// --- the village's own clock (#150) ------------------------------------------------------
+{
+  const vAt = (realMinutes: number) => villageDate(new Date(Date.UTC(2026, 0, 1) + realMinutes * 60_000), "own", 4);
+  const hm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  check("a village day of 4 real hours: an hour passes every 10 real minutes", [hm(vAt(0)), hm(vAt(10)), hm(vAt(120)), hm(vAt(240))], ["00:00", "01:00", "12:00", "00:00"]);
+  const now = new Date(2026, 0, 1, 23, 30);
+  check("…or the computer's own clock", villageDate(now, "real", 4), now);
+  check("its own clock wakes at 07:00 and sleeps at 22:00; the real one keeps the owner's hours", [villageHours("own", "23:00", "06:00"), villageHours("real", "23:00", "06:00")], [{ bedtime: "22:00", wakeTime: "07:00" }, { bedtime: "23:00", wakeTime: "06:00" }]);
+  const day = Array.from({ length: 24 }, (_, i) => {
+    const hour = vAt(i * 10).getHours();
+    return lifeTick(base, at(hour, { asleep: hour >= 22 || hour < 7, trade: "farmer" })).state.activity;
+  });
+  check("…and a village day goes through work, evening and sleep", [day.includes("working the fields"), day.includes("asleep"), day.some((a) => !["working the fields", "asleep"].includes(a))], [true, true, true]);
+}
+
+// --- names for newcomers (#151) ----------------------------------------------------------
+{
+  check("a newcomer gets a free name", freeName(["Ada", "agnes"], () => 0), "Alba");
+  check("…and none when every name is taken", freeName(VILLAGE_NAMES), null);
 }
 
 if (failures > 0) {

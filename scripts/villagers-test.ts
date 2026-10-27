@@ -38,7 +38,8 @@ async function main() {
 
   // --- an install from before villagers --------------------------------------------
   await getSettings();
-  await updateSettings({ agentName: "Ada", persona: "A cheerful baker." });
+  // These tests set the time by the computer's clock; the village's own clock has tests of its own (life-test).
+  await updateSettings({ agentName: "Ada", persona: "A cheerful baker.", villageClock: "real" });
   const [oldConv] = await db.insert(conversations).values({ title: "old chat" }).returning();
   const [oldJob] = await db.insert(jobs).values({ name: "old job" }).returning();
   const [oldGoal] = await db.insert(goals).values({ title: "old goal" }).returning();
@@ -929,6 +930,17 @@ async function main() {
   const seenD = fake.seen.length;
   await runAgentTurn({ userMessage: "hi", agentId: dot.id });
   check("…and still go to DeepSeek", fake.seen.slice(seenD).find((x) => x.stream)?.thinking, true);
+  // Thinking only for work (#152): village talk answers straight, at the talk temperature.
+  fake.byAgent.Dot = [{ text: "A fine day for it." }];
+  const seenT = fake.seen.length;
+  await runAgentTurn({ agentId: dot.id, trigger: "life", eventNote: "[VILLAGE LIFE] Your own time." });
+  const talkStep = fake.seen.slice(seenT).find((x) => x.stream);
+  check("village talk goes without thinking, at the talk temperature", [talkStep?.thinkingOn, talkStep?.temperature], [false, 0.7]);
+  fake.byAgent.Dot = [{ text: "done" }];
+  const seenW = fake.seen.length;
+  await runAgentTurn({ agentId: dot.id, trigger: "scheduled", eventNote: "work" });
+  const workStep = fake.seen.slice(seenW).find((x) => x.stream);
+  check("…and work keeps thinking", [workStep?.thinkingOn, workStep?.temperature], [true, undefined]);
   await agentRoute.PATCH(req(`/api/agents/${dot.id}`, "PATCH", { providerId: null, model: null }), { params: Promise.resolve({ id: String(dot.id) }) });
 
   // --- the live event stream (#74) ---------------------------------------------------------
@@ -1057,6 +1069,13 @@ async function main() {
   const calChat2 = (await runAgentTurn({ userMessage: "How's your day going?", agentId: cal.id })).conversationId;
   const calSaw = [...fake.seen].reverse().find((s) => s.system.startsWith("You are Cal"))!;
   check("villagers are told they're villagers first, with their life in every turn", [calSaw.system.includes("YOUR LIFE IN THE VILLAGE"), calSaw.system.includes("Your trade is looking after the computer"), calSaw.system.includes("not an assistant")], [true, false, true]);
+  // The village's facts and its own playbooks (#151).
+  const facts = await (await import("../src/lib/agent/villageFacts")).villageFacts();
+  check("every villager's prompt has the village's facts and how it works", [calSaw.system.includes("THE VILLAGE TODAY"), calSaw.system.includes("How the village works (built in)"), calSaw.system.includes("Being Mayor (built in)")], [true, true, false]);
+  check("…which name who lives here and their trades", facts.includes("Cal (carpenter"), true);
+  check("…and say the facts win over notes", facts.startsWith("THE VILLAGE TODAY (facts; these win over your notes"), true);
+  const mayorPrompt = await (await import("../src/lib/agent/systemPrompt")).buildSystemPrompt(await getSettings(), { agent: mayor });
+  check("the Mayor also gets how to be Mayor", mayorPrompt.includes("Being Mayor (built in)"), true);
 
   fake.byAgent.Cal = [{ tools: [{ name: "run_shell_command", args: { command: "ls" } }, { name: "do_activity", args: { what: "rest" } }] }, { text: "A quiet afternoon; I put my feet up." }];
   const lifeTurn = await runAgentTurn({ agentId: cal.id, trigger: "life", eventNote: "[VILLAGE LIFE] Your own time." });

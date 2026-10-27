@@ -150,8 +150,29 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
           <div className="rounded border-2 border-[#d8c49a] p-3">
             <p className="text-xs font-semibold">Day and night</p>
             <p className="text-[11px] text-[#6b4a2e]">
-              By the computer&apos;s own clock. At night the villagers sleep and nothing starts on its own; jobs that fall due wait
-              until morning. You can still knock and chat, and approvals still work.
+              The village keeps its own clock: a village day passes in a few real hours, so whenever the app is running the
+              villagers work, spend their evenings and sleep. Or follow the computer&apos;s clock.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(["own", "real"] as const).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => save({ villageClock: c })}
+                  className={`village-btn px-2 py-1 text-xs ${settings.villageClock === c ? "village-btn-go" : ""}`}
+                  aria-pressed={settings.villageClock === c}
+                >
+                  {c === "own" ? "Its own clock" : "The computer's clock"}
+                </button>
+              ))}
+            </div>
+            {settings.villageClock === "own" && (
+              <div className="mt-2 sm:w-1/2">
+                <NumberField s={s} settings={settings} field="villageDayHours" label="A village day lasts (real hours)" step="1" help="1 to 24. At 4, the village wakes at 07:00 village time every 4 hours." />
+              </div>
+            )}
+            <p className="mt-2 text-[11px] text-[#6b4a2e]">
+              Bedtime and wake-up by the computer&apos;s clock: at night nothing starts on its own and computer jobs wait until
+              morning. You can still knock and chat, and approvals still work.
             </p>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <TextField s={s} settings={settings} field="bedtime" label="Bedtime" type="time" />
@@ -512,8 +533,23 @@ function IdentityPage({ s, settings }: { s: Settings; settings: SettingsRow }) {
             </select>
           </label>
           <NumberField s={s} settings={settings} field="maxOutputTokens" label="Output tokens per step" step="100" help="Caps reasoning plus answer per model call." />
+          <label className="block text-xs font-semibold">
+            Think for
+            <select name="thinkingFor" value={settings.thinkingFor} onChange={(e) => save({ thinkingFor: e.target.value as SettingsRow["thinkingFor"] })} className={input}>
+              <option value="work">work only (chats and meetings answer straight)</option>
+              <option value="all">everything</option>
+            </select>
+          </label>
         </div>
       )}
+      <NumberField
+        s={s}
+        settings={settings}
+        field="talkTemperature"
+        label="Talk temperature"
+        step="0.1"
+        help="0 to 2. Used for village talk without thinking (chats, meetings, votes, village life). Lower is plainer; DeepSeek ignores it while thinking."
+      />
       <label className="block text-xs font-semibold">
         Extra instructions (optional)
         <textarea
