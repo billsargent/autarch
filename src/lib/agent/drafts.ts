@@ -21,9 +21,16 @@ export class DraftError extends Error {
   }
 }
 
-// How a kind of draft is sent once approved; none yet (connectors come with #108).
+// How a kind of draft is sent once approved. Email goes out over the owner's
+// SMTP server (#124) once it's set up; until then, and for the other kinds,
+// approving marks a draft ready for the owner to send themselves.
 type Sender = (d: DraftRow) => Promise<string>;
-const SENDERS: Partial<Record<DraftKind, Sender>> = {};
+const SENDERS: Partial<Record<DraftKind, Sender>> = {
+  email: async (d) => (await import("./email")).sendMail({ to: d.target ?? "", subject: d.subject, text: d.content }),
+};
+const senderReady: Partial<Record<DraftKind, () => Promise<boolean>>> = {
+  email: async () => (await import("./email")).publicMail(await (await import("./email")).getMail()).smtpReady,
+};
 
 export async function saveDraftTool(args: Record<string, unknown>, ctx?: ToolContext) {
   if (!ctx?.agentId) return { output: "Refused: only a villager can write a draft.", summary: "draft refused" };
@@ -70,7 +77,8 @@ export async function decideDraft(id: number, action: "approve" | "discard", edi
   };
   const [ready] = await db.update(drafts).set({ ...changed, status: "approved", decidedAt: new Date() }).where(eq(drafts.id, id)).returning();
   const sender = SENDERS[ready.kind as DraftKind];
-  if (!sender) return; // approved: the owner sends it themselves
+  const canSend = senderReady[ready.kind as DraftKind];
+  if (!sender || (canSend && !(await canSend()))) return; // approved: the owner sends it themselves
   try {
     const result = await sender(ready);
     await db.update(drafts).set({ status: "sent", sendResult: result }).where(eq(drafts.id, id));

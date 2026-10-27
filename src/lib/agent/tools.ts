@@ -1156,6 +1156,10 @@ async function postMessage(args: Record<string, unknown>, ctx?: ToolContext) {
   return { output: `Posted message to conversation #${targetConversation}.`, summary: `post_message #${targetConversation}` };
 }
 
+// Columns whose values are secrets: keys, passwords, tokens, the calendar's
+// private address (#125).
+export const SECRET_COLUMN = /api_?key|key_?value|password|passwd|secret|token|ics_?url|calendar_?ics/i;
+
 // query_database runs on its own read-only connection, so even a statement that
 // slipped past the checks below could not change anything (#10).
 let readOnlyConnection: Database.Database | null = null;
@@ -1189,21 +1193,28 @@ async function queryDatabase(args: Record<string, unknown>) {
   if (/api_?key/i.test(raw)) {
     return { output: "Queries that mention the API key column are not allowed.", summary: "query blocked (secret column)" };
   }
+  // The email settings hold passwords (#124): not readable at all.
+  if (/mail_?settings/i.test(raw)) {
+    return { output: "Queries on the email settings are not allowed.", summary: "query blocked (secret table)" };
+  }
   try {
     const stmt = readOnlyDb().prepare(raw);
     if (!stmt.readonly || !stmt.reader) {
       return { output: "Only read-only SELECT queries are allowed.", summary: "query blocked (not read-only)" };
     }
+    // Never leak a secret back to the model, however the query was written
+    // (`SELECT *`, an alias, a subquery): a result column is blanked when its
+    // name, or the table column it comes from, looks secret (#125).
+    const secretCols = stmt
+      .columns()
+      .filter((c) => SECRET_COLUMN.test(c.name) || (c.column != null && SECRET_COLUMN.test(c.column)))
+      .map((c) => c.name);
     const rows = stmt.all() as Record<string, unknown>[];
-    // Never leak the framework's own secrets back to the model (api_key, etc.).
     const sanitized = rows.map((r) => {
-      if (r && typeof r === "object") {
-        const copy = { ...r };
-        if ("api_key" in copy) copy.api_key = "***redacted***";
-        if ("apiKey" in copy) copy.apiKey = "***redacted***";
-        return copy;
-      }
-      return r;
+      if (!r || typeof r !== "object" || !secretCols.length) return r;
+      const copy = { ...r };
+      for (const k of secretCols) if (k in copy && copy[k] != null) copy[k] = "***redacted***";
+      return copy;
     });
     const text = sanitized.length ? JSON.stringify(sanitized.slice(0, 50), null, 2) : "(0 rows)";
     return { output: truncate(text), summary: `SELECT (${rows.length} rows)` };

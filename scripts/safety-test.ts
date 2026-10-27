@@ -22,7 +22,7 @@ function check(name: string, ok: boolean, detail?: unknown) {
 
 async function main() {
   // Load everything that touches the database only after AUTARCH_DB_PATH is set.
-  const { db } = await import("../src/db");
+  const { db, sqlite } = await import("../src/db");
   const { conversations, messages, toolExecutions, workSessions, jobs } = await import("../src/db/schema");
   const { eq } = await import("drizzle-orm");
   const risk = await import("../src/lib/agent/risk");
@@ -85,6 +85,16 @@ async function main() {
   check("a write hidden in a CTE is refused", (await q("with x as (select 1) delete from goals")).includes("Only read-only"));
   check("a pragma statement is refused", (await q("pragma journal_mode = delete")).includes("Only read-only"));
   check("attach is refused", (await q("attach database 'x.db' as y")).includes("Only read-only"));
+  // #125: every secret column is blanked, however it's asked for.
+  sqlite.prepare("UPDATE agent_settings SET calendar_ics_url = 'https://cal.example/private-abc123.ics'").run();
+  const leaks: string[] = [];
+  for (const sql of ["select * from agent_settings", "select * from (select * from agent_settings)", "select s.* from agent_settings s"]) {
+    const out = await q(sql);
+    if (out.includes("private-abc123") || out.includes("sk-test-secret")) leaks.push(sql);
+  }
+  check("no query result shows the calendar address or a key (#125)", leaks.length === 0, leaks);
+  check("the email settings can't be queried (#125)", (await q("select * from mail_settings")).includes("not allowed"));
+  sqlite.prepare("UPDATE agent_settings SET calendar_ics_url = NULL").run();
   await updateSettings({ apiKey: null });
 
   // --- #5 / #15 / #16 / #17 / #85: approvals -----------------------------------
