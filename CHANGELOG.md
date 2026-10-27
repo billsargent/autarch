@@ -3,6 +3,12 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — Saving the tool settings no longer fails on a newer tool
+
+- Under Mayor's ledger → Tools, any change failed with `unknown tool "add_event"` when the app ran
+  a version older than the one that had added that tool. A tool already on the list (the
+  village's, or a villager's own) now stays allowed; a new unknown name is still refused.
+
 ## 2026-10-28 — Villagers start where they are
 
 - **Nobody runs in from the gate.** Opening the village (or a building) used to start every

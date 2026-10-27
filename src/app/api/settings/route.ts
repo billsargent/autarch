@@ -118,7 +118,10 @@ export async function PUT(req: Request) {
   if ((patch.unrestrictedMode === true || patch.autonomyMode === "unrestricted") && body.confirm !== true) {
     return NextResponse.json({ error: "Enabling unrestricted mode requires confirm: true." }, { status: 400 });
   }
-  const checked = validateSettingsPatch(patch, ALL_TOOL_DEFINITIONS.map((t) => t.function.name));
+  // A tool already on the list stays allowed even if this version of the app
+  // doesn't know it (#182): a newer version may have added it.
+  const saved = ((await getSettings()).enabledTools as string[]) ?? [];
+  const checked = validateSettingsPatch(patch, [...ALL_TOOL_DEFINITIONS.map((t) => t.function.name), ...saved]);
   if (checked.ok && typeof checked.patch.calendarIcsUrl === "string" && !/^(https?|webcal):\/\//i.test(checked.patch.calendarIcsUrl)) {
     return NextResponse.json({ error: "calendarIcsUrl: must be an https:// or webcal:// address." }, { status: 400 });
   }

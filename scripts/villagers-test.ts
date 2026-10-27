@@ -1367,6 +1367,21 @@ async function main() {
   offerToEveryVillager(["write_letter", "read_letters", "propose_hire"]);
   check("a villager with a tool list of their own is offered the letters once, and nothing else", (await villagers.getAgent(fay.id))!.enabledTools, ["read_file", "ask_villager", "write_letter", "read_letters"]);
 
+  // A tool a newer version of the app added stays on the lists (#182): saving
+  // the tool settings or a villager doesn't fail on a name this version doesn't know.
+  const townTools = (await getSettings()).enabledTools as string[];
+  await updateSettings({ enabledTools: [...townTools, "future_tool"] });
+  const keptTown = await settingsRoute.PUT(req("/api/settings", "PUT", { enabledTools: [...townTools.filter((t) => t !== "read_file"), "future_tool"] }));
+  check("the tool settings save with a tool from a newer version still on them", [keptTown.status, ((await getSettings()).enabledTools as string[]).includes("future_tool")], [200, true]);
+  const newUnknown = await settingsRoute.PUT(req("/api/settings", "PUT", { enabledTools: [...townTools, "future_tool", "made_up_tool"] }));
+  check("…but a new unknown name is still refused", [newUnknown.status, (await newUnknown.json()).error], [400, 'enabledTools: unknown tool "made_up_tool".']);
+  await updateSettings({ enabledTools: townTools });
+  rawDb.prepare("UPDATE agents SET enabled_tools = ? WHERE id = ?").run(JSON.stringify(["read_file", "future_tool"]), fay.id);
+  const keptOwn = await agentRoute.PATCH(req(`/api/agents/${fay.id}`, "PATCH", { enabledTools: ["read_file", "ask_villager", "future_tool"] }), { params: Promise.resolve({ id: String(fay.id) }) });
+  check("…and so does a villager's own list", [keptOwn.status, (await villagers.getAgent(fay.id))!.enabledTools], [200, ["read_file", "ask_villager", "future_tool"]]);
+  const ownUnknown = await agentRoute.PATCH(req(`/api/agents/${fay.id}`, "PATCH", { enabledTools: ["read_file", "made_up_tool"] }), { params: Promise.resolve({ id: String(fay.id) }) });
+  check("…where a new unknown name is refused too", ownUnknown.status, 400);
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });
