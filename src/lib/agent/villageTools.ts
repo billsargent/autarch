@@ -275,25 +275,25 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
       function: {
         name: "propose_hire",
         description:
-          "Bring a new villager to the village. Nobody applies on their own and there are no outside candidates to wait for: a newcomer arrives only when you draft one here, so invent them (a name, a personality, their trade). Use it when a job needs a person: a building with nobody to work it (a tavern needs an innkeeper, a bakery a baker), or more work than the village can do. The Mayor interviews them, then the owner decides (or, if the owner allows it, the Mayor hires them). They can only have tools you have yourself, and a budget no bigger than yours. Workers report to you; only the Mayor can take on a director.",
+          "Bring a new villager to the village. Nobody applies on their own and there are no outside candidates to wait for: a newcomer arrives only when you draft one here, so invent them: their trade and one sentence of personality are enough (leave the name out and the village picks one). Use it when a job needs a person: a building with nobody to work it (a tavern needs an innkeeper, a bakery a baker), or more work than the village can do. The Mayor interviews them, then the owner decides (or, if the owner allows it, the Mayor hires them). They can only have tools you have yourself, and a budget no bigger than yours. Workers report to you; only the Mayor can take on a director.",
         parameters: {
           type: "object",
           properties: {
-            name: { type: "string", description: "Their name (not already used in the village)." },
+            name: { type: "string", description: "Optional: their name (not already used). Leave it out and the village picks a free one." },
             role: { type: "string", description: "Their job, in a few words." },
             trade: {
               type: "string",
               enum: ["farmer", "baker", "fisher", "innkeeper", "gardener", "shopkeeper", "carpenter", "trader", "scholar", "watchman", "helper"],
               description: "What they do in the village: the innkeeper works the tavern, the baker the bakery, and so on.",
             },
-            persona: { type: "string", description: "Their personality, in a few sentences." },
+            persona: { type: "string", description: "Their personality in one plain sentence (e.g. \"Cheerful and hardworking; likes an early start.\")." },
             area: { type: "string", description: "The area they work in. Default: yours." },
             tier: { type: "string", enum: ["worker", "director"], description: "Default worker." },
             tools: { type: "array", items: { type: "string" }, description: "Their tools. Default: yours, minus what a worker can't hold." },
-            dailyBudgetUsd: { type: "number", description: "What they may spend a day, in USD." },
+            dailyBudgetUsd: { type: "number", description: "Optional: what they may spend a day, in USD. Default: your own." },
             reason: { type: "string", description: "Why the village needs them." },
           },
-          required: ["name", "role", "persona", "dailyBudgetUsd", "reason"],
+          required: ["role", "trade", "persona", "reason"],
         },
       },
     },

@@ -103,11 +103,13 @@ The Mayor **cannot** dismiss anyone. Dismissal is the owner's decision.
 
 **Who drafts.** The Mayor or a director drafts a **hire**:
 
-- name, personality, role and area;
+- trade, one sentence of personality, role and area; the name is optional (the village picks a
+  free one from a built-in list);
 - rank: a director drafts workers; only the Mayor can take on a director;
 - tools: never more than the drafter has, never more than a worker may hold, and never more
   than the town policy;
-- a daily budget, which must be no more than the drafter's own budget or the town's budget.
+- a daily budget, which must be no more than the drafter's own budget or the town's budget
+  (by default, the drafter's own).
 
 A drafter can have at most three hire requests waiting.
 
@@ -208,9 +210,14 @@ is paused. There is only ever one meeting at a time.
 
 ## 8. Day and night
 
-The town follows the **real local time** of the machine.
+**The village keeps its own clock** (`villageClock`, by default "own"): a village day lasts a few
+real hours (`villageDayHours`, 4 by default), so whenever the app is running the villagers work
+(08:00–17:00 village time), spend their evenings and sleep (22:00–07:00). The light in the village
+and the clock in its corner follow it. The owner can switch it to the computer's clock instead.
 
-- **Bedtime** and **wake-up** are settings (defaults 22:00 and 07:00).
+**Bedtime** and **wake-up** (defaults 22:00 and 07:00) are the owner's own hours, by the computer's
+clock:
+
 - **At night**, villagers walk home and sleep.
   - No autonomous work starts: no scheduled jobs, reports, daydreams, votes or meetings. Jobs that
     fall due at night run after wake-up.
@@ -232,6 +239,17 @@ day:
 - **night**: asleep at home 💤.
 
 None of this costs anything: movement is decided by the app from real state, not by model calls.
+
+**What every villager knows.** Each prompt carries **THE VILLAGE TODAY**: who lives here and their
+trades, which buildings stand and who works them, the stores, the treasury, open orders and recent
+news. These facts win over notes, memory and what a neighbour said. Two built-in playbooks, kept
+current by the app, explain how the village works (trades run by themselves; what each makes) and,
+for the Mayor, how to be Mayor.
+
+**How villagers talk.** Plainly: the answer first, a few sentences, no sayings or catchphrases. A
+villager is always honest with the owner. Village talk (chats without tools, meetings, votes,
+interviews, life windows, messages) runs without the model's thinking, at a talk temperature
+(`thinkingFor`, `talkTemperature`); work keeps thinking.
 
 **The village grows.** There are four plots on the new land north and west of town, two along
 each road.

@@ -87,7 +87,7 @@ async function ensureSelfWorkJob() {
 // Enforce "how often it starts working" (cooldown + daily cap). Applies to
 // autonomous (scheduled/report) sessions only, not human-initiated chat.
 // The daily cap and the gap between sessions count each villager's own work
-// windows (#150): a bigger village doesn't share one allowance.
+// windows (#148): a bigger village doesn't share one allowance.
 async function checkWorkAllowed(settings: AgentSettingsRow, agentId: number | null): Promise<{ allowed: boolean; reason?: string }> {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);

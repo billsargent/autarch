@@ -73,7 +73,7 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
   const owner = isCottage ? (data.villagers.find((v) => v.id === agentId) ?? mayor) : null;
   const title = owner ? `${owner.name}'s cottage` : scene.title;
 
-  const { phase, night } = useVillageClock(data.bedtime, data.wakeTime);
+  const { phase, night } = useVillageClock(data.bedtime, data.wakeTime, data.villageClock, data.villageDayHours);
   const moods = data.villagers.map((v) => ({ v, mood: villagerMood(snapshotOf(v, data.paused, night)) }));
   const here = moods.filter(({ v, mood }) => building && MOOD_PLACE[mood] === building.id && (!isCottage || v.id === owner?.id));
   const away = owner && !here.some((h) => h.v.id === owner.id) ? moods.find((m) => m.v.id === owner.id) : null;

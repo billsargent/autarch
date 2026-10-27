@@ -527,6 +527,14 @@ export const agentSettings = sqliteTable("agent_settings", {
   workShare: integer("work_share").notNull().default(60),
   // What a villager's life windows may cost in a day (#133).
   lifeBudgetUsd: real("life_budget_usd").notNull().default(0.02),
+  // The village's own clock (#150): "own" (a village day every
+  // villageDayHours real hours) or "real" (the owner's clock).
+  villageClock: text("village_clock", { enum: ["own", "real"] }).notNull().default("own"),
+  villageDayHours: integer("village_day_hours").notNull().default(4),
+  // When the model thinks (#152): "work" (chats and work windows; village
+  // talk goes without, at talkTemperature), "all" or "none".
+  thinkingFor: text("thinking_for", { enum: ["work", "all", "none"] }).notNull().default("work"),
+  talkTemperature: real("talk_temperature").notNull().default(0.7),
   // Hiring (#99): "ask" = every hire waits for the owner; "auto" = the Mayor
   // hires within the caps. And how many villagers the village can hold.
   hiringMode: text("hiring_mode", { enum: ["ask", "auto"] }).notNull().default("ask"),

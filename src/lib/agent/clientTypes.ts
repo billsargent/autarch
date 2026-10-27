@@ -74,6 +74,10 @@ export interface SettingsRow {
   workEnd: string;
   workShare: number;
   lifeBudgetUsd: number;
+  villageClock: "own" | "real";
+  villageDayHours: number;
+  thinkingFor: "work" | "all" | "none";
+  talkTemperature: number;
   wakeTime: string;
   hiringMode: "ask" | "auto";
   maxPopulation: number;

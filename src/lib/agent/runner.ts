@@ -14,7 +14,7 @@ import { isChatMode, resolveToolAccess } from "./chatMode";
 import { HEARTBEAT_MS, TurnBusyError, claimTurn, heartbeat, isCancelRequested } from "./turnLock";
 import { resolveRun, type RunSettings } from "./providers";
 import { autoJournal, importPlanFile } from "./memory";
-import { LIFE_STEPS, TALK_ONLY_TRIGGERS, type SessionTrigger } from "./triggers";
+import { isTalkTurn, LIFE_STEPS, TALK_ONLY_TRIGGERS, type SessionTrigger } from "./triggers";
 import { BudgetError, actionsInLastHour, budgetAlerts, budgetProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
 
 export { BudgetError } from "./agents";
@@ -31,15 +31,20 @@ type DeepSeekRequestParams = OpenAI.Chat.Completions.ChatCompletionCreateParamsN
 // which spends a lot of output tokens on chain-of-thought on every step, so we
 // default to low effort and a bounded max_tokens. `thinking` is a DeepSeek-only
 // body field (not in the OpenAI SDK types); the SDK serializes it through.
-function modelRequestParams(
+// Village talk (#152) skips thinking when it's kept for work, and then sets
+// the talk temperature (thinking mode ignores temperature).
+export function modelRequestParams(
   settings: RunSettings,
   base: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  talk = false,
 ): DeepSeekRequestParams {
   const params: DeepSeekRequestParams = { ...base, max_tokens: settings.maxOutputTokens };
+  const think = settings.thinkingEnabled && settings.thinkingFor !== "none" && !(talk && settings.thinkingFor === "work");
+  if (!think && talk) params.temperature = settings.talkTemperature;
   // Other providers get a plain OpenAI-style request (#62).
   if (settings.providerKind !== "deepseek") return params;
-  params.thinking = settings.thinkingEnabled ? { type: "enabled" } : { type: "disabled" };
-  if (settings.thinkingEnabled) {
+  params.thinking = think ? { type: "enabled" } : { type: "disabled" };
+  if (think) {
     params.reasoning_effort = settings.reasoningEffort as "low" | "high" | "max";
   }
   return params;
@@ -66,12 +71,13 @@ async function streamChatCompletion(
   isInterrupted: () => boolean,
   onDelta?: (content: string, reasoning: string) => void,
   signal?: AbortSignal,
+  talk = false,
 ): Promise<StreamedMessage> {
   let stream;
   try {
     stream = await client.chat.completions.create(
       {
-        ...modelRequestParams(settings, base),
+        ...modelRequestParams(settings, base, talk),
         stream: true,
         stream_options: { include_usage: true },
       } as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming & DeepSeekThinking,
@@ -418,6 +424,7 @@ export async function runAgentTurn(opts: {
       chatMode: talkOnly ? "conversation" : conversation.chatMode,
       toolCount: tools.length,
     });
+    const talk = isTalkTurn(trigger, toolsAvailable);
     // An old notes/plan.md moves into a goal's notes, once (#71).
     await importPlanFile(agent, settings.workspaceDir).catch(() => false);
     const systemPrompt = await buildSystemPrompt(settings, {
@@ -513,6 +520,7 @@ export async function runAgentTurn(opts: {
           onEvent?.({ type: "model_stream", step: step + 1, content, reasoning });
         },
         stop.signal,
+        talk,
       );
 
       // Cancelled / timed out mid-generation: abort the stream (done above) and
@@ -603,7 +611,7 @@ export async function runAgentTurn(opts: {
         const toolName = call.function.name;
         let args: Record<string, unknown> = {};
         // Arguments that aren't valid JSON were usually cut off (a long file
-        // in one call): nothing runs, and the villager is told why (#150).
+        // in one call): nothing runs, and the villager is told why (#148).
         let argsBroken = false;
         try {
           args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
@@ -782,7 +790,7 @@ export async function runAgentTurn(opts: {
           modelRequestParams(settings, {
             model: settings.modelName,
             messages: apiMessages,
-          }),
+          }, talk),
           { timeout: CLOSING_CALL_TIMEOUT_MS, signal: stop.signal },
         );
         const tMsg = truncCompletion.choices[0].message as OpenAI.Chat.Completions.ChatCompletionMessage & {
@@ -826,7 +834,7 @@ export async function runAgentTurn(opts: {
                   "Give a brief plain-language summary of what you just did in this turn: the actions you took (including any tools) and their outcome. Reply with only the summary.",
               },
             ],
-          }),
+          }, talk),
           { timeout: CLOSING_CALL_TIMEOUT_MS, signal: stop.signal },
         );
         const sMsg = summaryCompletion.choices[0].message as OpenAI.Chat.Completions.ChatCompletionMessage & {

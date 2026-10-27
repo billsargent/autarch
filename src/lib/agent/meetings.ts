@@ -192,7 +192,7 @@ export async function summarizeMeeting(id: number): Promise<{ summary: string; i
       {
         conversationId: m.conversationId,
         eventNote:
-          `[Meeting ended] Write this meeting up for the town hall records: one short paragraph on what was said and agreed. Then, for each task someone agreed to take on, add a line "ACTION: <villager's name>: <the task>" (at most five). And for each new idea worth putting to the whole village (at most three), a line "IDEA: <the idea in a few words>".`,
+          `[Meeting ended] Sum this meeting up in two or three plain sentences: what was said and what was agreed. Then, for each task someone agreed to take on, add a line "ACTION: <villager's name>: <the task>" (at most five). And for each new idea worth putting to the whole village (at most three), a line "IDEA: <the idea in a few words>".`,
         trigger: "meeting",
       },
       2000,

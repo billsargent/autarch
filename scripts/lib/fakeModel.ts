@@ -18,6 +18,9 @@ export interface SeenRequest {
   lastUser: string;
   // Whether DeepSeek's own "thinking" field was sent (#62).
   thinking: boolean;
+  // …and whether it asked for thinking, and the temperature (#152).
+  thinkingOn: boolean;
+  temperature: number | undefined;
 }
 
 function chunk(delta: Record<string, unknown>, extra: Record<string, unknown> = {}) {
@@ -43,6 +46,8 @@ export function startFakeModel() {
         system: parsed.messages?.[0]?.role === "system" ? parsed.messages[0].content : "",
         tools: (parsed.tools ?? []).map((t: { function: { name: string } }) => t.function.name),
         thinking: "thinking" in parsed,
+        thinkingOn: parsed.thinking?.type === "enabled",
+        temperature: parsed.temperature,
         lastUser: [...(parsed.messages ?? [])].reverse().find((m: { role: string }) => m.role === "user")?.content ?? "",
       });
       const who = Object.keys(byAgent).find((n) => byAgent[n].length && seen[seen.length - 1].system.startsWith(`You are ${n}`));

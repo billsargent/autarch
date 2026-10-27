@@ -10,6 +10,9 @@ import type { AgentSettingsRow } from "./settingsStore";
 import { DEFAULT_PERSONA } from "./persona";
 import { isNight } from "./daynight";
 import { lifeBlock } from "./life";
+import { villageFacts } from "./villageFacts";
+import { builtInPlaybooks } from "./villagePlaybooks";
+import { villageDate, villageHours } from "./villageClock";
 import type { AgentRow } from "./agents";
 import type { SessionTrigger } from "./triggers";
 
@@ -42,6 +45,9 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
   const home = agent?.home ? `${settings.workspaceDir}/${agent.home}` : settings.workspaceDir;
   // Work windows carry the job mandate; chat + approval continuations are "focused."
   const isWorkTurn = trigger === "scheduled" || trigger === "report" || Boolean(jobId);
+
+  // Night by the village's own clock (#150), or the owner's.
+  const night = villageHours(settings.villageClock, settings.bedtime, settings.wakeTime);
 
   // Each villager keeps its own diary.
   const recentJournal = await db
@@ -156,13 +162,13 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
       ? `🧳 The owner is away and has trusted you to look at small requests while they're gone (the latest "[Approval request]" note). Approve it only if it's clearly safe, sensible and useful for the work it's part of; if you have any doubt, leave it for the owner. Explain in a sentence or two, then end with exactly one line: "DECISION: APPROVE" or "DECISION: LEAVE".`
       : "",
     trigger === "meeting"
-      ? `🏛 You're at a town meeting in the town hall, with the owner and your neighbours. The latest "[Town meeting]" note is what's been said since you last spoke. Answer the latest question in a few sentences, in your own voice, from your own work and point of view. Add something new rather than repeating what others said. A meeting is for deciding, so there are no tools here: what's agreed becomes goals afterwards, and you work on yours in your next work window. Say what you'd do; don't apologise for not doing it now.`
+      ? `🏛 You're at a town meeting in the town hall, with the owner and your neighbours. The latest "[Town meeting]" note is what's been said since you last spoke. Answer the latest question in two or three plain sentences, from your own work. Bring something new (an idea, a fact from THE VILLAGE TODAY, or a decision); if you agree with someone, say so in a few words rather than repeating them. No speeches, sayings or talk about yourself. There are no tools here: what's agreed becomes goals afterwards. Say what you'd do; don't apologise for not doing it now.`
       : "",
     trigger === "interview"
       ? `📋 You're interviewing someone who'd like to join the village (the latest "[Hire request]" note). Think about whether the village needs them, whether their personality and tools fit the job, and whether their budget is sensible. Say what you think in a few sentences, then end with exactly one line: "VERDICT: RECOMMEND" or "VERDICT: REJECT".`
       : "",
-    isNight(new Date(), settings.bedtime, settings.wakeTime)
-      ? `🌙 It's night in the village (${settings.bedtime}–${settings.wakeTime}). You were asleep; the human knocked to talk. Keep it brief and don't start any work of your own until morning.`
+    isNight(villageDate(new Date(), settings.villageClock, settings.villageDayHours), night.bedtime, night.wakeTime)
+      ? `🌙 It's night in the village (${night.bedtime}–${night.wakeTime}). You were asleep; the human knocked to talk. Keep it brief and don't start any work of your own until morning.`
       : "",
     settings.humanAtKeyboard
       ? `👤 HUMAN AT KEYBOARD — the operator is physically present at the machine right now. You may coordinate interactive tests with them (e.g. ask them to press keys, observe a screen, or click something and report back). Ask via chat or message_owner; never assume they'll do anything.`
@@ -187,6 +193,7 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
 CURRENT STATE (DYNAMIC — this section updates every turn)
 ${statusNotes}${agent?.status === "paused" ? `\n⏸ ${agent.pausedBy === "mayor" ? "The Mayor" : "The human"} has paused you: you can chat, but your tools are blocked until they let you work again.` : ""}${agent?.isMayor ? `\n${MAYOR_NOTE}` : ""}
 ${neighboursLine}
+${agent ? await villageFacts() : ""}
 ${agent ? lifeBlock(agent.id) : ""}
 ${isWorkTurn ? (settings.workWindowPrompt ? fill(settings.workWindowPrompt) : workWindowText) : trigger === "life" ? LIFE_WINDOW_NOTE : (settings.focusedChatPrompt ? fill(settings.focusedChatPrompt) : FOCUSED_CHAT_DEFAULT)}
 
@@ -199,7 +206,9 @@ ${goalsBlock}
 
 REUSABLE SKILLS
 - You maintain a library of markdown playbooks in ${skillsDir}, injected into your context every session. When you figure out a reusable technique (tool usage, recon methodology, CVE triage, etc.), write it there as a markdown file (low risk) so you don't re-derive it next session. Keep them concise and practical: each is shown up to ${SKILL_PROMPT_CHARS} characters, so give a new topic its own file rather than growing an old one.
-- Installed skills:
+${agent ? `- The village's own playbooks (kept current by the app):
+${builtInPlaybooks(Boolean(agent.isMayor))}
+` : ""}- Installed skills:
 ${skillsBlock}
 
 YOUR JOURNAL

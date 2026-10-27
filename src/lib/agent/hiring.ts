@@ -6,6 +6,7 @@ import { populationCap } from "./buildings";
 import { tierAllows } from "./mayorTools";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import type { ToolContext } from "./tools";
+import { freeName } from "./villageNames";
 
 // Hiring (#99, docs/town-charter.md section 4). The Mayor or a director
 // drafts a new villager; the Mayor interviews them (one talk-only turn of his,
@@ -81,15 +82,20 @@ export async function proposeHire(args: Record<string, unknown>, ctx?: ToolConte
   const full = populationProblem(settings, openRequests());
   if (full) return refused(full);
 
+  // No name, or no budget? The village picks a free name (#151), and the
+  // newcomer gets the drafter's own budget.
+  const living = (await db.select({ name: agents.name }).from(agents).where(ne(agents.status, "dismissed"))).map((a) => a.name);
+  const named = typeof args.name === "string" && args.name.trim() ? args.name.trim() : freeName(living);
+  if (!named) return refused("every name on the village's list is taken; give them a name yourself (`name`).");
   const draft: AgentInput = {
-    name: args.name,
+    name: named,
     role: args.role,
     persona: args.persona,
     area: args.area ?? me.area,
     tier,
     managerId: tier === "worker" ? me.id : null,
     enabledTools: args.tools ?? undefined,
-    dailyBudgetUsd: args.dailyBudgetUsd,
+    dailyBudgetUsd: args.dailyBudgetUsd ?? me.dailyBudgetUsd ?? settings.townDailyBudgetUsd ?? 1,
     character: args.character,
     // Their village trade (#131): innkeeper, baker, fisher …
     trade: typeof args.trade === "string" ? args.trade.toLowerCase().trim() : undefined,

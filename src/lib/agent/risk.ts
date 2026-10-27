@@ -69,7 +69,7 @@ function isWithin(parent: string, child: string) {
 
 export function resolvePathSafe(input: string, base: string): string {
   if (!input) return base;
-  // On Windows, a Git Bash path (/d/root/x) means drive D: (#150), the way
+  // On Windows, a Git Bash path (/d/root/x) means drive D: (#148), the way
   // villagers write paths in their commands.
   const native = process.platform === "win32" ? input.replace(/^\/([a-zA-Z])(?=\/|$)/, (_, d: string) => `${d.toUpperCase()}:`) : input;
   const expanded = native.startsWith("~") ? path.join(os.homedir(), native.slice(1)) : native;
