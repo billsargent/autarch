@@ -617,6 +617,15 @@ function DaySplit({ s, settings, save }: { s: Settings; settings: SettingsRow; s
           />
         </label>
       )}
+      <label className="block text-xs font-semibold">
+        Flaws the Mayor may give a newcomer
+        <select name="flawsAllowed" value={settings.flawsAllowed} onChange={(e) => save({ flawsAllowed: e.target.value as SettingsRow["flawsAllowed"] })} className={input}>
+          <option value="none">None</option>
+          <option value="one">At most one</option>
+          <option value="any">Any</option>
+        </select>
+        <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">Lazy, light-fingered and shifty. You can give anyone any traits yourself on the Villagers page.</span>
+      </label>
       <NumberField s={s} settings={settings} field="lifeBudgetUsd" label="Life windows: daily budget per villager (USD)" step="0.01" help="A life window is a few short model calls; it's skipped once a villager has spent this on village life today." />
       <p className="text-[11px] text-[#6b4a2e]">Each villager can have their own split on the Villagers page.</p>
     </Section>

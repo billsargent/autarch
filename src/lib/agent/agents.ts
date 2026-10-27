@@ -5,6 +5,7 @@ import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { calendarReaders, mailReaders } from "./mailAccess";
 import { assignHomes, dwellingsFor } from "./homes";
 import { isTradeKey } from "./trades";
+import { checkTraits } from "./traits";
 import { lifeSummary } from "./life";
 import { CHARACTER_KEYS, isCharacterKey, TRADE_LOOKS, VILLAGER_COLORS } from "./villagerLooks";
 import { ABANDONED_AFTER_MS } from "./turnLock";
@@ -110,9 +111,10 @@ export interface AgentInput {
   trade?: unknown;
   lifeBalance?: unknown;
   workShare?: unknown;
+  traits?: unknown;
 }
 
-type Clean = Partial<Pick<AgentRow, "name" | "role" | "persona" | "character" | "color" | "model" | "enabledTools" | "dailyBudgetUsd" | "maxActionsPerHour" | "status" | "tier" | "area" | "managerId" | "providerId" | "trade" | "lifeBalance" | "workShare">>;
+type Clean = Partial<Pick<AgentRow, "name" | "role" | "persona" | "character" | "color" | "model" | "enabledTools" | "dailyBudgetUsd" | "maxActionsPerHour" | "status" | "tier" | "area" | "managerId" | "providerId" | "trade" | "lifeBalance" | "workShare" | "traits">>;
 
 // Checks a create/update body. Returns the clean fields, or the first problem
 // as "field: reason" (the same shape as settings errors, so forms can place it).
@@ -153,6 +155,15 @@ export function validateAgentInput(input: AgentInput, toolNames: readonly string
     const v = text("persona", 4000);
     if (isErr(v)) return { ok: false, error: v.error };
     out.persona = v;
+  }
+  // Character traits (#153): the owner may choose any; the Mayor's drafts are checked again in hiring.ts.
+  if (has("traits")) {
+    if (input.traits === null) out.traits = null;
+    else {
+      const t = checkTraits(input.traits);
+      if (!t.ok) return { ok: false, error: t.error };
+      out.traits = t.traits;
+    }
   }
   if (has("trade")) {
     if (input.trade !== null && !isTradeKey(input.trade)) return { ok: false, error: "trade: isn't one of the village's trades." };
@@ -396,6 +407,7 @@ export async function createVillager(value: NewVillager): Promise<AgentRow> {
         CHARACTER_KEYS.find((c) => c !== "master" && !usedLooks.has(c)) ??
         "villager",
       trade: value.trade ?? null,
+      traits: value.traits ?? null,
       color: value.color ?? VILLAGER_COLORS.find((c) => !usedColors.has(c)) ?? VILLAGER_COLORS[1],
       model: value.model ?? null,
       enabledTools: value.enabledTools ?? null,

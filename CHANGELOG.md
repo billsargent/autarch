@@ -3,6 +3,29 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — Character traits, and conduct votes
+
+- **Every villager can have two or three traits:** hardworking, lazy, cheerful, grumpy,
+  chatty, shy, generous, thrifty, light-fingered, shifty or gossip. Pick them on the Villagers page.
+- **Traits change village life,** with no model calls:
+  - hardworking villagers learn their trade faster, and lazy ones now and then doze through a stint;
+  - cheerful villagers make friends faster, and grumpy ones slower;
+  - chatty villagers go out more of an evening, and shy ones less;
+  - generous villagers take flowers to friends, and thrifty ones don't spend on decor;
+  - light-fingered villagers now and then pocket a loaf from the stores.
+- **Traits change how they talk with neighbours,** in village talk only.
+- **Flaws are for village life only.** In computer work, and in anything they tell you about it,
+  every villager is diligent and honest. Work windows never mention their traits.
+- **Getting caught.** A theft or a doze stays private unless a neighbour out and about notices
+  (gossips notice more). Then it's in the chronicle, and the Mayor hears of it.
+- **Conduct votes.** When neighbours keep seeing someone misbehave, the Mayor can put it to the
+  village (`call_conduct_vote`), only about what was actually seen. If it passes:
+  - a warning, which dents their spirits;
+  - or losing their keeper post;
+  - or asking you to let them go (yours to decide; nothing happens on its own).
+- **Newcomers** get traits from the Mayor (two good ones if he doesn't choose). He can give at
+  most one flaw, a setting under Work & life (none, one or any).
+
 ## 2026-10-28 — Choosing the workspace, safely on Windows
 
 - **Browse… for the workspace** (Mayor's ledger → Limits): walk the folders on this computer

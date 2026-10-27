@@ -139,6 +139,16 @@ raises the cap first.
 
 ## 5. Ideas and voting
 
+**Conduct votes.** Villagers have character traits, and three are flaws (lazy, light-fingered,
+shifty). Flaws live only in village life: no villager is ever dishonest or lazy in computer work
+or in what they tell the owner. When neighbours keep seeing someone take from the stores or doze
+through their work, the Mayor may call a conduct vote (`call_conduct_vote`), only about what was
+seen that week. The villager it's about doesn't vote. If it passes:
+
+- a warning;
+- or losing their keeper post;
+- or asking the owner to let them go. Dismissal stays with the owner (section 2).
+
 Anyone can **propose an idea** (`propose_idea`): a villager at work, in free time or at a meeting;
 the Mayor; or the owner (on the notice board).
 

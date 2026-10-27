@@ -7,6 +7,7 @@ import { tierAllows } from "./mayorTools";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import type { ToolContext } from "./tools";
 import { freeName } from "./villageNames";
+import { TRAITS, checkTraits, isTraitKey, pickTraits } from "./traits";
 
 // Hiring (#99, docs/town-charter.md section 4). The Mayor or a director
 // drafts a new villager; the Mayor interviews them (one talk-only turn of his,
@@ -99,7 +100,12 @@ export async function proposeHire(args: Record<string, unknown>, ctx?: ToolConte
     character: args.character,
     // Their village trade (#131): innkeeper, baker, fisher …
     trade: typeof args.trade === "string" ? args.trade.toLowerCase().trim() : undefined,
+    // Their character (#153): what the drafter chose, within the owner's
+    // limit on flaws; or two good traits the village picks.
+    traits: args.traits ?? pickTraits(),
   };
+  const traits = checkTraits(draft.traits, settings.flawsAllowed);
+  if (!traits.ok) return refused(traits.error);
   const checked = await checkDraft(draft, me, settings);
   if ("error" in checked) return refused(checked.error!);
 
@@ -122,6 +128,7 @@ function describe(draft: Record<string, unknown>): string {
   return [
     `${draft.name}, ${draft.tier} — ${draft.role ?? "Villager"}${draft.area ? ` (area: ${draft.area})` : ""}.`,
     `Personality: ${draft.persona ?? "(the default)"}`,
+    ...(Array.isArray(draft.traits) && draft.traits.length ? [`Traits: ${(draft.traits as string[]).map((t) => (isTraitKey(t) ? TRAITS[t].label : t)).join(", ")}.`] : []),
     `Tools: ${tools.join(", ") || "none"}.`,
     `Daily budget: ${draft.dailyBudgetUsd != null ? `$${draft.dailyBudgetUsd}` : "none of their own"}.`,
   ].join("\n");

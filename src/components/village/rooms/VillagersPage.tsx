@@ -6,6 +6,7 @@ import { DEFAULT_PERSONA, personaToSave } from "@/lib/agent/persona";
 import { CHARACTER_GROUPS, CHARACTER_KEYS, CHARACTER_LABELS, VILLAGER_COLORS } from "@/lib/agent/villagerLooks";
 import { TRADES, TRADE_KEYS, guessTrade } from "@/lib/agent/trades";
 import { dwellingLabel } from "@/lib/agent/homes";
+import { MAX_TRAITS, TRAITS, TRAIT_KEYS, isTraitKey, type TraitKey } from "@/lib/agent/traits";
 import { tierAllows, type Tier } from "@/lib/agent/mayorTools";
 import { useVillagers, type VillagerInput } from "../../data/useVillagers";
 import { useProviders } from "./ProvidersPage";
@@ -187,6 +188,8 @@ function VillagerEditor({
   const [split, setSplit] = useState<string>(villager?.lifeBalance ?? "");
   const [share, setShare] = useState(villager?.workShare != null ? String(villager.workShare) : "");
   const [romance, setRomance] = useState(villager?.life?.romanceOpen ?? true);
+  // Their character (#153): two or three traits.
+  const [traits, setTraits] = useState<TraitKey[]>((villager?.traits ?? []).filter(isTraitKey));
   // Starts with the default personality written out, ready to edit.
   const [persona, setPersona] = useState(villager?.persona ?? DEFAULT_PERSONA);
   const [character, setCharacter] = useState(villager?.character ?? CHARACTER_KEYS.find((c) => c !== "master") ?? "villager");
@@ -227,6 +230,7 @@ function VillagerEditor({
       lifeBalance: (split || null) as "idle" | "hours" | "balanced" | null,
       workShare: split === "balanced" && share.trim() !== "" ? Number(share) : null,
       romanceOpen: romance,
+      traits,
     });
     if (!res.ok) {
       const m = /^(\w+): (.*)$/.exec(res.error);
@@ -334,11 +338,38 @@ function VillagerEditor({
           )}
         </div>
       )}
+      <fieldset>
+        <legend className="text-xs font-semibold">Character</legend>
+        <p className="text-[11px] text-[#6b4a2e]">
+          Two or three traits. They change village life (who works hard, who makes friends, who pockets a loaf) and how they talk with
+          neighbours, never their computer work or what they tell you. Marked ⚠ are flaws the village may notice and vote about.
+        </p>
+        <div className="mt-1 flex flex-wrap gap-1.5" role="group" aria-label="Traits">
+          {TRAIT_KEYS.map((t) => {
+            const on = traits.includes(t);
+            return (
+              <button
+                key={t}
+                type="button"
+                aria-pressed={on}
+                disabled={!on && traits.length >= MAX_TRAITS}
+                onClick={() => setTraits((cur) => (on ? cur.filter((x) => x !== t) : [...cur, t]))}
+                title={TRAITS[t].talk}
+                className={`village-btn px-2 py-1 text-[11px] disabled:opacity-40 ${on ? "village-btn-go" : ""}`}
+              >
+                {TRAITS[t].flaw ? "⚠ " : ""}
+                {TRAITS[t].label}
+              </button>
+            );
+          })}
+        </div>
+        {fieldError("traits")}
+      </fieldset>
       <label className="block text-xs font-semibold">
         Personality
         <textarea name="persona" value={persona} onChange={(e) => setPersona(e.target.value)} rows={4} className={`${input} resize-y`} />
         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 font-normal text-[11px] text-[#6b4a2e]">
-          Who they are, in your words — edit or add to the default.
+          Who they are, in your words, best kept to a sentence or two: the traits above do the rest.
           {persona.trim() !== DEFAULT_PERSONA && (
             <button type="button" onClick={() => setPersona(DEFAULT_PERSONA)} className="underline">
               Start again from the default

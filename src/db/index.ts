@@ -496,6 +496,8 @@ if (!globalForDb.__agentLabSqlite) {
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     decided_at INTEGER
   )`);
+  // A conduct vote's subject and outcome (#153).
+  if (!existingCols("ideas").includes("conduct")) sqlite.exec("ALTER TABLE ideas ADD COLUMN conduct TEXT");
   // Ideas a meeting's write-up pinned were once recorded as the Mayor's (#147).
   sqlite.exec("UPDATE ideas SET proposed_by = NULL WHERE body LIKE 'Raised at town meeting%' AND proposed_by IS NOT NULL");
   sqlite.exec(`CREATE TABLE IF NOT EXISTS votes (
@@ -569,6 +571,7 @@ if (!globalForDb.__agentLabSqlite) {
     ["village_day_hours", "INTEGER NOT NULL DEFAULT 4"],
     ["thinking_for", "TEXT NOT NULL DEFAULT 'work'"],
     ["talk_temperature", "REAL NOT NULL DEFAULT 0.7"],
+    ["flaws_allowed", "TEXT NOT NULL DEFAULT 'one'"],
   ] as const) {
     if (!existingCols("agent_settings").includes(col)) sqlite.exec(`ALTER TABLE agent_settings ADD COLUMN ${col} ${def}`);
   }
@@ -576,6 +579,7 @@ if (!globalForDb.__agentLabSqlite) {
     ["life_balance", "TEXT"],
     ["work_share", "INTEGER"],
     ["dwelling", "TEXT"],
+    ["traits", "TEXT"],
   ] as const) {
     if (!existingCols("agents").includes(col)) sqlite.exec(`ALTER TABLE agents ADD COLUMN ${col} ${def}`);
   }

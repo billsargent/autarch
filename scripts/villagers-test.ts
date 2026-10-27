@@ -1159,6 +1159,62 @@ async function main() {
   await patchBuilding(Number(/#(\d+)/.exec(prop)?.[1]), { action: "approve" });
   check("approving the Mayor's building pays from the treasury", (lifeDb.prepare("SELECT treasury FROM economy WHERE id = 1").get() as { treasury: number }).treasury, treasuryNow - 25);
 
+  // --- character traits (#153) -------------------------------------------------------------
+  const setTraits = (id: number, traits: string[] | null) => agentRoute.PATCH(req(`/api/agents/${id}`, "PATCH", { traits }), { params: Promise.resolve({ id: String(id) }) });
+  check("the owner gives a villager traits", (await setTraits(cal.id, ["grumpy", "lazy"])).status, 200);
+  check("…but not ones that clash", (await setTraits(cal.id, ["grumpy", "cheerful"])).status, 400);
+  fake.byAgent.Cal = [{ text: "Hm. Fine day." }];
+  const seenLife = fake.seen.length;
+  await runAgentTurn({ agentId: cal.id, trigger: "life", eventNote: "[VILLAGE LIFE] Your own time." });
+  const lifeStep = fake.seen.slice(seenLife).find((x) => x.system.startsWith("You are Cal"))!;
+  check("traits are in village talk", [lifeStep.system.includes("YOUR CHARACTER"), lifeStep.system.includes("You're grumpy, lazy")], [true, true]);
+  fake.byAgent.Cal = [{ text: "Done." }];
+  const seenWork = fake.seen.length;
+  await runAgentTurn({ agentId: cal.id, trigger: "scheduled", eventNote: "work" });
+  const workTurn = fake.seen.slice(seenWork).find((x) => x.system.startsWith("You are Cal"))!;
+  check("…never in computer work", [workTurn.system.includes("YOUR CHARACTER"), workTurn.system.includes("lazy")], [false, false]);
+  check("…and the owner is always told the truth", workTurn.system.includes("Be honest with the owner, always"), true);
+
+  const { proposeHire: hireTool } = await import("../src/lib/agent/hiring");
+  const popBefore = (await getSettings()).maxPopulation;
+  await updateSettings({ maxPopulation: 40 });
+  const flawed = (await hireTool({ role: "Fisher", trade: "fisher", persona: "Quiet.", reason: "Fish.", traits: ["lazy", "thieving"] }, ctxMayor)).output;
+  await updateSettings({ maxPopulation: popBefore });
+  check("the Mayor's newcomer gets at most one flaw, by default", flawed.includes("at most one flaw"), true);
+
+  const { GET: chronicle } = await import("../src/app/api/life/chronicle/route");
+  const { logLife } = await import("../src/lib/agent/life");
+  logLife("theft", dot.id, "Dot pocketed a loaf from the stores.");
+  check("a theft nobody saw stays out of the chronicle", JSON.stringify(await (await chronicle()).json()).includes("Dot pocketed"), false);
+  check("no conduct vote over what nobody saw", (await power("call_conduct_vote", { name: "Dot", outcome: "warning", reason: "Loaves are missing." })).includes("nobody has seen Dot"), true);
+  logLife("seen_theft", dot.id, "Cal saw Dot slip a loaf from the village stores.", cal.id);
+  check("…once someone saw it, it's news", JSON.stringify(await (await chronicle()).json()).includes("Cal saw Dot slip a loaf"), true);
+  const mayorFacts = await (await import("../src/lib/agent/villageFacts")).villageFacts(new Date(), true);
+  check("…and the Mayor hears of it", mayorFacts.includes("Dot was seen taking loaves 1 time"), true);
+
+  // A whole tick: a light-fingered villager pockets a loaf, and a neighbour out and about sees it.
+  await setTraits(dot.id, ["thieving"]);
+  lifeDb.prepare("UPDATE economy SET bread = 20").run();
+  lifeDb.prepare("UPDATE villager_life SET fullness = 90, energy = 90").run();
+  const sightingsBefore = (lifeDb.prepare("SELECT COUNT(*) AS n FROM life_events WHERE kind = 'seen_theft'").get() as { n: number }).n;
+  await life.runLifeTick(at(10), () => 0.01, true);
+  check("a light-fingered villager takes a loaf in the village's day", (lifeDb.prepare("SELECT COUNT(*) AS n FROM life_events WHERE kind = 'theft' AND agent_id = ?").get(dot.id) as { n: number }).n >= 1, true);
+  check("…and a neighbour may see it", (lifeDb.prepare("SELECT COUNT(*) AS n FROM life_events WHERE kind = 'seen_theft'").get() as { n: number }).n > sightingsBefore, true);
+  await setTraits(dot.id, null);
+
+  // A conduct vote that passes (here, adopted by the owner straight away).
+  const conductLib = await import("../src/lib/agent/ideas");
+  const kept = lifeDb.prepare("SELECT id FROM buildings WHERE status = 'built' LIMIT 1").get() as { id: number } | undefined;
+  if (kept) lifeDb.prepare("UPDATE buildings SET keeper_id = ? WHERE id = ?").run(dot.id, kept.id);
+  const keeperVote = await conductLib.proposeIdea("Conduct: Dot", "Seen taking loaves.", mayor.id, { agentId: dot.id, outcome: "keeper" });
+  await conductLib.adoptNow(keeperVote.id);
+  check("a conduct vote that passes can take a keeper post away", (lifeDb.prepare("SELECT COUNT(*) AS n FROM buildings WHERE keeper_id = ?").get(dot.id) as { n: number }).n, 0);
+  check("…without making it a town goal", (await db.select().from(goals).where(eq(goals.title, "Conduct: Dot"))).length, 0);
+  const letGo = await conductLib.proposeIdea("Conduct: Dot (2)", "Seen again.", mayor.id, { agentId: dot.id, outcome: "dismissal" });
+  await conductLib.adoptNow(letGo.id);
+  check("…and a dismissal only asks the owner", [(await rowOf(dot.id))?.status, (await db.select().from(notifications).where(eq(notifications.title, "The village asks you to let Dot go"))).length], ["active", 1]);
+  await setTraits(cal.id, null);
+
   // Everyone has a home (#159), handed out when the village lists its villagers.
   const housed = ((await (await agentsRoute.GET()).json()).agents as Array<{ name: string; status: string; dwelling: string | null }>).filter((a) => a.status !== "dismissed");
   check("every villager has a home", housed.filter((a) => !a.dwelling).map((a) => a.name), []);
