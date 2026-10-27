@@ -420,6 +420,8 @@ export async function createVillager(value: NewVillager): Promise<AgentRow> {
       home,
     })
     .returning();
+  // A newcomer whose trade works an empty building keeps it (#165).
+  if (created.status === "active") (await import("./buildings")).fillKeeperPosts({ agentId: created.id });
   return created;
 }
 

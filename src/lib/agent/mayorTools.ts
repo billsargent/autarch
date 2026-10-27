@@ -1,7 +1,7 @@
 // The Mayor's own tools (#58, docs/town-charter.md section 3). Nobody else is
 // ever given them, whatever their tool list says. Kept apart from tools.ts so
 // the browser can use the list too.
-export const MAYOR_TOOLS = ["assign_goal", "schedule_job_for", "review_agent", "flag", "pause_agent", "resume_agent", "call_meeting", "call_vote", "call_conduct_vote", "propose_building", "accept_order"];
+export const MAYOR_TOOLS = ["assign_goal", "schedule_job_for", "review_agent", "flag", "pause_agent", "resume_agent", "call_meeting", "call_vote", "call_conduct_vote", "appoint_keeper", "propose_building", "accept_order"];
 
 export const isMayorTool = (name: string) => MAYOR_TOOLS.includes(name);
 

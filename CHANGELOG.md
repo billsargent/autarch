@@ -3,6 +3,18 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — Every building gets its keeper
+
+- **Fixed: hired villagers didn't keep their building.** The Mayor hired a shopkeeper "for the
+  empty shop", and the village had an innkeeper, yet the shop and the tavern had no keeper:
+  hiring never assigned one, and the Mayor had no way to.
+  - A newcomer whose trade works an empty building now keeps it.
+  - A building that's just been finished goes to a villager of its trade.
+  - The Mayor can appoint a keeper (`appoint_keeper`), and his playbook says when.
+  - Existing villages had their empty posts filled once. A post you later set to "Nobody" stays
+    that way.
+- THE VILLAGE TODAY now says who keeps each building, and plainly when a post is empty.
+
 ## 2026-10-28 — Character traits, and conduct votes
 
 - **Every villager can have two or three traits:** hardworking, lazy, cheerful, grumpy,

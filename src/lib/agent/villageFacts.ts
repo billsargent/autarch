@@ -31,8 +31,11 @@ export async function villageFacts(now = new Date(), mayor = false): Promise<str
   const label = (kind: string) => (isBuildingKind(kind) ? BUILDING_KINDS[kind].label.toLowerCase() : kind);
   // Who works a building: its keeper, and anyone whose trade works there.
   const workers = (kind: string, keeperId: number | null) => {
-    const by = villagers.filter((v) => v.id === keeperId || TRADES[tradeOf({ trade: v.trade, role: v.role, isMayor: Boolean(v.isMayor) })].building === kind);
-    return by.length ? ` (worked by ${by.map((v) => v.name).join(" and ")})` : " (nobody works it)";
+    const keeper = villagers.find((v) => v.id === keeperId);
+    const by = villagers.filter((v) => v.id !== keeperId && TRADES[tradeOf({ trade: v.trade, role: v.role, isMayor: Boolean(v.isMayor) })].building === kind);
+    // Who keeps it, and an empty post said plainly (#165).
+    if (keeper) return ` (kept by ${keeper.name}${by.length ? `, with ${by.map((v) => v.name).join(" and ")}` : ""})`;
+    return by.length ? ` (no keeper yet; ${by.map((v) => v.name).join(" and ")} work${by.length > 1 ? "" : "s"} there by trade)` : " (no keeper, and nobody of its trade)";
   };
   const standingText = standing.map((b) => `${label(b.kind)}${workers(b.kind, b.keeperId)}`);
   const going = buildings.filter((b) => b.status === "building").map((b) => label(b.kind));
