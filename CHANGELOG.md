@@ -3,6 +3,22 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — Choosing the workspace, safely on Windows
+
+- **Browse… for the workspace** (Mayor's ledger → Limits): walk the folders on this computer
+  (names only), make a new one, and use it. A folder that can't be a workspace says why.
+- **Windows rules for the workspace.** Before, only the Linux system folders were checked. Now
+  it can't be any of these:
+  - a drive's root;
+  - inside `\Windows`, `\Program Files` or `\ProgramData`, on any drive;
+  - `C:\Users` itself, or your home folder itself;
+  - this framework's folder;
+  - a network drive or share.
+
+  A Git Bash path (`/d/…`) becomes a drive path.
+- **Older Windows installs.** A workspace written Linux-style (`/root/agent-workspace`) now
+  shows as the drive path it always meant: the same folder, on the drive the app runs from.
+
 ## 2026-10-28 — Homes for everyone, a closer village, and the countryside
 
 - **Villagers go indoors.** At night they walk to their own front door and go in; a 💤 sign on

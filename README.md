@@ -123,6 +123,13 @@ reset it, stop the server, delete that file, and start again for a new setup cod
 password signs out every other session. Sessions last 30 days. After 5 wrong passwords, sign-in
 waits 30 seconds, doubling with each further miss up to 15 minutes.
 
+**The workspace** is the villagers' own folder: everything they make goes there, and working in
+it is always low risk. A new install uses `agent-workspace` in your home folder; change it in
+the Mayor's ledger → Limits, by typing a path or with **Browse…**. It can't be a drive's or the
+filesystem's root, a system folder (`/etc`, `/usr` …; `C:\Windows`, `C:\Program Files` …), your
+home folder itself, this framework's folder, or a network drive or share. On Windows, write a
+drive path (`D:\agent-workspace`); a Git Bash path (`/d/agent-workspace`) is turned into one.
+
 > The `db:push` / `db:generate` scripts still exist for schema maintenance, but the app creates
 > its own schema at startup, so they are optional.
 

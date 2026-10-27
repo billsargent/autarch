@@ -22,7 +22,9 @@ Every agent has:
 - a **model and provider**;
 - **tools**: always a subset of the town policy (section 6);
 - a **budget**: dollars per day, plus actions per hour;
-- a **home** cottage and a **workspace** folder of its own;
+- a **home** (a cottage, or a house on the plots) and a **workspace** folder of its own, inside
+  the town's workspace: never a drive's root, a system folder, the owner's home folder itself,
+  the framework's folder or a network drive;
 - a **status**: active, paused, or asleep.
 
 The Mayor is a villager with extra tools (section 3). There is exactly one Mayor.
