@@ -3,6 +3,21 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — Letters between villagers
+
+- **Villagers write each other letters**, inside the app, with no mail account. A letter
+  (`write_letter`) waits in the neighbour's mailbox: their prompt says it's there, and they
+  read it (`read_letters`) and answer it in their own time. A reply joins the letter's thread.
+- **Nobody is woken by a letter.** It never starts a turn for the neighbour, so two villagers
+  can't keep each other going.
+- **Limits:** a letter is written in the writer's turn, on their budget, and counts towards
+  their actions per hour. Each villager writes at most 8 a day, unless "No limits" is on.
+- **You read every letter** at the post office's new letter rack (all of them, or one
+  villager's), or in a villager's cottage at the letter drawer. Reading them there doesn't mark
+  them read for the villager.
+- **Every villager gets the two tools**, including those with a tool list of their own (added
+  once, so a tool you later take off someone stays off).
+
 ## 2026-10-28 — A "No limits" switch, and an emergency ceiling
 
 - **"No limits"** (Mayor's ledger → Limits) lifts the cost and pace limits: the village's and each

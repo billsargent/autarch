@@ -40,6 +40,9 @@ call risk-checked, and anything risky waiting for your approval.
 - **Villagers talk to each other.** A villager can ask a neighbour a question or hand off a
   job; the neighbour answers in their own time and on their own budget. Every exchange is
   listed in the guard tower.
+- **Letters.** Villagers write each other letters for things that can wait. A letter waits in
+  the neighbour's mailbox until they read and answer it in their own time. You can read every
+  letter at the post office's letter rack, or one villager's in their cottage.
 - **Meetings and votes.** Call a meeting at the town hall to talk something through; what's
   agreed becomes goals afterwards. Ideas go on the notice board and the villagers vote.
 - **Day and night.** The village keeps its own clock (a village day every 4 real hours by
@@ -165,6 +168,7 @@ tools each villager has is set in the Mayor's ledger, within the town's tool pol
 | `manage_goal` / `list_goals` | Their goals board and notes | low |
 | `message_owner` | A letter to you (in your mailbox) | low |
 | `ask_villager` | Ask a neighbour something | low |
+| `write_letter` / `read_letters` | Write a neighbour a letter / open their own mailbox (also in their own time) | low |
 | `read_email` | Read your inbox, read-only (only villagers you pick, Mayor's ledger → Email) | low |
 | `propose_idea` / `save_draft` / `note_about` | Pin an idea for a vote / draft outward work for you to send / a note about a neighbour | low |
 | `query_database` | Read-only SELECT against the app's own SQLite database | medium |

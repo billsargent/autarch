@@ -191,7 +191,7 @@ export async function buildSystemPrompt(settings: AgentSettingsRow, scope: Promp
 
   const neighbours = scope.neighbours ?? [];
   const neighboursLine = neighbours.length
-    ? `YOUR NEIGHBOURS\n- ${neighbours.map((n) => `${n.name} (${n.role}${n.status === "paused" ? ", resting" : ""})`).join(", ")}. You can ask one of them something with ask_villager when they'd know or it's their job.`
+    ? `YOUR NEIGHBOURS\n- ${neighbours.map((n) => `${n.name} (${n.role}${n.status === "paused" ? ", resting" : ""})`).join(", ")}. You can ask one of them something with ask_villager when they'd know or it's their job, or write them a letter (write_letter) for things that can wait.`
     : "";
 
   const dynamicTail = `

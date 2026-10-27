@@ -32,10 +32,17 @@ export const COTTAGE_SCENE = interior({
       action: "journal.open",
       parts: [{ stamp: "writingDesk", col: 1, row: 6 }],
     },
+    {
+      id: "letters",
+      label: "Letter drawer",
+      role: "Letters from the neighbours, and the ones written back (#172)",
+      door: "letters",
+      action: "cottage.letters",
+      parts: [{ stamp: "drawers", col: 14, row: 3 }],
+    },
   ],
   decor: [
     { stamp: "bedRed", col: 12, row: 3 },
-    { stamp: "drawers", col: 14, row: 3 },
     { stamp: "tallBookshelf", col: 1, row: 2 },
     { stamp: "pottedPlant", col: 4, row: 3 },
     { stamp: "book", col: 3, row: 7 },
@@ -47,10 +54,12 @@ export const COTTAGE_SCENE = interior({
     { id: "diary", x: 3, y: 8.6 },
     // On the bed itself: where they sleep at night (#111).
     { id: "bed", x: 13, y: 5.3, onFurniture: true },
+    { id: "letters", x: 14.5, y: 5.8 },
   ],
   edges: [
     ["center", "hearth"],
     ["center", "diary"],
     ["center", "bed"],
+    ["center", "letters"],
   ],
 });

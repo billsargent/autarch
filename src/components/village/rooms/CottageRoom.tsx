@@ -6,6 +6,7 @@ import { useChat } from "../../data/useChat";
 import { JOURNAL_ICON, useJournal } from "../../data/useJournal";
 import { MessageList, VILLAGE_THEME } from "../../MessageList";
 import ParchmentDialog, { ConfirmDialog } from "../ParchmentDialog";
+import LetterRack from "./LetterRack";
 import { useProviders } from "./ProvidersPage";
 import type { RoomProps } from "./types";
 
@@ -15,6 +16,7 @@ import type { RoomProps } from "./types";
 // Journal pages (useChat, useJournal).
 
 export default function CottageRoom({ action, agentId, onClose }: RoomProps) {
+  if (action === "cottage.letters") return <LetterRack agentId={agentId ?? null} kicker="The cottage" onClose={onClose} />;
   return action === "journal.open" ? <Diary agentId={agentId ?? null} onClose={onClose} /> : <Parlour agentId={agentId ?? null} onClose={onClose} />;
 }
 

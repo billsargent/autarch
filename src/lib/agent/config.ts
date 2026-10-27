@@ -171,6 +171,9 @@ export const DEFAULT_ENABLED_TOOLS = [
   "take_screenshot",
   "web_search",
   "ask_villager",
+  // Letters between villagers (#172).
+  "write_letter",
+  "read_letters",
   // The Mayor's (#58); only he ever gets them.
   "assign_goal",
   "schedule_job_for",
