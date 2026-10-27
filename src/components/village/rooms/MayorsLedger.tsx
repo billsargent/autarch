@@ -313,6 +313,26 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
     case "limits":
       return (
         <Section title="Limits" intro="Caps on how much the agent does per turn, per hour and per day, and what it costs.">
+          <Toggle
+            label="No limits"
+            desc="Lifts the daily budgets (the village's and each villager's), work sessions per day and the gap between them, actions per hour and steps per turn. The safety rules, approvals and protected paths stay as they are, and so do the longest session and the meeting, vote and away budgets."
+            checked={settings.noLimits}
+            onToggle={(v) => save({ noLimits: v })}
+          />
+          <MoneyField
+            s={s}
+            settings={settings}
+            field="spendCeilingUsd"
+            label="Emergency ceiling (USD a day)"
+            placeholder="No ceiling"
+            help="A backstop, with or without No limits: once the village has spent this today, all work stops until midnight, research too. The spend so far is in the bar at the top of the village."
+          />
+          {settings.noLimits && (
+            <p className="rounded border-2 border-[#c98a2b] bg-[#fbf0d9] px-3 py-2 text-xs text-[#6b4a2e]">
+              <strong>No limits is on.</strong>{" "}
+              {`The caps below are kept for when you switch it off, but don't apply now.${settings.spendCeilingUsd == null ? " Without an emergency ceiling, a villager stuck in a loop can spend until its session's time runs out." : ""}`}
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <NumberField s={s} settings={settings} field="maxAgentSteps" label="Tool steps per turn" />
             <NumberField s={s} settings={settings} field="maxActionsPerHour" label="Actions per hour" />
@@ -325,7 +345,14 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
             <NumberField s={s} settings={settings} field="outputPricePerMTok" label="Output price per 1M tokens" step="0.01" />
             <NumberField s={s} settings={settings} field="cacheHitInputPricePerMTok" label="Cached input price per 1M tokens" step="0.0001" help="DeepSeek caches prompt prefixes automatically." />
           </div>
-          <TownBudgetField s={s} settings={settings} />
+          <MoneyField
+            s={s}
+            settings={settings}
+            field="townDailyBudgetUsd"
+            label="The village's daily budget (USD)"
+            placeholder="No town budget"
+            help="When everyone together has spent this today, every villager stops until midnight. Each villager can also have a budget of their own (Villagers)."
+          />
           <div className="grid gap-3 sm:grid-cols-2">
             <NumberField s={s} settings={settings} field="meetingCostCapUsd" label="Budget per town meeting (USD)" step="0.01" help="A meeting's round stops when it has spent this." />
             <NumberField s={s} settings={settings} field="voteCostCapUsd" label="Budget per round of votes (USD)" step="0.01" help="A vote stops collecting when it has spent this." />
@@ -672,7 +699,9 @@ function FreeTimePage({ settings }: { settings: SettingsRow }) {
         );
       })}
       <p className="text-[11px] text-[#6b4a2e]">
-        {`Each villager: up to ${settings.maxSessionsPerDay} work sessions a day, at least ${settings.minGapMinutes} min apart. Village-life windows don't count.`}
+        {settings.noLimits
+          ? "No limits is on: no cap on work sessions a day and no gap between them."
+          : `Each villager: up to ${settings.maxSessionsPerDay} work sessions a day, at least ${settings.minGapMinutes} min apart. Village-life windows don't count.`}
       </p>
     </Section>
   );
@@ -940,25 +969,41 @@ function WorkspaceField({ s, settings }: { s: Settings; settings: SettingsRow })
   );
 }
 
-// What the whole village may spend in a day (#60); empty = no town cap.
-function TownBudgetField({ s, settings }: { s: Settings; settings: SettingsRow }) {
-  const error = s.fieldErrors.townDailyBudgetUsd;
-  const saved = settings.townDailyBudgetUsd == null ? "" : String(settings.townDailyBudgetUsd);
+// A daily amount in USD where empty means none: the village's budget (#60)
+// and the emergency ceiling (#171).
+function MoneyField({
+  s,
+  settings,
+  field,
+  label,
+  placeholder,
+  help,
+}: {
+  s: Settings;
+  settings: SettingsRow;
+  field: "townDailyBudgetUsd" | "spendCeilingUsd";
+  label: string;
+  placeholder: string;
+  help: string;
+}) {
+  const error = s.fieldErrors[field];
+  const value = settings[field];
+  const saved = value == null ? "" : String(value);
   const [draft, setDraft] = useDraft(saved, error);
   const commit = () => {
-    if (draft === saved) s.clearFieldError("townDailyBudgetUsd");
-    else void s.save({ townDailyBudgetUsd: draft.trim() === "" ? null : Number(draft) });
+    if (draft === saved) s.clearFieldError(field);
+    else void s.save({ [field]: draft.trim() === "" ? null : Number(draft) });
   };
   return (
     <label className="block text-xs font-semibold">
-      The village&apos;s daily budget (USD)
+      {label}
       <input
         type="number"
-        name="townDailyBudgetUsd"
+        name={field}
         min={0}
         step="0.01"
         value={draft}
-        placeholder="No town budget"
+        placeholder={placeholder}
         aria-invalid={Boolean(error)}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
@@ -967,9 +1012,7 @@ function TownBudgetField({ s, settings }: { s: Settings; settings: SettingsRow }
         }}
         className={`${input} ${error ? "border-[#b3261e]" : ""}`}
       />
-      <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">
-        When everyone together has spent this today, every villager stops until midnight. Each villager can also have a budget of their own (Villagers).
-      </span>
+      <span className="mt-0.5 block font-normal text-[11px] text-[#6b4a2e]">{help}</span>
       <FieldError msg={error} />
     </label>
   );

@@ -350,8 +350,21 @@ export class BudgetError extends Error {
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
-// Why this villager can't spend any more today, or null if they can.
+// The owner's emergency ceiling (#171): it applies to every turn, with
+// "No limits" on or off, research included.
+export function ceilingProblem(settings: AgentSettingsRow, now = new Date()): string | null {
+  if (settings.spendCeilingUsd == null) return null;
+  const spent = townSpentToday(now);
+  if (spent < settings.spendCeilingUsd) return null;
+  return `The village has reached its emergency ceiling (${usd(spent)} of ${usd(settings.spendCeilingUsd)} today). Everything stops until midnight, or you can raise it in the Mayor's ledger.`;
+}
+
+// Why this villager can't spend any more today, or null if they can. With
+// "No limits" on (#171), only the emergency ceiling counts.
 export function budgetProblem(agent: AgentRow, settings: AgentSettingsRow, now = new Date()): string | null {
+  const ceiling = ceilingProblem(settings, now);
+  if (ceiling) return ceiling;
+  if (settings.noLimits) return null;
   if (agent.dailyBudgetUsd != null) {
     const spent = spentToday(agent.id, now);
     if (spent >= agent.dailyBudgetUsd) {
@@ -470,10 +483,21 @@ export async function setDaydream(agent: AgentRow, on: boolean) {
 // another when it's all spent (once each a day). Called after each session.
 export async function budgetAlerts(now = new Date()): Promise<string[]> {
   const settings = await getSettings();
-  const cap = settings.townDailyBudgetUsd;
-  if (cap == null || cap <= 0) return [];
-  const spent = townSpentToday(now);
   const sent: string[] = [];
+  // The emergency ceiling (#171), whether or not "No limits" is on.
+  const ceiling = settings.spendCeilingUsd;
+  if (ceiling != null && ceiling > 0 && townSpentToday(now) >= ceiling) {
+    const title = "The village reached its emergency ceiling";
+    if (!sqlite.prepare("SELECT 1 FROM notifications WHERE kind = 'budget' AND title = ? AND created_at >= ?").get(title, startOfToday(now))) {
+      sqlite
+        .prepare("INSERT INTO notifications (kind, title, body, severity, source) VALUES ('budget', ?, ?, 'critical', 'The vault')")
+        .run(title, `$${townSpentToday(now).toFixed(2)} of $${ceiling.toFixed(2)} so far today. Everything stops until midnight, unless you raise it (Mayor's ledger → Limits).`);
+      sent.push(title);
+    }
+  }
+  const cap = settings.townDailyBudgetUsd;
+  if (settings.noLimits || cap == null || cap <= 0) return sent;
+  const spent = townSpentToday(now);
   for (const [share, title] of [
     [1, "The village has spent today's budget"],
     [0.8, "The village has spent 80% of today's budget"],

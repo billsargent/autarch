@@ -3,6 +3,17 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — A "No limits" switch, and an emergency ceiling
+
+- **"No limits"** (Mayor's ledger → Limits) lifts the cost and pace limits: the village's and each
+  villager's daily budgets, work sessions per day and the gap between them, actions per hour and
+  steps per turn (up to 200). The caps keep their values for when you switch it off.
+- **The safety rules don't change.** The risk gate, approvals, protected paths and the framework's
+  own files work as before, and so do the longest session and the meeting, vote and away budgets.
+- **An emergency ceiling** (empty = none): once the village has spent it today, all work stops until
+  midnight, research included, with or without "No limits", and you get a letter. The bar at the
+  top of the village shows the day's spend against it.
+
 ## 2026-10-28 — The document shelf in the library
 
 - **The library's reading table is a document shelf.** Put PDFs, text, markdown, Word files and

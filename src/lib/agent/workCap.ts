@@ -8,6 +8,8 @@ import type { AgentSettingsRow } from "./settingsStore";
 // The daily cap and the gap between sessions count each villager's own work
 // windows (#148): a bigger village doesn't share one allowance.
 export async function checkWorkAllowed(settings: AgentSettingsRow, agentId: number | null): Promise<{ allowed: boolean; reason?: string }> {
+  // "No limits" (#171) lifts both; the emergency ceiling is checked per turn.
+  if (settings.noLimits) return { allowed: true };
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const whose = agentId == null ? isNull(workSessions.agentId) : eq(workSessions.agentId, agentId);

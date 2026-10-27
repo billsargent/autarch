@@ -16,8 +16,8 @@ import { isChatMode, resolveToolAccess } from "./chatMode";
 import { HEARTBEAT_MS, TurnBusyError, claimTurn, heartbeat, isCancelRequested } from "./turnLock";
 import { resolveRun, type RunSettings } from "./providers";
 import { autoJournal, importPlanFile } from "./memory";
-import { isTalkTurn, LIFE_STEPS, TALK_ONLY_TRIGGERS, type SessionTrigger } from "./triggers";
-import { BudgetError, actionsInLastHour, budgetAlerts, budgetProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
+import { isTalkTurn, LIFE_STEPS, NO_LIMIT_STEPS, TALK_ONLY_TRIGGERS, type SessionTrigger } from "./triggers";
+import { BudgetError, actionsInLastHour, budgetAlerts, budgetProblem, ceilingProblem, effectiveTools, getAgent, listVillagers, type AgentRow } from "./agents";
 
 export { BudgetError } from "./agents";
 
@@ -348,10 +348,11 @@ export async function runAgentTurn(opts: {
   // Over today's budget (the villager's or the town's): refuse before
   // anything is written (#60).
   // A research turn (#170) spends its project's own budget instead, which
-  // the research desk checks before every turn.
+  // the research desk checks before every turn; the emergency ceiling (#171)
+  // still stops it.
   const trigger: SessionTrigger = opts.trigger ?? (opts.jobId ? "scheduled" : "chat");
   const researchTurn = trigger === "research";
-  const overBudget = researchTurn ? null : budgetProblem(agent, settings);
+  const overBudget = researchTurn ? ceilingProblem(settings) : budgetProblem(agent, settings);
   if (overBudget) throw new BudgetError(overBudget);
   const overrides = buildOverrides(settings);
   const maxDurationMinutes = opts.maxDurationMinutes ?? settings.maxSessionMinutes;
@@ -412,9 +413,11 @@ export async function runAgentTurn(opts: {
       ? LIFE_STEPS
       : researchTurn
         ? RESEARCH_STEPS
-        : isWorkWindow
-        ? Math.max(settings.maxAgentSteps, Math.ceil(maxDurationMinutes * 2))
-        : Math.max(1, settings.maxAgentSteps);
+        : settings.noLimits
+          ? NO_LIMIT_STEPS
+          : isWorkWindow
+            ? Math.max(settings.maxAgentSteps, Math.ceil(maxDurationMinutes * 2))
+            : Math.max(1, settings.maxAgentSteps);
     const tools = lifeTurn ? lifeToolDefinitions() : researchTurn ? researchToolDefinitions() : getEnabledToolDefinitions(settings.enabledTools as string[]);
     // Direct user chat in a conversation-mode conversation: we DON'T expose
     // tools at all (a tool call becomes impossible), and toolsForbidden refuses
@@ -501,7 +504,7 @@ export async function runAgentTurn(opts: {
       }
 
       // A turn that has spent the day's budget stops here (#60).
-      const spentOut = step > 0 && !researchTurn ? budgetProblem(agent, settings) : null;
+      const spentOut = step > 0 ? (researchTurn ? ceilingProblem(settings) : budgetProblem(agent, settings)) : null;
       if (spentOut) {
         terminated = true;
         budgetStopped = true;
@@ -697,9 +700,10 @@ export async function runAgentTurn(opts: {
           output = "Turn cancelled by the human before this action ran.";
           resultContent = `CANCELLED: ${output}`;
         } else {
-          // The town's hourly cap, and the villager's own (#60).
-          const townLimitHit = actionsInLastHour(undefined, execution.id) >= settings.maxActionsPerHour;
-          const ownLimitHit = agent.maxActionsPerHour != null && actionsInLastHour(agent.id, execution.id) >= agent.maxActionsPerHour;
+          // The town's hourly cap, and the villager's own (#60). "No limits"
+          // (#171) lifts both.
+          const townLimitHit = !settings.noLimits && actionsInLastHour(undefined, execution.id) >= settings.maxActionsPerHour;
+          const ownLimitHit = !settings.noLimits && agent.maxActionsPerHour != null && actionsInLastHour(agent.id, execution.id) >= agent.maxActionsPerHour;
           if (townLimitHit || ownLimitHit) {
             status = "rate_limited";
             output = ownLimitHit

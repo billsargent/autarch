@@ -53,6 +53,8 @@ const RULES: Record<string, Rule> = {
   outputPricePerMTok: { kind: "number", min: 0, max: 1000 },
   cacheHitInputPricePerMTok: { kind: "number", min: 0, max: 1000 },
   townDailyBudgetUsd: { kind: "number", min: 0, max: 10000, nullable: true },
+  noLimits: { kind: "bool" },
+  spendCeilingUsd: { kind: "number", min: 0, max: 10000, nullable: true },
   bedtime: { kind: "time" },
   lifeBalance: { kind: "enum", values: ["idle", "hours", "balanced"] },
   workStart: { kind: "time" },

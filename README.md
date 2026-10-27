@@ -58,6 +58,9 @@ call risk-checked, and anything risky waiting for your approval.
   anything risky still waits for you.
 - **Spending guard rails.** A daily budget for the whole village and for each villager, with a
   letter at 80% and 100%, and today's spending broken down by activity in the vault.
+- **No limits, with a ceiling.** One switch lifts the budgets, session caps, hourly actions and
+  step caps (the safety rules stay); an optional emergency ceiling still stops everything for the
+  day once it's spent.
 
 The rules of the village (who may do what, and what always stays with you) are written up in
 `docs/town-charter.md`.
@@ -183,6 +186,11 @@ controls how often and how long it works:
 - `maxActionsPerHour` / `maxAgentSteps` — action/step caps
 
 Human-initiated chat is never throttled; only autonomous (scheduled/report) sessions are.
+
+**No limits** (`noLimits`) lifts the session cap and gap, the hourly action caps, the step caps
+(200 steps a turn) and the daily budgets. It leaves the safety rules and `maxSessionMinutes` alone.
+**The emergency ceiling** (`spendCeilingUsd`, empty = none) stops every turn, research included,
+once the village has spent it today, whether or not No limits is on.
 
 ### Jobs & the worker
 **Villagers can schedule their own jobs** (`schedule_job`) and the human can create them

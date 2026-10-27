@@ -93,6 +93,8 @@ export async function PUT(req: Request) {
     "maxOutputTokens",
     "cacheHitInputPricePerMTok",
     "townDailyBudgetUsd",
+    "noLimits",
+    "spendCeilingUsd",
     "bedtime",
     "wakeTime",
     "hiringMode",

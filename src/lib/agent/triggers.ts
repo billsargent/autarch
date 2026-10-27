@@ -19,3 +19,7 @@ export function isTalkTurn(trigger: SessionTrigger, toolsAvailable: boolean): bo
 
 // A villager's own time in the village (#133): only the life tools, a few steps.
 export const LIFE_STEPS = 4;
+// Steps per turn with "No limits" on (#171): high enough never to cut real
+// work short; a runaway turn still meets the session's time limit and the
+// emergency ceiling.
+export const NO_LIMIT_STEPS = 200;
