@@ -256,6 +256,10 @@ each road.
 
 - The Mayor proposes a building (`propose_building`): a house, a farm, a bakery or a workshop.
 - The owner approves or declines it at the map table at home, or builds something there directly.
+- The tavern, the bakery and the shop have an inside: click one to go in. Whoever is there by
+  their village life is shown inside, and the furniture shows the stores, who works there and
+  (in the shop) what's for sale. Every building but a house can have a keeper, who takes up its
+  trade.
 - A building takes half a day of scaffolding.
 - Each finished house adds two beds, which raises the village's room for villagers (the
   `maxPopulation` setting plus the beds) that hiring respects.

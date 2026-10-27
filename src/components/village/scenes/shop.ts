@@ -7,7 +7,7 @@ export const SHOP_SCENE = interior({
   title: "The shop",
   ground: [
     { stamp: "windowBlue", col: 7, row: 0 },
-    { stamp: "bigRug", col: 6, row: 7 },
+    { stamp: "bigRug", col: 6, row: 6 },
   ],
   places: [
     {
