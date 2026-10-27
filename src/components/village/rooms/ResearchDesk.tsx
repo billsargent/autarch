@@ -11,10 +11,11 @@ interface Project {
   id: number;
   topic: string;
   brief: string | null;
-  depth: "quick" | "thorough";
+  depth: "quick" | "thorough" | "deep";
+  format: "md" | "html" | "txt" | "docx" | "pdf";
   budgetUsd: number;
   deadline: number;
-  status: "planning" | "researching" | "writing" | "done" | "failed" | "cancelled";
+  status: "planning" | "researching" | "reviewing" | "writing" | "done" | "failed" | "cancelled";
   leadId: number;
   helperIds: number[];
   report: string | null;
@@ -28,6 +29,7 @@ interface Project {
 const STATUS: Record<Project["status"], string> = {
   planning: "Planning the questions",
   researching: "Researching",
+  reviewing: "Looking for gaps",
   writing: "Writing the report",
   done: "Done: on the research shelf",
   failed: "Didn't work out",
@@ -35,13 +37,21 @@ const STATUS: Record<Project["status"], string> = {
 };
 const input = "mt-1 block w-full rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 py-1 font-normal";
 
-export default function ResearchDesk({ onClose }: { onClose: () => void }) {
+const FORMAT_LABEL: Record<Project["format"], string> = {
+  md: "Markdown (opens in the library's reader)",
+  html: "Web page",
+  txt: "Plain text",
+  docx: "Word document",
+  pdf: "PDF",
+};
+
+export default function ResearchDesk({ onClose, onRead }: { onClose: () => void; onRead: (report: string) => void }) {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { villagers } = useVillagers(30000);
   const working = villagers.filter((v) => v.status === "active");
   const librarians = working.filter((v) => (v.life?.trade ?? v.trade) === "scholar");
-  const [form, setForm] = useState({ topic: "", brief: "", depth: "quick", budgetUsd: "0.50", deadlineDays: "3", leadId: 0, helperIds: [] as number[] });
+  const [form, setForm] = useState({ topic: "", brief: "", depth: "quick", format: "md", budgetUsd: "0.50", deadlineDays: "3", leadId: 0, helperIds: [] as number[] });
   const lead = form.leadId || librarians[0]?.id || working[0]?.id || 0;
 
   const load = useCallback(async () => {
@@ -96,12 +106,26 @@ export default function ResearchDesk({ onClose }: { onClose: () => void }) {
           Anything to focus on (optional)
           <textarea name="brief" value={form.brief} onChange={(e) => setForm({ ...form, brief: e.target.value })} rows={2} className={`${input} resize-y`} />
         </label>
+        <label className="block font-semibold">
+          The report as
+          <select name="format" value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })} className={input}>
+            {Object.entries(FORMAT_LABEL).map(([k, label]) => (
+              <option key={k} value={k}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {form.depth === "deep" && Number(form.budgetUsd) < 1 && (
+          <p className="text-[11px] text-[#8a5a2b]">A deep dive reads a lot: give it a dollar or more, or it will stop early and write up what it has.</p>
+        )}
         <div className="grid gap-2 sm:grid-cols-4">
           <label className="block font-semibold">
             How deep
             <select name="depth" value={form.depth} onChange={(e) => setForm({ ...form, depth: e.target.value })} className={input}>
               <option value="quick">Quick (2–3 questions)</option>
               <option value="thorough">Thorough (4–6 questions)</option>
+              <option value="deep">Deep dive (6–8 questions, wide reading, a second round)</option>
             </select>
           </label>
           <label className="block font-semibold">
@@ -159,17 +183,17 @@ export default function ResearchDesk({ onClose }: { onClose: () => void }) {
             </div>
             <p className="text-[11px] text-[#6b4a2e]">
               Led by {nameOf(p.leadId)}
-              {p.helperIds.length ? `, with ${p.helperIds.map(nameOf).join(", ")}` : ""} · {p.depth} · questions {p.questionsDone}/{p.questions} · {p.notes} finding
+              {p.helperIds.length ? `, with ${p.helperIds.map(nameOf).join(", ")}` : ""} · {p.depth === "deep" ? "deep dive" : p.depth} · {FORMAT_LABEL[p.format]?.split(" (")[0] ?? p.format} · questions {p.questionsDone}/{p.questions} · {p.notes} finding
               {p.notes === 1 ? "" : "s"} · ${p.spentUsd.toFixed(2)} of ${p.budgetUsd.toFixed(2)}
             </p>
             {p.note && <p className="text-[11px]">{p.note}</p>}
             <div className="mt-1 flex gap-1.5">
               {p.report && (
-                <a href={`/api/library/research/${encodeURIComponent(p.report)}`} target="_blank" rel="noreferrer" className="village-btn px-2 py-0.5 text-[11px]">
+                <button onClick={() => onRead(p.report!)} className="village-btn px-2 py-0.5 text-[11px]">
                   📄 Read the report
-                </a>
+                </button>
               )}
-              {["planning", "researching", "writing"].includes(p.status) && (
+              {["planning", "researching", "reviewing", "writing"].includes(p.status) && (
                 <button onClick={() => void stop(p.id)} className="village-btn village-btn-danger px-2 py-0.5 text-[11px]">
                   Stop it
                 </button>

@@ -55,6 +55,8 @@ const RULES: Record<string, Rule> = {
   townDailyBudgetUsd: { kind: "number", min: 0, max: 10000, nullable: true },
   noLimits: { kind: "bool" },
   spendCeilingUsd: { kind: "number", min: 0, max: 10000, nullable: true },
+  searchApiKey: { kind: "text", max: 200, nullable: true },
+  searxngUrl: { kind: "text", max: 500, nullable: true },
   bedtime: { kind: "time" },
   lifeBalance: { kind: "enum", values: ["idle", "hours", "balanced"] },
   workStart: { kind: "time" },

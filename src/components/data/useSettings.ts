@@ -35,7 +35,8 @@ export const UNRESTRICTED_MODE_WARNING =
 export const UNRESTRICTED_OVERRIDES_WARNING =
   "Enable unrestricted mode? The agent can then REQUEST every normally-blocked action — it still requires your explicit approval for each one.";
 
-export type SettingsPatch = Partial<SettingsRow>;
+// The search key (#170) is written, never read back: the page only learns whether it's set.
+export type SettingsPatch = Partial<SettingsRow> & { searchApiKey?: string | null };
 
 export function useSettings() {
   const [settings, setSettings] = useState<SettingsRow | null>(null);

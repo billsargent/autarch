@@ -9,7 +9,7 @@ import { TRUNCATION_DEFAULT } from "./promptDefaults";
 import { buildSystemPrompt } from "./systemPrompt";
 import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, executeTool, lifeToolDefinitions, researchToolDefinitions } from "./tools";
 import { RESEARCH_TOOL_NAMES } from "./researchTools";
-import { RESEARCH_STEPS } from "./research";
+import { RESEARCH_OUTPUT_TOKENS, RESEARCH_STEPS } from "./research";
 import { LIFE_TOOL_NAMES } from "./lifeTools";
 import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
 import { isChatMode, resolveToolAccess } from "./chatMode";
@@ -333,6 +333,8 @@ export async function runAgentTurn(opts: {
   trigger?: SessionTrigger;
   jobId?: number | null;
   maxDurationMinutes?: number;
+  // A research turn's steps (#170): a deep dive's researchers get more.
+  maxSteps?: number;
   // For a new conversation: which villager it's with (default: the Mayor).
   agentId?: number | null;
 }, onEvent?: (e: AgentEvent) => void): Promise<AgentTurnResult> {
@@ -352,6 +354,8 @@ export async function runAgentTurn(opts: {
   // still stops it.
   const trigger: SessionTrigger = opts.trigger ?? (opts.jobId ? "scheduled" : "chat");
   const researchTurn = trigger === "research";
+  // A report is one long reply: research turns get room for it (#170).
+  if (researchTurn) settings.maxOutputTokens = Math.max(settings.maxOutputTokens, RESEARCH_OUTPUT_TOKENS);
   const overBudget = researchTurn ? ceilingProblem(settings) : budgetProblem(agent, settings);
   if (overBudget) throw new BudgetError(overBudget);
   const overrides = buildOverrides(settings);
@@ -412,7 +416,7 @@ export async function runAgentTurn(opts: {
     const maxSteps = lifeTurn
       ? LIFE_STEPS
       : researchTurn
-        ? RESEARCH_STEPS
+        ? Math.min(Math.max(1, opts.maxSteps ?? RESEARCH_STEPS), 64)
         : settings.noLimits
           ? NO_LIMIT_STEPS
           : isWorkWindow

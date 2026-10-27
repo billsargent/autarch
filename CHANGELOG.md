@@ -3,6 +3,26 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+## 2026-10-28 — Deep dives, report formats, a markdown reader, and pictures that fit
+
+- **A deep dive** at the research desk: 6–8 questions, twice the steps for each, and a second round
+  in which the lead reads what's been found and adds up to 4 follow-up questions for the gaps.
+  Deep-dive researchers are told to read widely and follow pages' links to the original sources.
+- **`fetch_url` can list a page's links** (`links: true`), so a researcher can follow a page's
+  references to the sources behind it.
+- **A wider web search.** `web_search` tries, in turn: a Brave Search key, your own SearXNG (both
+  optional, Mayor's ledger → Tools, with a "Try a search" button), DuckDuckGo, DuckDuckGo's plain
+  page (often answering when the other refuses), and Wikipedia. Each result says where it came
+  from. The Brave key is kept like the model key: never shown to the page or the villagers.
+- **Choose the report's format:** Markdown, a web page, plain text, a Word document or a PDF.
+  Word documents are written by the app itself; PDFs use `pdfkit` 0.20.2 (MIT).
+- **A markdown reader in the library:** reports and documents in markdown open set out like a
+  page, with headings, lists, tables, quotes and links. "Read the report" on the research desk
+  opens it there. Web-page reports open in the page too, sandboxed.
+- **Pictures keep their shape.** A picture on the shelf is fitted to the viewer whatever its size,
+  at its own proportions, and opens at full size when clicked. Before, wide pictures were
+  stretched.
+
 ## 2026-10-28 — Letters between villagers
 
 - **Villagers write each other letters**, inside the app, with no mail account. A letter

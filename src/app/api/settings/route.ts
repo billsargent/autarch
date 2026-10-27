@@ -20,7 +20,7 @@ import {
 // agent's name and personality are the Mayor's now that there are villagers
 // (#55), so older screens that edit "the agent" edit him.
 async function publicSettings(settings: AgentSettingsRow) {
-  const { apiKey, calendarIcsUrl, ...safeSettings } = settings;
+  const { apiKey, calendarIcsUrl, searchApiKey, ...safeSettings } = settings;
   const mayor = await ensureMayor();
   return {
     ...safeSettings,
@@ -29,6 +29,7 @@ async function publicSettings(settings: AgentSettingsRow) {
     apiKeySet: Boolean(apiKey),
     // The calendar's address is a secret too: only whether it's set.
     calendarSet: Boolean(calendarIcsUrl),
+    searchKeySet: Boolean(searchApiKey),
     deepseekModels: (settings.deepseekModels as string[]) || [],
   };
 }
@@ -95,6 +96,8 @@ export async function PUT(req: Request) {
     "townDailyBudgetUsd",
     "noLimits",
     "spendCeilingUsd",
+    "searchApiKey",
+    "searxngUrl",
     "bedtime",
     "wakeTime",
     "hiringMode",
@@ -117,6 +120,9 @@ export async function PUT(req: Request) {
   const checked = validateSettingsPatch(patch, ALL_TOOL_DEFINITIONS.map((t) => t.function.name));
   if (checked.ok && typeof checked.patch.calendarIcsUrl === "string" && !/^(https?|webcal):\/\//i.test(checked.patch.calendarIcsUrl)) {
     return NextResponse.json({ error: "calendarIcsUrl: must be an https:// or webcal:// address." }, { status: 400 });
+  }
+  if (checked.ok && typeof checked.patch.searxngUrl === "string" && checked.patch.searxngUrl && !/^https?:\/\//i.test(checked.patch.searxngUrl)) {
+    return NextResponse.json({ error: "searxngUrl: must be an http:// or https:// address." }, { status: 400 });
   }
   if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
   // Going away starts the away-mode spend count afresh (#102).

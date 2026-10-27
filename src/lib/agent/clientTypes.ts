@@ -70,6 +70,8 @@ export interface SettingsRow {
   townDailyBudgetUsd: number | null;
   noLimits: boolean;
   spendCeilingUsd: number | null;
+  searchKeySet: boolean;
+  searxngUrl: string | null;
   bedtime: string;
   lifeBalance: "idle" | "hours" | "balanced";
   workStart: string;

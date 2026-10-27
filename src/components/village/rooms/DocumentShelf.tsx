@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useVillagers } from "../../data/useVillagers";
 import ParchmentDialog from "../ParchmentDialog";
+import MarkdownReader from "./MarkdownReader";
 
 // The document shelf in the library (#169): your documents and the village's
 // research reports, to read in the page or download. Villagers you tick can
@@ -18,11 +19,11 @@ interface Doc {
 
 const SHELF_TITLE = { documents: "Your documents", research: "Research reports" } as const;
 const IN_PAGE = new Set(["pdf", "png", "jpg", "jpeg", "gif", "webp"]);
-const AS_TEXT = new Set(["txt", "md", "csv", "json", "html", "rtf"]);
+const AS_TEXT = new Set(["txt", "md", "csv", "json", "rtf"]);
 const href = (d: Doc) => `/api/library/${d.shelf}/${encodeURIComponent(d.name)}`;
 const kb = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
-export default function DocumentShelf({ onClose }: { onClose: () => void }) {
+export default function DocumentShelf({ onClose, initial }: { onClose: () => void; initial?: { shelf: Doc["shelf"]; name: string } }) {
   const [docs, setDocs] = useState<Doc[] | null>(null);
   const [readers, setReaders] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +46,16 @@ export default function DocumentShelf({ onClose }: { onClose: () => void }) {
     const t = setTimeout(load, 0);
     return () => clearTimeout(t);
   }, [load]);
+  // Straight to one document (a report from the research desk).
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!initial || opened.current || !docs) return;
+    const d = docs.find((x) => x.shelf === initial.shelf && x.name === initial.name);
+    if (!d) return;
+    opened.current = true;
+    const t = setTimeout(() => void read(d), 0);
+    return () => clearTimeout(t);
+  }, [docs, initial]);
 
   async function upload(files: FileList | null) {
     if (!files?.length) return;
@@ -94,13 +105,23 @@ export default function DocumentShelf({ onClose }: { onClose: () => void }) {
         </div>
         {open.type === "pdf" && <iframe title={open.name} src={href(open)} className="h-[65vh] w-full rounded border-2 border-[#3b2716] bg-white" />}
         {IN_PAGE.has(open.type) && open.type !== "pdf" && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={href(open)} alt={open.name} className="max-h-[65vh] max-w-full rounded border-2 border-[#3b2716]" />
+          // A picture fits the viewer whatever its size, keeping its shape;
+          // click it for the full size.
+          <div className="flex h-[65vh] items-center justify-center rounded border-2 border-[#3b2716] bg-[#2b1d10]/5 p-1">
+            <a href={href(open)} target="_blank" rel="noreferrer" title="Open at full size" className="flex h-full w-full items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={href(open)} alt={open.name} className="block h-auto max-h-full w-auto max-w-full object-contain" />
+            </a>
+          </div>
         )}
-        {AS_TEXT.has(open.type) && (
+        {open.type === "md" && <MarkdownReader text={text} />}
+        {open.type === "html" && <iframe title={open.name} sandbox="" src={href(open)} className="h-[65vh] w-full rounded border-2 border-[#3b2716] bg-white" />}
+        {AS_TEXT.has(open.type) && open.type !== "md" && (
           <pre className="max-h-[65vh] overflow-auto whitespace-pre-wrap rounded border-2 border-[#3b2716] bg-white p-3 font-mono text-[12px]">{text ?? "Opening…"}</pre>
         )}
-        {!IN_PAGE.has(open.type) && !AS_TEXT.has(open.type) && <p className="text-sm">This kind of document opens in its own program: download it.</p>}
+        {!IN_PAGE.has(open.type) && !AS_TEXT.has(open.type) && open.type !== "html" && (
+          <p className="text-sm">This kind of document opens in its own program: download it.</p>
+        )}
       </ParchmentDialog>
     );
   }

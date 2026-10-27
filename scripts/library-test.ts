@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "autarch-library-"));
 process.env.AUTARCH_DB_PATH = path.join(tmp, "test.db");
@@ -186,6 +187,100 @@ async function main() {
   const stopped = research.commission({ topic: "Owls", budgetUsd: 1, leadId: mayor.id });
   research.cancel(stopped.id);
   check("the owner can stop a project", [research.getProject(stopped.id)!.status, await tick()], ["cancelled", false]);
+
+  // --- report formats, the deep dive and the wider search ------------------------------------
+  const formats = await import("../src/lib/agent/reportFormats");
+  const mdSrc = "# Mills\n\nWater **turns** the *wheel* [1], see [the guide](https://example.org/g) and <https://example.org/x>.\n\n## Parts\n\n- The wheel\n- The stones\n\n1. First\n2. Second\n\n> A quote\n\n| Part | Cost |\n|---|---|\n| Wheel | 10 |\n\n```\ncode <b>\n```\n\nEnd & done.";
+  const blocks = formats.parseMarkdown(mdSrc);
+  check("the report reader finds headings, paragraphs, lists, quotes, tables and code", blocks.map((b) => b.kind), ["heading", "para", "heading", "item", "item", "item", "item", "quote", "table", "code", "para"]);
+  check("…and bold, italics and links inside a line", (blocks[1] as unknown as { runs: Array<Record<string, unknown>> }).runs.filter((r) => r.bold || r.italic || r.link).map((r) => [r.text, Boolean(r.bold), Boolean(r.italic), r.link ?? null]), [
+    ["turns", true, false, null],
+    ["wheel", false, true, null],
+    ["the guide", false, false, "https://example.org/g"],
+    ["https://example.org/x", false, false, "https://example.org/x"],
+  ]);
+  const html = formats.toHtml(mdSrc + "\n\n[bad](javascript:alert(1)) <script>x</script>", "Mills & more");
+  check("a web page report: a whole page, its text escaped", [html.startsWith("<!doctype html>"), html.includes("<title>Mills &amp; more</title>"), html.includes("<script>"), html.includes('href="javascript'), html.includes("<ol>"), html.includes("<th><strong>Part</strong></th>")], [true, true, false, false, true, true]);
+  const txt = formats.toText(mdSrc);
+  check("a plain text report keeps the links' addresses", [txt.startsWith("Mills\n====="), txt.includes("the guide (https://example.org/g)"), txt.includes("**")], [true, true, false]);
+  const docx = formats.toDocx(mdSrc, "Mills");
+  const unzip = (buf: Buffer) => {
+    const files = new Map<string, string>();
+    for (let at = 0; buf.readUInt32LE(at) === 0x04034b50; ) {
+      const size = buf.readUInt32LE(at + 18);
+      const nameLen = buf.readUInt16LE(at + 26);
+      const name = buf.subarray(at + 30, at + 30 + nameLen).toString();
+      files.set(name, zlib.inflateRawSync(buf.subarray(at + 30 + nameLen, at + 30 + nameLen + size)).toString());
+      at += 30 + nameLen + size;
+    }
+    return files;
+  };
+  const parts = unzip(docx);
+  check("a Word report is a proper .docx", [...parts.keys()].sort(), ["[Content_Types].xml", "_rels/.rels", "docProps/core.xml", "word/_rels/document.xml.rels", "word/document.xml", "word/styles.xml"]);
+  check("…with its headings, text and working links", [parts.get("word/document.xml")!.includes('<w:pStyle w:val="Title"/>'), parts.get("word/document.xml")!.includes("The stones"), parts.get("word/_rels/document.xml.rels")!.includes('Target="https://example.org/g" TargetMode="External"')], [true, true, true]);
+  const pdfBuf = await formats.toPdf(mdSrc + "\n\nNon-Latin: 水车", "Mills");
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  const pdfText = (await extractText(await getDocumentProxy(new Uint8Array(pdfBuf)), { mergePages: true })).text;
+  check("a PDF report reads back as text", [pdfBuf.subarray(0, 5).toString(), pdfText.includes("Mills"), pdfText.includes("The stones"), pdfText.includes("Wheel")], ["%PDF-", true, true, true]);
+  check("a PDF keeps accented letters it can't print as their plain letter", formats.pdfSafe("Śāh Łódź café 水"), "Sah Lódz café ?");
+  check("an unknown format is refused", (() => {
+    try {
+      research.commission({ topic: "x", budgetUsd: 1, leadId: mayor.id, format: "exe" });
+      return "";
+    } catch (err) {
+      return (err as Error).message;
+    }
+  })().startsWith("The report comes as"), true);
+
+  // A deep dive: wide reading, more steps, a review round, and a Word report.
+  const deep = research.commission({ topic: "Windmills", depth: "deep", format: "docx", budgetUsd: 2, leadId: mayor.id, helperIds: [nora.id] });
+  const steps: Array<number | undefined> = [];
+  const deepTick = () => research.researchTick((o) => (steps.push(o.maxSteps), runAgentTurn(o)));
+  fake.byAgent[mayor.name] = [{ tools: [{ name: "research_plan", args: { questions: [{ question: "How do windmills turn?", assignee: "Nora" }] } }] }, { text: "Planned." }];
+  await deepTick();
+  fake.byAgent.Nora = [{ tools: [{ name: "research_note", args: { finding: "Sails catch the wind.", url: "https://example.org/sails", title: "Sails" } }] }, { text: "Done." }];
+  await deepTick();
+  const researchNote = String(fake.seen.filter((s) => s.system.startsWith("You are Nora")).at(-1)!.lastUser);
+  check("a deep dive's researchers get more steps and are told to read widely", [steps[1], researchNote.includes("cast a wide net"), researchNote.includes("links: true")], [research.DEPTHS.deep.steps, true, true]);
+  check("after the first round, the lead looks for gaps", research.getProject(deep.id)!.status, "reviewing");
+  fake.byAgent[mayor.name] = [{ tools: [{ name: "research_plan", args: { questions: [{ question: "Who built the first one?", assignee: "Nora" }] } }] }, { text: "One gap." }];
+  await deepTick();
+  check("…and adds follow-ups, keeping the first questions", [research.getProject(deep.id)!.status, research.listProjects().find((x) => x.id === deep.id)!.questions], ["researching", 2]);
+  fake.byAgent.Nora = [{ tools: [{ name: "research_note", args: { finding: "Persian windmills came first.", url: "https://example.org/persia", title: "History" } }] }, { text: "Done." }];
+  await deepTick();
+  check("the review happens once: then it's time to write", research.getProject(deep.id)!.status, "writing");
+  fake.byAgent[mayor.name] = [
+    { tools: [{ name: "research_write", args: { title: "Windmills", report: `## How they turn\n\n${"Sails catch the wind [1]. ".repeat(12)}`, more: true } }] },
+    { tools: [{ name: "research_write", args: { report: "## History\n\nPersian windmills came first [2]." } }] },
+    { text: "Written." },
+  ];
+  await deepTick();
+  const deepDone = research.getProject(deep.id)!;
+  check("a report written in parts is shelved whole, in the chosen format", [deepDone.status, deepDone.report], ["done", "Windmills.docx"]);
+  check("…the lead having been told a long report can go in parts", String(fake.seen.filter((s) => s.system.startsWith(`You are ${mayor.name}`)).at(-1)!.lastUser).includes("send it in parts"), true);
+  check("…its research turns had room for a long reply", fake.seen.filter((s) => s.system.startsWith(`You are ${mayor.name}`)).at(-1)!.maxTokens, research.RESEARCH_OUTPUT_TOKENS);
+  const shelvedDocx = unzip(fs.readFileSync(path.join(LIBRARY_DIR, "research", deepDone.report!)));
+  check("…with its title, both parts and its sources", ["Windmills", "Sails catch the wind", "Persian windmills came first", "https://example.org/persia"].map((s) => shelvedDocx.get("word/document.xml")!.includes(s) || shelvedDocx.get("word/_rels/document.xml.rels")!.includes(s)), [true, true, true, true]);
+  check("a report's file name keeps hyphens and stops at a word", [research.fileTitle("How horizontal-axis windmills were developed in medieval Europe, 1100–1400"), research.fileTitle("Bees: why?")], ["How horizontal-axis windmills were developed in medieval", "Bees why"]);
+
+  // The wider search: the owner's SearXNG first when set; DuckDuckGo's plain page and links on a page.
+  const http = await import("node:http");
+  const searx = http.createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ results: [{ title: "Mill history", url: "https://example.org/mill", content: `asked: ${new URL(req.url!, "http://x").searchParams.get("q")}` }] }));
+  });
+  await new Promise<void>((r) => searx.listen(0, "127.0.0.1", r));
+  const searxPort = (searx.address() as { port: number }).port;
+  const tools = await import("../src/lib/agent/tools");
+  const found = await tools.webSearch({ query: "mills" }, { searchApiKey: null, searxngUrl: `http://127.0.0.1:${searxPort}` });
+  check("web_search asks the owner's SearXNG first, and says so", [found.output.startsWith("Web search results (SearXNG)"), found.output.includes("https://example.org/mill"), found.output.includes("asked: mills")], [true, true, true]);
+  searx.close();
+  check("DuckDuckGo's plain page is read, its redirects unwrapped and adverts dropped", tools.parseDuckHtml(
+    '<a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.org%2Fa&amp;rut=x">A &amp; B</a><a class="result__snippet" href="#">About <b>A</b></a>' +
+      '<a class="result__a" href="https://duckduckgo.com/y.js?ad=1">Ad</a><a class="result__snippet">ad</a>',
+  ).map((r) => [r.title, r.url]), [["A & B", "https://example.org/a"]]);
+  check("fetch_url's links: absolute, once each, with their text", tools.pageLinks('<a href="/b">B page</a> <a href="https://x.org/c">C</a> <a href="/b">again</a> <a href="#top">top</a> <a href="mailto:a@b">m</a>', "https://example.org/a/"), ["- B page: https://example.org/b", "- C: https://x.org/c"]);
+  check("the search key is kept from the model and the page", [tools.SECRET_COLUMN.test("search_api_key"), "searchApiKey" in (await (await (await import("../src/app/api/settings/route")).GET()).json()).settings], [true, false]);
   fake.close();
 
   try {
