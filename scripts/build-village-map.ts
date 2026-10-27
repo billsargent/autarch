@@ -9,7 +9,7 @@
 // drawn top-to-bottom so taller things overlap correctly.
 import fs from "node:fs";
 import path from "node:path";
-import sharp from "sharp";
+import sharp, { type OverlayOptions } from "sharp";
 import {
   STAMPS,
   SCALE,
@@ -80,7 +80,7 @@ function pathTile(scene: SceneLayout, col: number, row: number): TileRef {
 async function buildScene(scene: SceneLayout) {
   const random = rng(scene.scatter?.seed ?? 1);
   const { cols, rows } = scene;
-  const layers: sharp.OverlayOptions[] = [];
+  const layers: OverlayOptions[] = [];
   // Tiled export: one grid for the floor, one for everything placed on it.
   const ground: Array<Array<TileRef | null>> = Array.from({ length: rows }, () => Array(cols).fill(null));
   const objects: Array<Array<TileRef | null>> = Array.from({ length: rows }, () => Array(cols).fill(null));
