@@ -126,7 +126,7 @@ export async function GET() {
   const byActivity = sqlite
     .prepare(
       `SELECT CASE WHEN j.kind = 'daydream' THEN 'village life' WHEN s.trigger = 'scheduled' THEN 'jobs' WHEN s.trigger = 'report' THEN 'daily report'
-              WHEN s.trigger = 'message' THEN 'neighbours asking' WHEN s.trigger = 'review' THEN 'away-mode reviews' WHEN s.trigger = 'interview' THEN 'interviews'
+              WHEN s.trigger = 'message' THEN 'neighbours asking' WHEN s.trigger = 'review' THEN 'away-mode reviews' WHEN s.trigger = 'interview' THEN 'interviews' WHEN s.trigger = 'research' THEN 'research'
               WHEN s.trigger = 'meeting' THEN 'meetings' WHEN s.trigger = 'vote' THEN 'votes' WHEN s.trigger = 'approval' THEN 'after approvals' ELSE 'chat' END AS name,
               COALESCE(SUM(s.cost_usd), 0) AS cost, COALESCE(SUM(s.total_tokens), 0) AS total, COUNT(*) AS sessions
        FROM work_sessions s LEFT JOIN jobs j ON j.id = s.job_id

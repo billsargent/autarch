@@ -7,7 +7,9 @@ import { buildPromptMessages } from "./compact";
 import { getSettings, type AgentSettingsRow } from "./settingsStore";
 import { TRUNCATION_DEFAULT } from "./promptDefaults";
 import { buildSystemPrompt } from "./systemPrompt";
-import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, executeTool, lifeToolDefinitions } from "./tools";
+import { getEnabledToolDefinitions, evaluateToolRisk, extraProcessGuard, executeTool, lifeToolDefinitions, researchToolDefinitions } from "./tools";
+import { RESEARCH_TOOL_NAMES } from "./researchTools";
+import { RESEARCH_STEPS } from "./research";
 import { LIFE_TOOL_NAMES } from "./lifeTools";
 import { autonomyAllowsAuto, buildOverrides, type RiskLevel } from "./risk";
 import { isChatMode, resolveToolAccess } from "./chatMode";
@@ -345,10 +347,13 @@ export async function runAgentTurn(opts: {
   const villagerPaused = agent.status === "paused";
   // Over today's budget (the villager's or the town's): refuse before
   // anything is written (#60).
-  const overBudget = budgetProblem(agent, settings);
+  // A research turn (#170) spends its project's own budget instead, which
+  // the research desk checks before every turn.
+  const trigger: SessionTrigger = opts.trigger ?? (opts.jobId ? "scheduled" : "chat");
+  const researchTurn = trigger === "research";
+  const overBudget = researchTurn ? null : budgetProblem(agent, settings);
   if (overBudget) throw new BudgetError(overBudget);
   const overrides = buildOverrides(settings);
-  const trigger: SessionTrigger = opts.trigger ?? (opts.jobId ? "scheduled" : "chat");
   const maxDurationMinutes = opts.maxDurationMinutes ?? settings.maxSessionMinutes;
   // Claim the conversation before writing anything, so a refused turn leaves
   // no trace and two turns never interleave (#18).
@@ -405,10 +410,12 @@ export async function runAgentTurn(opts: {
     const lifeTurn = trigger === "life";
     const maxSteps = lifeTurn
       ? LIFE_STEPS
-      : isWorkWindow
+      : researchTurn
+        ? RESEARCH_STEPS
+        : isWorkWindow
         ? Math.max(settings.maxAgentSteps, Math.ceil(maxDurationMinutes * 2))
         : Math.max(1, settings.maxAgentSteps);
-    const tools = lifeTurn ? lifeToolDefinitions() : getEnabledToolDefinitions(settings.enabledTools as string[]);
+    const tools = lifeTurn ? lifeToolDefinitions() : researchTurn ? researchToolDefinitions() : getEnabledToolDefinitions(settings.enabledTools as string[]);
     // Direct user chat in a conversation-mode conversation: we DON'T expose
     // tools at all (a tool call becomes impossible), and toolsForbidden refuses
     // any call that still reaches execution. Each conversation's own toggle is
@@ -494,7 +501,7 @@ export async function runAgentTurn(opts: {
       }
 
       // A turn that has spent the day's budget stops here (#60).
-      const spentOut = step > 0 ? budgetProblem(agent, settings) : null;
+      const spentOut = step > 0 && !researchTurn ? budgetProblem(agent, settings) : null;
       if (spentOut) {
         terminated = true;
         budgetStopped = true;
@@ -630,7 +637,7 @@ export async function runAgentTurn(opts: {
         }
 
         const enabledTools = settings.enabledTools as string[];
-        const toolIsEnabled = enabledTools.includes(toolName) || (lifeTurn && LIFE_TOOL_NAMES.includes(toolName));
+        const toolIsEnabled = enabledTools.includes(toolName) || (lifeTurn && LIFE_TOOL_NAMES.includes(toolName)) || (researchTurn && RESEARCH_TOOL_NAMES.includes(toolName));
 
         const execRow = await db
           .insert(toolExecutions)
@@ -663,6 +670,11 @@ export async function runAgentTurn(opts: {
           // Never the computer in a villager's own time, whatever the mode.
           status = "blocked";
           output = "This is your own time in the village: only village-life tools work now. Computer work waits for a work window.";
+          resultContent = `BLOCKED: ${output}`;
+        } else if (researchTurn && !RESEARCH_TOOL_NAMES.includes(toolName)) {
+          // A research turn only searches, reads and takes notes (#170).
+          status = "blocked";
+          output = "This is a research turn: only searching (web_search), reading pages (fetch_url) and the research tools work here.";
           resultContent = `BLOCKED: ${output}`;
         } else if (settings.paused) {
           status = "blocked";

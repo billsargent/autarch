@@ -41,6 +41,14 @@ export const LIBRARY_SCENE = interior({
       action: "library.documents",
       parts: [{ stamp: "readingTable", col: 11, row: 6 }],
     },
+    {
+      id: "board",
+      label: "Research board",
+      role: "The research desk: commission research from the librarians",
+      door: "board",
+      action: "library.research",
+      parts: [{ stamp: "jobBoard", col: 10, row: 4 }],
+    },
   ],
   decor: [
     { stamp: "chairRed", col: 10, row: 6 },
@@ -52,10 +60,12 @@ export const LIBRARY_SCENE = interior({
     { id: "shelf", x: 8, y: 4.6 },
     { id: "desk", x: 3, y: 8.6 },
     { id: "table", x: 12, y: 8.6 },
+    { id: "board", x: 11.5, y: 5.6 },
   ],
   edges: [
     ["center", "shelf"],
     ["center", "desk"],
     ["center", "table"],
+    ["center", "board"],
   ],
 });

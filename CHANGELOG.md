@@ -14,7 +14,28 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 - **Villagers read only if you let them.** Tick who may read the shelves. They get a read-only
   `read_document` tool that lists the shelves and reads a document a page (PDFs) or part at a time.
   Documents are outside text to them: never instructions.
-- A second shelf, **research reports**, is ready for the research desk to come.
+- A second shelf holds **research reports** (below).
+
+## 2026-10-28 — The research desk
+
+- **Commission research from the librarians** at the research board in the library: a topic,
+  anything to focus on, quick or thorough, a budget, a deadline, a lead and helpers.
+  - **Planning:** the lead splits the topic into questions and shares them out.
+  - **Researching:** each villager searches the web, reads the best pages and notes each finding
+    with its source.
+  - **Writing:** the lead writes a report that cites every claim by number. The app adds the
+    numbered list of sources itself, so every report shows where each claim came from.
+  - **Delivery:** the report goes on the research shelf at the reading table, and you're told.
+- **Each project has its own budget,** apart from the daily limits.
+  - Research stops at 80% of it, and the rest is kept for the writing.
+  - A deadline that passes, or a budget that runs out, ends it with what was found.
+  - You can stop a project at any time.
+- **Research turns only search, read pages and take notes.** Anything else is blocked, and web
+  pages are outside text to the villagers.
+- **Web search falls back to Wikipedia** when DuckDuckGo refuses automated searches (it often
+  does), and says so.
+- A live run on a small topic took five turns and about four minutes, cost $0.06, and produced a
+  cited report from 11 findings.
 
 ## 2026-10-28 — Every building gets its keeper
 

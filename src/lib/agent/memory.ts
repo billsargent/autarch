@@ -11,7 +11,7 @@ import { and, eq } from "drizzle-orm";
 // Sessions that are only a part of something else (answering a question, a
 // meeting, a vote, an interview, a review, an approval's follow-up) don't get
 // a diary entry of their own.
-const QUIET_TRIGGERS = new Set(["message", "meeting", "vote", "interview", "review", "approval"]);
+const QUIET_TRIGGERS = new Set(["message", "meeting", "vote", "interview", "review", "approval", "research"]);
 
 // After a session: a short diary entry of what was done (#69). Work windows
 // always get one; a chat only when tools were used. No model call.

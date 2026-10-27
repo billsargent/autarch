@@ -101,6 +101,93 @@ async function main() {
   const del = await docRoute.DELETE(new Request("http://t/x", { method: "DELETE" }), { params: Promise.resolve({ shelf: "documents", name: "notes (2).md" }) });
   check("the owner takes a document off the shelf", [del.status, fs.existsSync(path.join(LIBRARY_DIR, "documents", "notes (2).md"))], [200, false]);
 
+  // --- the research desk (#170), with the fake model playing the villagers --------------------
+  const { startFakeModel } = await import("./lib/fakeModel");
+  const { updateSettings } = await import("../src/lib/agent/settingsStore");
+  const research = await import("../src/lib/agent/research");
+  const { runAgentTurn } = await import("../src/lib/agent/runner");
+  const { sqlite } = await import("../src/db");
+  const fake = startFakeModel();
+  const port = await fake.listen();
+  await updateSettings({ apiKey: "test-key", apiBaseUrl: `http://127.0.0.1:${port}`, workspaceDir: path.join(tmp, "ws"), autonomyMode: "autonomous", modelName: "town-model" });
+  const nora = await villagers.createVillager({ name: "Nora", role: "Librarian", trade: "scholar" });
+  const tick = () => research.researchTick((o) => runAgentTurn(o));
+
+  check("a project needs a topic and a lead", [() => research.commission({ topic: "", budgetUsd: 1, leadId: mayor.id }), () => research.commission({ topic: "x", budgetUsd: 1, leadId: 999 })].map((f) => {
+    try {
+      f();
+      return "ok";
+    } catch {
+      return "refused";
+    }
+  }), ["refused", "refused"]);
+  const proj = research.commission({ topic: "The village mill", depth: "quick", budgetUsd: 1, deadlineDays: 3, leadId: mayor.id, helperIds: [nora.id] });
+  check("the owner commissions research", [proj.status, proj.helperIds], ["planning", [nora.id]]);
+
+  fake.byAgent[mayor.name] = [
+    { tools: [{ name: "research_plan", args: { questions: [{ question: "How does a watermill grind wheat?", assignee: "Nora" }, { question: "What does a mill cost to build?", assignee: mayor.name }] } }] },
+    { text: "Planned." },
+  ];
+  const seenPlan = fake.seen.length;
+  await tick();
+  const planStep = fake.seen.slice(seenPlan).find((s) => s.stream)!;
+  check("a research turn offers only searching, reading and the research tools", [...planStep.tools].sort(), ["fetch_url", "research_note", "research_plan", "research_write", "web_search"]);
+  check("the lead plans the questions and shares them out", [research.getProject(proj.id)!.status, research.listProjects()[0].questions], ["researching", 2]);
+
+  fake.byAgent.Nora = [
+    {
+      tools: [
+        { name: "run_shell_command", args: { command: "dir" } },
+        { name: "research_note", args: { finding: "Water turns a wheel that drives the millstones.", url: "not-a-link" } },
+        { name: "research_note", args: { finding: "Water turns a wheel that drives the millstones.", url: "https://example.org/mills", title: "How mills work" } },
+      ],
+    },
+    { text: "Noted." },
+  ];
+  const before = (sqlite.prepare("SELECT COUNT(*) AS n FROM tool_executions WHERE tool = 'run_shell_command' AND status = 'blocked'").get() as { n: number }).n;
+  await tick();
+  check("anything else is blocked in a research turn", (sqlite.prepare("SELECT COUNT(*) AS n FROM tool_executions WHERE tool = 'run_shell_command' AND status = 'blocked'").get() as { n: number }).n, before + 1);
+  check("a finding without a real source is refused; with one, it's kept", research.listProjects()[0].notes, 1);
+  fake.byAgent[mayor.name] = [{ tools: [{ name: "research_note", args: { finding: "A small mill costs about 40 coins.", url: "https://example.org/costs", title: "Costs" } }] }, { text: "Noted." }];
+  await tick();
+  check("when every question is done, it's time to write", research.getProject(proj.id)!.status, "writing");
+
+  const body = `The mill turns wheat into flour using water power [1]. A small one costs about 40 coins to build [2]. ${"More detail follows. ".repeat(12)}`;
+  fake.byAgent[mayor.name] = [{ tools: [{ name: "research_write", args: { title: "The village mill", report: body } }] }, { text: "Written." }];
+  const seenWrite = fake.seen.length;
+  await tick();
+  const writeStep = fake.seen.slice(seenWrite).find((s) => s.stream)!;
+  check("the writer gets the findings numbered by source", writeStep.lastUser.includes("[1] (How does a watermill grind wheat?) Water turns a wheel"), true);
+  const done = research.getProject(proj.id)!;
+  check("the report goes on the research shelf", [done.status, done.report], ["done", "The village mill.md"]);
+  const report = fs.readFileSync(path.join(LIBRARY_DIR, "research", done.report!), "utf8");
+  check("…with the sources listed, numbered as cited", [report.includes("## Sources"), report.includes("1. How mills work. <https://example.org/mills>"), report.includes("2. Costs. <https://example.org/costs>")], [true, true, true]);
+  check("the owner is told", Boolean(sqlite.prepare("SELECT 1 FROM notifications WHERE title = 'Research ready: The village mill'").get()), true);
+
+  // The budget: research stops at most of it, keeping the rest for the writing.
+  const tight = research.commission({ topic: "Bees", budgetUsd: 0.01, leadId: mayor.id });
+  const thread = Number(sqlite.prepare("INSERT INTO conversations (title, agent_id) VALUES (?, ?)").run(`Research #${tight.id}`, mayor.id).lastInsertRowid);
+  sqlite.prepare("INSERT INTO work_sessions (trigger, conversation_id, agent_id, status, cost_usd, started_at) VALUES ('research', ?, ?, 'completed', 0.009, unixepoch())").run(thread, mayor.id);
+  await tick();
+  check("a project that spends its budget with nothing found stops, and the owner is told", [research.getProject(tight.id)!.status, Boolean(sqlite.prepare("SELECT 1 FROM notifications WHERE title LIKE 'Research: \"Bees\"%'").get())], ["failed", true]);
+  // A question that ends with nothing noted gets one more try, then the project stops.
+  const empty = research.commission({ topic: "Moths", budgetUsd: 1, leadId: mayor.id });
+  fake.byAgent[mayor.name] = [
+    { tools: [{ name: "research_plan", args: { questions: [{ question: "Why do moths like lamps?", assignee: mayor.name }] } }] },
+    { text: "Planned." },
+    { text: "I read about it but didn't note anything." },
+    { text: "Still nothing noted." },
+  ];
+  await tick();
+  await tick();
+  check("a question with nothing noted is tried again", [research.getProject(empty.id)!.status, research.listProjects().find((x) => x.id === empty.id)!.questionsDone], ["researching", 0]);
+  await tick();
+  check("…and after a second empty try, the project stops", research.getProject(empty.id)!.status, "failed");
+  const stopped = research.commission({ topic: "Owls", budgetUsd: 1, leadId: mayor.id });
+  research.cancel(stopped.id);
+  check("the owner can stop a project", [research.getProject(stopped.id)!.status, await tick()], ["cancelled", false]);
+  fake.close();
+
   try {
     fs.rmSync(tmp, { recursive: true, force: true });
   } catch {
