@@ -1215,6 +1215,31 @@ async function main() {
   check("…and a dismissal only asks the owner", [(await rowOf(dot.id))?.status, (await db.select().from(notifications).where(eq(notifications.title, "The village asks you to let Dot go"))).length], ["active", 1]);
   await setTraits(cal.id, null);
 
+  // --- keepers (#165) -------------------------------------------------------------------
+  const buildingsLib = await import("../src/lib/agent/buildings");
+  const keeperOf = (id: number) => (lifeDb.prepare("SELECT keeper_id AS k FROM buildings WHERE id = ?").get(id) as { k: number | null }).k;
+  const addBuilding = (kind: string, status = "built", readyAt: number | null = null) =>
+    Number(lifeDb.prepare("INSERT INTO buildings (kind, plot_id, status, ready_at) VALUES (?, ?, ?, ?)").run(kind, `test-${kind}-${Math.random()}`, status, readyAt).lastInsertRowid);
+  check("the one-time fill of empty posts has run, once", Boolean(lifeDb.prepare("SELECT 1 FROM done_once WHERE name = 'keepers-165'").get()), true);
+  const shopId = addBuilding("shop");
+  await buildingsLib.listBuildings();
+  check("…and doesn't run again (an empty post the owner chose stays empty)", keeperOf(shopId), null);
+  const ezra = (await add({ name: "Ezra", role: "Shopkeeper", trade: "shopkeeper" })).agent;
+  check("a newcomer whose trade works an empty building keeps it", keeperOf(shopId), ezra.id);
+  const workshopId = addBuilding("workshop", "building", Math.floor(Date.now() / 1000) - 60);
+  const owen = (await add({ name: "Owen", role: "Carpenter", trade: "carpenter" })).agent;
+  check("…not before it's built", keeperOf(workshopId), null);
+  await buildingsLib.listBuildings();
+  check("a finished building gets a keeper of its trade", keeperOf(workshopId), owen.id);
+  const secondShop = addBuilding("shop");
+  buildingsLib.fillKeeperPosts();
+  check("one post each: nobody keeps two", keeperOf(secondShop), null);
+  check("an empty post is said plainly", (await (await import("../src/lib/agent/villageFacts")).villageFacts()).includes("shop (no keeper yet; Ezra works there by trade)"), true);
+  check("the Mayor can appoint a keeper", await power("appoint_keeper", { building: "workshop", name: "Ezra" }), "Ezra now keeps the workshop (instead of Owen).");
+  check("…but not of a building that isn't there", (await power("appoint_keeper", { building: "garden", name: "Ezra" })).startsWith("Refused: there's no garden"), true);
+  // Back to as it was, so the beds below still go round.
+  lifeDb.prepare("UPDATE agents SET status = 'dismissed' WHERE id IN (?, ?)").run(ezra.id, owen.id);
+
   // Everyone has a home (#159), handed out when the village lists its villagers.
   const housed = ((await (await agentsRoute.GET()).json()).agents as Array<{ name: string; status: string; dwelling: string | null }>).filter((a) => a.status !== "dismissed");
   check("every villager has a home", housed.filter((a) => !a.dwelling).map((a) => a.name), []);

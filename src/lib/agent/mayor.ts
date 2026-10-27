@@ -68,6 +68,8 @@ export async function runMayorTool(tool: string, args: Record<string, unknown>, 
       return callVoteTool(args, ctx);
     case "call_conduct_vote":
       return callConductVote(mayor, args, ctx);
+    case "appoint_keeper":
+      return appointKeeper(args, ctx);
     case "propose_building": {
       const busy = notWhileAnswering(ctx);
       if (busy) return busy;
@@ -235,6 +237,22 @@ function notesSummary(agentId: number): string {
 }
 
 // Put an idea to the vote now (#98).
+// Who keeps a building (#165). They take up its trade, as when the owner chooses.
+async function appointKeeper(args: Record<string, unknown>, ctx?: ToolContext): Promise<Result> {
+  const busy = notWhileAnswering(ctx);
+  if (busy) return busy;
+  const kind = String(args.building ?? "");
+  const target = await findVillager(args.name);
+  if (isResult(target)) return target;
+  if (target.status !== "active") return refused(`${target.name} is resting; appoint someone who's working.`);
+  const b = sqlite.prepare("SELECT id, keeper_id AS keeperId FROM buildings WHERE kind = ? AND status = 'built' ORDER BY id LIMIT 1").get(kind) as { id: number; keeperId: number | null } | undefined;
+  if (!b) return refused(`there's no ${kind || "such building"} standing in the village.`);
+  if (b.keeperId === target.id) return { output: `${target.name} already keeps the ${kind}.`, summary: "keeper unchanged" };
+  const before = b.keeperId ? (sqlite.prepare("SELECT name FROM agents WHERE id = ?").get(b.keeperId) as { name: string } | undefined)?.name : null;
+  await (await import("./buildings")).setKeeper(b.id, target.id);
+  return { output: `${target.name} now keeps the ${kind}${before ? ` (instead of ${before})` : ""}.`, summary: `keeper: ${target.name}` };
+}
+
 // A conduct vote (#153): only about what neighbours saw someone do this week.
 const OUTCOMES = { warning: "a warning", keeper: "losing their keeper post", dismissal: "asking the owner to let them go" } as const;
 async function callConductVote(mayor: AgentRow, args: Record<string, unknown>, ctx?: ToolContext): Promise<Result> {

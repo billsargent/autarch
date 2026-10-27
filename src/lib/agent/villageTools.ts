@@ -232,6 +232,27 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
     risk: { risk: "medium", reason: "The Mayor opening a vote: a short turn for every villager, within the round's cost cap." },
     run: mayor("call_vote"),
   },
+  // Keepers (#165): who looks after each building.
+  appoint_keeper: {
+    definition: {
+      type: "function" as const,
+      function: {
+        name: "appoint_keeper",
+        description:
+          "Mayor only. Make a villager the keeper of a standing building (farm, bakery, tavern, shop, garden, workshop): they work there and take up its trade. Use it when a building has no keeper (THE VILLAGE TODAY says) and someone suits it; hiring a newcomer with the right trade usually fills the post by itself. The owner can change it.",
+        parameters: {
+          type: "object",
+          properties: {
+            building: { type: "string", enum: ["farm", "bakery", "tavern", "shop", "garden", "workshop"] },
+            name: { type: "string", description: "The villager." },
+          },
+          required: ["building", "name"],
+        },
+      },
+    },
+    risk: { risk: "low", reason: "The Mayor choosing who keeps a building in the village; no effect on the computer." },
+    run: mayor("appoint_keeper"),
+  },
   // Conduct votes (#153): about someone neighbours have seen misbehave.
   call_conduct_vote: {
     definition: {

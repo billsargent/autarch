@@ -5,6 +5,7 @@ import { ensureMayor } from "./agents";
 import type { AgentSettingsRow } from "./settingsStore";
 import type { ToolContext } from "./tools";
 import { MAX_VILLAGE_LEVEL, ringPlotIds } from "@/components/village/scenes/village";
+import { tradeOf } from "./trades";
 
 // The village grows (#105, docs/town-charter.md section 9): the Mayor (or
 // the owner) proposes a building on one of the empty plots north and west of
@@ -62,13 +63,51 @@ export class BuildingError extends Error {
 
 // Buildings whose scaffolding time is up are finished.
 function finishDue(now = new Date()) {
-  db.update(buildings).set({ status: "built" }).where(and(eq(buildings.status, "building"), lte(buildings.readyAt, now))).run();
+  const done = db.select({ id: buildings.id }).from(buildings).where(and(eq(buildings.status, "building"), lte(buildings.readyAt, now))).all();
+  if (!done.length) return;
+  db.update(buildings).set({ status: "built" }).where(inArray(buildings.id, done.map((b) => b.id))).run();
+  // A finished building gets a keeper, if someone's trade works it (#165).
+  fillKeeperPosts({ buildingIds: done.map((b) => b.id) });
+}
+
+// Empty keeper posts (#165): a standing building nobody keeps goes to a
+// villager whose trade works it and who keeps nothing yet, longest in the
+// village first. `buildingIds` / `agentId` narrow it to a building just
+// finished or a newcomer. Returns who now keeps what.
+export function fillKeeperPosts(only: { buildingIds?: number[]; agentId?: number } = {}): Array<{ kind: string; name: string }> {
+  const empty = (sqlite.prepare("SELECT id, kind FROM buildings WHERE status = 'built' AND keeper_id IS NULL AND kind NOT IN ('land', 'house') ORDER BY id").all() as Array<{ id: number; kind: string }>).filter(
+    (b) => !only.buildingIds || only.buildingIds.includes(b.id),
+  );
+  if (!empty.length) return [];
+  const keeping = new Set((sqlite.prepare("SELECT keeper_id AS id FROM buildings WHERE keeper_id IS NOT NULL").all() as Array<{ id: number }>).map((r) => r.id));
+  const villagers = (
+    sqlite.prepare("SELECT id, name, role, trade, is_mayor AS isMayor FROM agents WHERE status = 'active' ORDER BY id").all() as Array<{ id: number; name: string; role: string; trade: string | null; isMayor: number }>
+  ).filter((v) => only.agentId == null || v.id === only.agentId);
+  const set = sqlite.prepare("UPDATE buildings SET keeper_id = ? WHERE id = ?");
+  const filled: Array<{ kind: string; name: string }> = [];
+  for (const b of empty) {
+    const v = villagers.find((x) => !keeping.has(x.id) && KEEPER_TRADE[b.kind] === tradeOf({ trade: x.trade, role: x.role, isMayor: Boolean(x.isMayor) }));
+    if (!v) continue;
+    set.run(v.id, b.id);
+    keeping.add(v.id);
+    filled.push({ kind: b.kind, name: v.name });
+  }
+  return filled;
+}
+
+// Once, for villages from before #165: their empty posts are filled. Only
+// once, so a post the owner later sets to "Nobody" stays that way.
+function fillKeeperPostsOnce() {
+  if (sqlite.prepare("SELECT 1 FROM done_once WHERE name = 'keepers-165'").get()) return;
+  fillKeeperPosts();
+  sqlite.prepare("INSERT OR IGNORE INTO done_once (name) VALUES ('keepers-165')").run();
 }
 
 const current = (): BuildingRow[] => db.select().from(buildings).where(inArray(buildings.status, ["proposed", "building", "built"])).all();
 
 export async function listBuildings(now = new Date()): Promise<BuildingRow[]> {
   finishDue(now);
+  fillKeeperPostsOnce();
   return current();
 }
 

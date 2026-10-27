@@ -453,6 +453,8 @@ if (!globalForDb.__agentLabSqlite) {
   ] as const) {
     if (!existingCols("mail_settings").includes(col)) sqlite.exec(`ALTER TABLE mail_settings ADD COLUMN ${col} ${def}`);
   }
+  // One-off fixes to existing villages that must never run twice (#165).
+  sqlite.exec("CREATE TABLE IF NOT EXISTS done_once (name TEXT PRIMARY KEY, at INTEGER NOT NULL DEFAULT (unixepoch()))");
   // Orders from the neighbouring towns (#136), and a first purse for the
   // village treasury (once, for new and existing villages alike).
   sqlite.exec(`CREATE TABLE IF NOT EXISTS trade_orders (
