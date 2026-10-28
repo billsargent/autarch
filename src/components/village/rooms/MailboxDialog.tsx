@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import type { NotificationRow } from "@/lib/agent/clientTypes";
 import { useNotifications } from "../../data/useNotifications";
 import ParchmentDialog from "../ParchmentDialog";
+import { MapTable } from "./BuildingDialogs";
 
 // The mailbox by the cottages: letters (notifications) the agent sends the
 // owner — finished work, problems, things that need a look.
@@ -21,6 +23,9 @@ function when(iso: string): string {
 export default function MailboxDialog({ onClose }: { onClose: () => void }) {
   const { unread, recent, loaded, markRead, markAllRead } = useNotifications();
   const older = recent.filter((n) => n.read);
+  // A letter about a building opens the map table, where it's decided (#199).
+  const [mapTable, setMapTable] = useState(false);
+  if (mapTable) return <MapTable onClose={() => setMapTable(false)} />;
 
   return (
     <ParchmentDialog
@@ -43,7 +48,7 @@ export default function MailboxDialog({ onClose }: { onClose: () => void }) {
       {unread.length > 0 && (
         <ul className="space-y-2">
           {unread.map((n) => (
-            <Letter key={n.id} n={n} onRead={() => void markRead(n.id)} />
+            <Letter key={n.id} n={n} onRead={() => void markRead(n.id)} onMapTable={() => setMapTable(true)} />
           ))}
         </ul>
       )}
@@ -61,7 +66,7 @@ export default function MailboxDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function Letter({ n, onRead, onUnread }: { n: NotificationRow; onRead?: () => void; onUnread?: () => void }) {
+function Letter({ n, onRead, onUnread, onMapTable }: { n: NotificationRow; onRead?: () => void; onUnread?: () => void; onMapTable?: () => void }) {
   const sev = SEVERITY[n.severity] ?? SEVERITY.info;
   return (
     <li className="rounded border-2 bg-[#fffaf0] px-3 py-2" style={{ borderColor: n.read ? "#d8c49a" : sev.tone }}>
@@ -81,8 +86,13 @@ function Letter({ n, onRead, onUnread }: { n: NotificationRow; onRead?: () => vo
         <span>
           {when(n.createdAt)} · from {n.source}
         </span>
+        {onMapTable && n.kind === "building" && (
+          <button onClick={onMapTable} className="village-btn village-btn-go ml-auto px-2 py-0.5">
+            Decide at the map table
+          </button>
+        )}
         {onRead && (
-          <button onClick={onRead} className="village-btn ml-auto px-2 py-0.5">
+          <button onClick={onRead} className={`village-btn px-2 py-0.5 ${onMapTable && n.kind === "building" ? "" : "ml-auto"}`}>
             Mark read
           </button>
         )}

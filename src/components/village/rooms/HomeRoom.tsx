@@ -16,6 +16,7 @@ import VillageCalendar from "./VillageCalendar";
 import TalkDrawer from "../TalkDrawer";
 import VillagerPortrait from "../VillagerPortrait";
 import { MapTable, Pantry } from "./BuildingDialogs";
+import { useBuildings } from "../../data/useBuildings";
 import CottageRoom from "./CottageRoom";
 import Outbox, { useDrafts } from "./Outbox";
 import { useGoals } from "../../data/useGoals";
@@ -106,17 +107,22 @@ function Desk({ onClose }: { onClose: () => void }) {
   const { waiting } = useHires();
   const { unread } = useNotifications();
   const { waiting: drafts } = useDrafts();
-  const [open, setOpen] = useState<"approvals" | "hires" | "letters" | "outbox" | null>(null);
+  const [open, setOpen] = useState<"approvals" | "hires" | "letters" | "outbox" | "buildings" | null>(null);
+  // Buildings waiting for a decision (#199): decided at the map table.
+  const { state: buildingState } = useBuildings();
+  const proposed = buildingState?.buildings.filter((b) => b.status === "proposed").length ?? 0;
   const { villagers } = useVillagers(30000);
   if (open === "approvals") return <TownHallRoom action="approvals.pending" onClose={onClose} />;
   if (open === "hires") return <TownHallRoom action="hires.open" onClose={onClose} />;
   if (open === "letters") return <MailboxDialog onClose={onClose} />;
   if (open === "outbox") return <Outbox onClose={onClose} />;
+  if (open === "buildings") return <MapTable onClose={onClose} />;
   const papers = [
     { id: "approvals" as const, label: "✋ Approvals", count: pending.length, note: "actions waiting for your yes or no" },
     { id: "hires" as const, label: "📜 Hire requests", count: waiting.length, note: "new villagers, with the Mayor's interview" },
     { id: "letters" as const, label: "✉ Letters", count: unread.length, note: "what the villagers wrote to you" },
     { id: "outbox" as const, label: "📤 Outbox", count: drafts.length, note: "drafts for the outside world, waiting for your okay" },
+    { id: "buildings" as const, label: "🏗️ Building proposals", count: proposed, note: "the Mayor's buildings, decided at the map table" },
   ];
   return (
     <ParchmentDialog kicker="Your home" title="Your desk" onClose={onClose}>

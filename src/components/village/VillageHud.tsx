@@ -20,6 +20,9 @@ interface VillageHudProps {
   // The season (#187).
   season?: string;
   onShowApprovals: () => void;
+  // Buildings waiting for the owner's decision (#199), and the way to them.
+  buildingsWaiting?: number;
+  onShowBuildings?: () => void;
   onTogglePause: () => void;
   onShowMail: () => void;
   // Town meetings (#81): one going on now, and the way to the long table.
@@ -59,6 +62,11 @@ export default function VillageHud(p: VillageHudProps) {
         <Chip label={p.season ? `${p.season} · ${p.phase}` : p.phase} value={`${PHASE_ICON[p.phase]} ${p.time}`} dot={p.phase === "night" ? "#1d2340" : "#e3b04b"} />
       </div>
       <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:ml-auto sm:pb-0">
+        {(p.buildingsWaiting ?? 0) > 0 && p.onShowBuildings && (
+          <button onClick={p.onShowBuildings} className="village-btn village-btn-go px-3 py-1.5 text-xs">
+            🏗️ {p.buildingsWaiting} building{p.buildingsWaiting === 1 ? "" : "s"} to decide
+          </button>
+        )}
         {p.waiting > 0 && (
           <button onClick={p.onShowApprovals} className="village-btn village-btn-danger animate-pulse px-3 py-1.5 text-xs motion-reduce:animate-none">
             ❗ {p.waiting} waiting on you

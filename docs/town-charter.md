@@ -270,7 +270,12 @@ interviews, life windows, messages) runs without the model's thinking, at a talk
 east and south), two on each road for every ring of land cleared.
 
 - The Mayor proposes a building (`propose_building`): a house, a farm, a mill, a bakery, a workshop, a tavern, a shop, a garden, a smithy, a chapel or a school.
-- The owner approves or declines it at the map table at home, or builds something there directly.
+- Who approves it is the owner's choice (Mayor's ledger → Villagers, "Who approves buildings"):
+  - the owner, at the map table at home (proposals also show on the desk and in the top bar);
+  - a village vote: the proposal goes to one at once; adopted, the treasury pays and it's built;
+  - the Mayor, within what the treasury can pay.
+- Whichever it is, the owner can still approve, decline or veto a proposal at the map table, or
+  build something there directly.
 - The tavern, the bakery and the shop have an inside: click one to go in. Whoever is there by
   their village life is shown inside, and the furniture shows the stores, who works there and
   (in the shop) what's for sale. Every building but a house can have a keeper, who takes up its

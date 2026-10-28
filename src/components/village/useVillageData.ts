@@ -19,6 +19,8 @@ export interface VillageData {
   spentToday: number;
   // The emergency ceiling (#171), if the owner set one.
   spendCeilingUsd: number | null;
+  // Who approves buildings (#199): only "ask" puts them in the top bar.
+  buildingApproval: "ask" | "vote" | "mayor";
   openGoals: number;
   unread: number;
 }
@@ -34,6 +36,7 @@ const EMPTY: VillageData = {
   pending: [],
   spentToday: 0,
   spendCeilingUsd: null,
+  buildingApproval: "ask",
   openGoals: 0,
   unread: 0,
 };
@@ -56,7 +59,7 @@ export function useVillageData() {
       const [agents, approvals, settings, stats, goals, notifs] = await Promise.all([
         getJson<{ agents: AgentRow[] }>("/api/agents"),
         getJson<{ pending: ToolExecutionRow[] }>("/api/approvals"),
-        getJson<{ settings: { paused: boolean; bedtime: string; wakeTime: string; villageClock?: "own" | "real"; villageDayHours?: number; spendCeilingUsd?: number | null } }>("/api/settings"),
+        getJson<{ settings: { paused: boolean; bedtime: string; wakeTime: string; villageClock?: "own" | "real"; villageDayHours?: number; spendCeilingUsd?: number | null; buildingApproval?: "ask" | "vote" | "mayor" } }>("/api/settings"),
         getJson<{ today: { costUsd: number } }>("/api/stats"),
         getJson<{ goals: Array<{ status: string }> }>("/api/goals"),
         getJson<{ unread: unknown[] }>("/api/notifications"),
@@ -72,6 +75,7 @@ export function useVillageData() {
         pending: approvals.pending ?? [],
         spentToday: Number(stats.today?.costUsd ?? 0),
         spendCeilingUsd: settings.settings?.spendCeilingUsd ?? null,
+        buildingApproval: settings.settings?.buildingApproval ?? "ask",
         openGoals: (goals.goals ?? []).filter((g) => g.status === "backlog" || g.status === "in_progress").length,
         unread: notifs.unread?.length ?? 0,
       });

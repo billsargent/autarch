@@ -9,6 +9,23 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 
 
 
+
+## 2026-10-29 — Building approvals you can find, and a vote if you like
+
+- **Easy to find.** A building waiting for you now shows in the top bar ("🏗️ 1 building to
+  decide", which opens the map table), on your desk ("Building proposals") and on the Mayor's
+  letter about it ("Decide at the map table"). Before, only the map table in your home had it.
+- **The Mayor knows where you decide it,** and who decides: it's in his facts and his playbook.
+- **A new setting, "Who approves buildings"** (Mayor's ledger → Villagers):
+  - **I approve each one** (as before).
+  - **The village votes:** the Mayor's proposals go straight to a village vote (they don't count
+    toward his three ideas a day). Adopted, the treasury pays and it's built; turned down or
+    vetoed, it's declined.
+  - **The Mayor decides:** a proposal goes ahead at once when the treasury can pay, and you're
+    told.
+  - Proposals already waiting follow a change of setting. You can still approve, decline or veto
+    any proposal yourself at the map table, which also closes the village's vote on it.
+- The Mayor's letter about new land now says it opens eight plots, not four.
 ## 2026-10-29 — Housekeeping
 
 - **Once a day, what's long out of date is let go,** so the board, the chronicle and the logs don't

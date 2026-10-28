@@ -198,6 +198,11 @@ export async function proposeBuilding(kind: BuildingKind, plotId: string | null,
     .immediate();
 }
 
+// A building the owner decides directly closes the village's vote on it (#199).
+function settleItsVote(id: number, outcome: "adopted" | "vetoed") {
+  sqlite.prepare("UPDATE ideas SET status = ?, decided_by = 'owner', decided_at = unixepoch() WHERE building_id = ? AND status IN ('open', 'voting')").run(outcome, id);
+}
+
 export async function approveBuilding(id: number): Promise<BuildingRow> {
   const [b] = await db.select().from(buildings).where(eq(buildings.id, id));
   if (!b) throw new BuildingError("No such building.", 404);
@@ -211,6 +216,7 @@ export async function approveBuilding(id: number): Promise<BuildingRow> {
     .set({ status: "building", readyAt: new Date(Date.now() + (b.kind === "land" ? LAND_HOURS : BUILD_HOURS) * 3600_000) })
     .where(eq(buildings.id, id))
     .returning();
+  settleItsVote(id, "adopted");
   return row;
 }
 
@@ -219,6 +225,7 @@ export async function declineBuilding(id: number) {
   if (!b) throw new BuildingError("No such building.", 404);
   if (b.status !== "proposed") throw new BuildingError(`That building is already ${b.status}.`);
   await db.update(buildings).set({ status: "declined" }).where(eq(buildings.id, id));
+  settleItsVote(id, "vetoed");
 }
 
 // Who looks after a farm or a bakery (#106); null = nobody.
@@ -239,21 +246,78 @@ const KEEPER_TRADE: Record<string, string> = Object.fromEntries(
 );
 
 // The Mayor's propose_building tool.
+// What happens to a proposal of the Mayor's (#199), by the owner's setting:
+// it waits for the owner (at the map table in their home), goes to a
+// village vote, or goes ahead now. Returns a sentence for the Mayor.
+async function afterProposal(row: BuildingRow, what: string, reason: string | null): Promise<string> {
+  const { getSettings } = await import("./settingsStore");
+  const mode = (await getSettings()).buildingApproval;
+  const mayor = await ensureMayor();
+  const letter = (title: string, body: string) =>
+    db.insert(notifications).values({ kind: "building", title, body: `${reason ? `${reason} ` : ""}${body}`.trim(), severity: "info", source: mayor.name, agentId: mayor.id });
+  if (mode === "mayor") {
+    await approveBuilding(row.id);
+    await letter(`The Mayor is building ${what}`, `On the ${row.plotId} plot, paid from the treasury (you let the Mayor decide buildings).`);
+    return `It's going up now: you decide buildings (the owner's setting), so it's paid from the treasury and started.`;
+  }
+  let couldNotVote = "";
+  if (mode === "vote") {
+    const ideasLib = await import("./ideas");
+    let idea: Awaited<ReturnType<typeof ideasLib.proposeIdea>> | null = null;
+    try {
+      idea = await ideasLib.proposeIdea(`Build ${what} (the ${row.plotId} plot)`, reason, mayor.id, null, null, row.id);
+    } catch (err) {
+      // The board is full, say: it waits for the owner instead.
+      couldNotVote = ` It couldn't go to a vote (${err instanceof Error ? err.message : String(err)}), so it waits for the owner.`;
+    }
+    if (idea) {
+      let when = "in the daily vote";
+      try {
+        await ideasLib.callVote(idea.id);
+        when = "now";
+      } catch {
+        /* night or paused: the daily vote takes it */
+      }
+      await letter(`The village is voting on ${what}`, `On the ${row.plotId} plot. If it's adopted, the treasury pays and it's built; you can still approve, decline or veto it at the map table in your home.`);
+      return `It's gone to a village vote (${when}, idea #${idea.id}): adopted, it's built from the treasury. The owner can still decide it at the map table in their home.`;
+    }
+  }
+  await letter(`The Mayor would like to build ${what}`, `On the ${row.plotId} plot. Approve or decline it at the map table in your home (it's on your desk too).`);
+  return `It waits for the owner, who approves or declines it at the map table in their home (it's on their desk too).${couldNotVote}`;
+}
+
+// The owner changed who decides buildings (#199): the Mayor's proposals
+// already waiting go the new way. To a vote, each one not already up for one;
+// to the Mayor, each the treasury can pay for. Returns how many were moved on.
+export async function applyBuildingApproval(mode: "ask" | "vote" | "mayor"): Promise<number> {
+  if (mode === "ask") return 0;
+  const waiting = sqlite
+    .prepare(
+      "SELECT b.id FROM buildings b WHERE b.status = 'proposed' AND b.proposed_by IS NOT NULL AND NOT EXISTS (SELECT 1 FROM ideas i WHERE i.building_id = b.id AND i.status IN ('open', 'voting')) ORDER BY b.id",
+    )
+    .all() as Array<{ id: number }>;
+  let moved = 0;
+  for (const { id } of waiting) {
+    const [row] = await db.select().from(buildings).where(eq(buildings.id, id));
+    if (!row) continue;
+    const what = row.kind === "land" ? "new land" : isBuildingKind(row.kind) ? `a ${BUILDING_KINDS[row.kind].label.toLowerCase()}` : row.kind;
+    try {
+      await afterProposal(row, what, null);
+      moved++;
+    } catch {
+      /* the treasury can't pay yet: it stays waiting */
+    }
+  }
+  return moved;
+}
+
 export async function proposeBuildingTool(args: Record<string, unknown>, ctx?: ToolContext) {
   const kind = args.kind;
   if (kind === "land") {
     try {
       const row = await proposeLand(ctx?.agentId ?? null);
-      const mayor = await ensureMayor();
-      await db.insert(notifications).values({
-        kind: "building",
-        title: "The Mayor would like to clear new land",
-        body: `${args.reason ? String(args.reason) : ""} Every plot is spoken for; clearing the next ring opens four more. Approve it at the map table in your home.`.trim(),
-        severity: "info",
-        source: mayor.name,
-        agentId: mayor.id,
-      });
-      return { output: `Proposed clearing new land (${row.plotId}, #${row.id}). The owner decides at the map table.`, summary: "propose land" };
+      const next = await afterProposal(row, "new land (every plot is spoken for; the next ring opens eight more)", args.reason ? String(args.reason) : null);
+      return { output: `Proposed clearing new land (${row.plotId}, #${row.id}). ${next}`, summary: "propose land" };
     } catch (err) {
       if (err instanceof BuildingError) return { output: `Refused: ${err.message.charAt(0).toLowerCase()}${err.message.slice(1)}`, summary: "land refused" };
       throw err;
@@ -262,16 +326,8 @@ export async function proposeBuildingTool(args: Record<string, unknown>, ctx?: T
   if (!isBuildingKind(kind)) return { output: `Refused: say what to build (\`kind\`: ${Object.keys(BUILDING_KINDS).join(", ")}, or land).`, summary: "building refused" };
   try {
     const row = await proposeBuilding(kind, args.plot ? String(args.plot) : null, ctx?.agentId ?? null);
-    const mayor = await ensureMayor();
-    await db.insert(notifications).values({
-      kind: "building",
-      title: `The Mayor would like to build a ${BUILDING_KINDS[kind].label.toLowerCase()}`,
-      body: `${args.reason ? String(args.reason) : ""} On the ${row.plotId} plot. Approve it at the map table in your home.`.trim(),
-      severity: "info",
-      source: mayor.name,
-      agentId: mayor.id,
-    });
-    return { output: `Proposed a ${kind} on the ${row.plotId} plot (#${row.id}). The owner decides at the map table.`, summary: `propose ${kind}` };
+    const next = await afterProposal(row, `a ${BUILDING_KINDS[kind].label.toLowerCase()}`, args.reason ? String(args.reason) : null);
+    return { output: `Proposed a ${kind} on the ${row.plotId} plot (#${row.id}). ${next}`, summary: `propose ${kind}` };
   } catch (err) {
     if (err instanceof BuildingError) return { output: `Refused: ${err.message.charAt(0).toLowerCase()}${err.message.slice(1)}`, summary: "building refused" };
     throw err;
