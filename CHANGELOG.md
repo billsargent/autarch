@@ -5,6 +5,17 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 
 
 
+
+## 2026-10-29 — Search with DeepSeek
+
+- **`web_search` uses DeepSeek's own search** first when the village runs on DeepSeek's API, with
+  your DeepSeek key: nothing else to sign up for. Results carry each page's site, date and a
+  summary written for models.
+- **It costs $0.75 per 1,000 searches** (only those that find something). Each search is added to
+  the turn's spend, so the daily budgets and research projects count it.
+- **A switch** in Mayor's ledger → Tools turns it off. Tavily, Brave, SearXNG, DuckDuckGo and
+  Wikipedia stay as fallbacks, in that order.
+- **The key is only ever sent to DeepSeek's own address.**
 ## 2026-10-29 — The mill
 
 - **A new building, the mill,** on a plot like the others (50 coins). It's the orange-roofed

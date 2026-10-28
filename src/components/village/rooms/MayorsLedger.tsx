@@ -990,8 +990,17 @@ function WebSearchSettings({ s, settings }: { s: Settings; settings: SettingsRow
     <div className="space-y-2 rounded border-2 border-[#d8c49a] p-3 text-xs">
       <p className="font-semibold">Web search</p>
       <p className="text-[11px] text-[#6b4a2e]">
-        web_search tries these in turn: Tavily with your key, Brave and your own SearXNG if you set them up; then Tavily without a key (free and rate-limited), DuckDuckGo and Wikipedia. Searching works without any of them; for a lot of research, add a Tavily key: it&apos;s free for 1,000 searches a month, with no card.
+        web_search tries these in turn: DeepSeek&apos;s own search (with the village&apos;s DeepSeek key), Tavily with your key, Brave and your own SearXNG if you set them up; then Tavily without a key (free and rate-limited), DuckDuckGo and Wikipedia.
       </p>
+      <label className="flex items-start gap-2">
+        <input type="checkbox" className="mt-0.5" checked={settings.deepseekSearch} onChange={(e) => void s.save({ deepseekSearch: e.target.checked })} />
+        <span>
+          <span className="font-semibold">Search with DeepSeek</span>
+          <span className="block text-[11px] text-[#6b4a2e]">
+            Uses your DeepSeek key, so there&apos;s nothing to sign up for: $0.75 per 1,000 searches (under a tenth of a cent each), counted in the day&apos;s spend and the budgets. Only when the village runs on DeepSeek&apos;s own API.
+          </span>
+        </span>
+      </label>
       <SearchKeyField
         s={s}
         field="tavilyApiKey"

@@ -559,6 +559,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   searchApiKey: text("search_api_key"),
   // Tavily's search API (a key free for 1,000 searches a month); a secret too.
   tavilyApiKey: text("tavily_api_key"),
+  // Search with DeepSeek's own search API (#192), on the village's key.
+  deepseekSearch: integer("deepseek_search", { mode: "boolean" }).notNull().default(true),
   searxngUrl: text("searxng_url"),
   // The weekly market day on the village calendar (#173): 0 = Sunday … 6 =
   // Saturday; empty = none.

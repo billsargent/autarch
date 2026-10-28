@@ -72,6 +72,7 @@ export interface SettingsRow {
   spendCeilingUsd: number | null;
   searchKeySet: boolean;
   tavilyKeySet: boolean;
+  deepseekSearch: boolean;
   searxngUrl: string | null;
   marketDay: number | null;
   bedtime: string;
