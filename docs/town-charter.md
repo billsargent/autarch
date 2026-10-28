@@ -266,10 +266,10 @@ villager is always honest with the owner. Village talk (chats without tools, mee
 interviews, life windows, messages) runs without the model's thinking, at a talk temperature
 (`thinkingFor`, `talkTemperature`); work keeps thinking.
 
-**The village grows.** There are four plots on the new land north and west of town, two along
-each road.
+**The village grows.** The land around town has plots along four roads out of it (north, west,
+east and south), two on each road for every ring of land cleared.
 
-- The Mayor proposes a building (`propose_building`): a house, a farm, a bakery or a workshop.
+- The Mayor proposes a building (`propose_building`): a house, a farm, a mill, a bakery, a workshop, a tavern, a shop or a garden.
 - The owner approves or declines it at the map table at home, or builds something there directly.
 - The tavern, the bakery and the shop have an inside: click one to go in. Whoever is there by
   their village life is shown inside, and the furniture shows the stores, who works there and

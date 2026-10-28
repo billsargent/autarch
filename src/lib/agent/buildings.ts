@@ -8,8 +8,8 @@ import { MAX_VILLAGE_LEVEL, ringPlotIds } from "@/components/village/scenes/vill
 import { TRADES, tradeOf } from "./trades";
 
 // The village grows (#105, docs/town-charter.md section 9): the Mayor (or
-// the owner) proposes a building on one of the empty plots north and west of
-// town; the owner approves; it's scaffolding for a while, then it stands.
+// the owner) proposes a building on one of the empty plots on the roads out of
+// town (north, west, east and south, #193); the owner approves; it's scaffolding for a while, then it stands.
 // Every house adds beds, and beds make room for more villagers.
 
 // `morale`: what a finished one adds to everyone's morale (morale.ts).

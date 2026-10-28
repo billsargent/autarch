@@ -21,15 +21,19 @@ const WHAT: Record<BuildingKind, string> = {
   garden: "Where the gardener grows flowers: everyone's morale +3.",
 };
 const ICON: Record<BuildingKind, string> = { house: "🏠", farm: "🌾", mill: "⚙️", bakery: "🍞", workshop: "🔧", tavern: "🍺", shop: "🛍️", garden: "🌷" };
-// "north-3" → "North road, left (second ring)": two plots per road per ring.
+// "north-3" → "North road, left (second ring)": two plots per road per ring,
+// on the north, west, east and south roads (#193).
 const RING = ["first", "second", "third", "fourth"];
+const ROAD = { north: "North", west: "West", east: "East", south: "South" } as const;
 export function plotLabel(plot: string) {
-  const m = /^(north|west)-(\d+)$/.exec(plot);
+  const m = /^(north|west|east|south)-(\d+)$/.exec(plot);
   if (!m) return plot;
+  const road = m[1] as keyof typeof ROAD;
   const n = Number(m[2]) - 1;
-  const side = m[1] === "north" ? (n % 2 ? "right" : "left") : n % 2 ? "lower" : "upper";
+  // Roads running north and south have plots left and right; east and west, upper and lower.
+  const side = road === "north" || road === "south" ? (n % 2 ? "right" : "left") : n % 2 ? "lower" : "upper";
   const ring = Math.floor(n / 2);
-  return `${m[1] === "north" ? "North" : "West"} road, ${side}${ring ? ` (${RING[ring] ?? `ring ${ring + 1}`} ring)` : ""}`;
+  return `${ROAD[road]} road, ${side}${ring ? ` (${RING[ring] ?? `ring ${ring + 1}`} ring)` : ""}`;
 }
 const until = (iso: string | null) => (iso ? new Date(iso).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "soon");
 
@@ -114,7 +118,7 @@ export function MapTable({ onClose }: { onClose: () => void }) {
   return (
     <ParchmentDialog kicker="Your home" title="The map table" onClose={onClose} wide>
       <p className="mb-3 text-xs text-[#6b4a2e]">
-        The land north and west of town, with a plot on each side of the roads. The Mayor proposes buildings and you decide,
+        The land around town, with a plot on each side of the roads out to the north, west, east and south. The Mayor proposes buildings and you decide,
         or build something yourself. A building takes half a day. Each house makes room for two more villagers (room now: {state.room}). The
         Mayor&apos;s proposals are paid from the village treasury (🪙 {state.economy.treasury ?? 0} now); what you build yourself is on you.
       </p>

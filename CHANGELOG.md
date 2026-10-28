@@ -6,6 +6,17 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 
 
 
+
+## 2026-10-29 — More land: east and south
+
+- **Every ring of land now reaches east and south too.** A new east road carries on from the upper
+  street, and a new south road leaves the lower street beside the guard tower, each with two plots
+  per ring, plus fresh countryside around them. A ring now brings eight plots instead of four.
+- **Villages that have already cleared rings get the new plots straight away**: a village at the
+  second ring has eight more free plots. Nothing already built moves: the map grows right and
+  down.
+- The map table, plot signs, the Mayor's `propose_building` and its plot names (east-1, south-2…)
+  know the new roads.
 ## 2026-10-29 — Search with DeepSeek
 
 - **`web_search` uses DeepSeek's own search** first when the village runs on DeepSeek's API, with
