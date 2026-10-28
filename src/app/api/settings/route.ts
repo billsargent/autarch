@@ -99,6 +99,7 @@ export async function PUT(req: Request) {
     "spendCeilingUsd",
     "searchApiKey",
     "tavilyApiKey",
+    "deepseekSearch",
     "searxngUrl",
     "marketDay",
     "bedtime",

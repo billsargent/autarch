@@ -309,6 +309,41 @@ async function main() {
   tavily.close();
   delete process.env.AUTARCH_TAVILY_URL;
   check("the Tavily key is a secret too", [tools.SECRET_COLUMN.test("tavily_api_key"), "tavilyApiKey" in (await (await (await import("../src/app/api/settings/route")).GET()).json()).settings], [true, false]);
+
+  // DeepSeek's own search (#192), on the village's DeepSeek key, counted in the spend.
+  check("the DeepSeek key is never sent to a server that isn't DeepSeek's", await tools.deepseekSearchKey(), null);
+  const dsSeen: Array<{ auth?: string; body: { query: string; count: number } }> = [];
+  let dsEmpty = false;
+  const ds = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      dsSeen.push({ auth: req.headers.authorization, body: body ? JSON.parse(body) : { query: "", count: 0 } });
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ results: dsEmpty ? [] : [{ title: "Post mill", url: "https://example.org/post-mill", snippet: "short", summary: "The post mill\nturned on one post.", site_name: "Mills", date: "2026-05-01T00:00:00+00:00", rerank_score: 2.1, authority: 3 }] }));
+    });
+  });
+  await new Promise<void>((r) => ds.listen(0, "127.0.0.1", r));
+  process.env.AUTARCH_DEEPSEEK_SEARCH_URL = `http://127.0.0.1:${(ds.address() as { port: number }).port}/v1/tools/search`;
+  const dsFound = await tools.webSearch({ query: "post mill ".repeat(20), maxResults: 4 }, { searchApiKey: null, searxngUrl: null, tavilyApiKey: "tvly-good" });
+  check("DeepSeek's search goes first, with the village's key, and says so", [dsFound.output.startsWith("Web search results (DeepSeek)"), dsSeen[0].auth, dsSeen[0].body.count, [...dsSeen[0].body.query].length <= 128], [true, "Bearer test-key", 4, true]);
+  check("…its summary, site and date, on one line", dsFound.output.includes("Mills · 2026-05-01 · The post mill turned on one post."), true);
+  check("…and what it cost", dsFound.costUsd, tools.DEEPSEEK_SEARCH_USD);
+  check("…site names that come hex-encoded are read", [tools.siteName("486973746f72696320456e676c616e64"), tools.siteName("Mills"), tools.siteName("cafe"), tools.siteName(null)], ["Historic England", "Mills", "cafe", null]);
+  // Switched off: the next engine answers (a local stand-in for a SearXNG here).
+  const off = await tools.webSearch({ query: "x" }, { searchApiKey: null, searxngUrl: `http://127.0.0.1:${(ds.address() as { port: number }).port}/`, tavilyApiKey: null, deepseekSearch: false });
+  check("switched off, it isn't used", [off.output.startsWith("Web search results (SearXNG)"), dsSeen.at(-1)!.auth, off.costUsd], [true, undefined, undefined]);
+  dsEmpty = true;
+  check("a search that finds nothing costs nothing", (await tools.deepseekSearch("x", 3, { key: "k", url: process.env.AUTARCH_DEEPSEEK_SEARCH_URL })).length, 0);
+  dsEmpty = false;
+  // In a turn: the search's cost goes on the turn's spend.
+  const searcher = await villagers.createVillager({ name: "Sage", role: "Scholar", enabledTools: ["web_search"] });
+  fake.byAgent.Sage = [{ tools: [{ name: "web_search", args: { query: "windmills" } }] }, { text: "Found it." }];
+  const searchTurn = await runAgentTurn({ userMessage: "look up windmills", agentId: searcher.id });
+  const turnCost = (sqlite.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS c FROM work_sessions WHERE conversation_id = ?").get(searchTurn.conversationId) as { c: number }).c;
+  check("a villager's search is counted in what their turn spent", turnCost >= tools.DEEPSEEK_SEARCH_USD, true);
+  ds.close();
+  delete process.env.AUTARCH_DEEPSEEK_SEARCH_URL;
   fake.close();
 
   try {

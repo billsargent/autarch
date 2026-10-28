@@ -542,7 +542,7 @@ export async function executeTool(
   args: Record<string, unknown>,
   settings: AgentSettingsRow,
   ctx?: ToolContext,
-): Promise<{ output: string; summary: string }> {
+): Promise<{ output: string; summary: string; costUsd?: number }> {
   ensureWorkspace(settings.workspaceDir);
   ensureWorkspace(workspaceSkillsDir(settings.workspaceDir));
   ensureWorkspace(path.join(settings.workspaceDir, "uploads"));
@@ -1343,7 +1343,10 @@ type SearchHit = { title: string; url: string; description?: string };
 // Tools), DuckDuckGo, DuckDuckGo's plain HTML page (often still answering
 // when the other refuses), and Wikipedia's own search last. Each result says
 // where it came from.
-export async function webSearch(args: Record<string, unknown>, settings?: Pick<AgentSettingsRow, "searchApiKey" | "searxngUrl"> & { tavilyApiKey?: string | null }) {
+export async function webSearch(
+  args: Record<string, unknown>,
+  settings?: Pick<AgentSettingsRow, "searchApiKey" | "searxngUrl"> & { tavilyApiKey?: string | null; deepseekSearch?: boolean },
+): Promise<{ output: string; summary: string; costUsd?: number }> {
   const query = String(args.query || "").trim();
   if (!query) return { output: "No search query provided.", summary: "web search (empty query)" };
   const maxResults = Math.min(Math.max(Number(args.maxResults) || 5, 1), 10);
@@ -1352,6 +1355,19 @@ export async function webSearch(args: Record<string, unknown>, settings?: Pick<A
     summary: `web search "${query}" (${items.length} results)`,
   });
   const engines: Array<[string, () => Promise<SearchHit[]>]> = [];
+  // DeepSeek's own search (#192), with the village's DeepSeek key: paid per
+  // search that finds something, so it reports its cost for the budgets.
+  let paid = 0;
+  const deepseek = settings?.deepseekSearch === false ? null : await deepseekSearchKey();
+  if (deepseek)
+    engines.push([
+      "Web search results (DeepSeek)",
+      async () => {
+        const hits = await deepseekSearch(query, maxResults, deepseek);
+        if (hits.length) paid = DEEPSEEK_SEARCH_USD;
+        return hits;
+      },
+    ]);
   if (settings?.tavilyApiKey) engines.push(["Web search results (Tavily)", () => tavilySearch(query, maxResults, settings.tavilyApiKey!)]);
   if (settings?.searchApiKey) engines.push(["Web search results (Brave)", () => braveSearch(query, maxResults, settings.searchApiKey!)]);
   if (settings?.searxngUrl) engines.push(["Web search results (SearXNG)", () => searxngSearch(query, maxResults, settings.searxngUrl!)]);
@@ -1373,7 +1389,7 @@ export async function webSearch(args: Record<string, unknown>, settings?: Pick<A
   for (const [from, run] of engines) {
     try {
       const items = (await run()).filter((r) => r.title && /^https?:/i.test(r.url)).slice(0, maxResults);
-      if (items.length) return show(items, from);
+      if (items.length) return { ...show(items, from), ...(paid ? { costUsd: paid } : {}) };
       failures.push("no results");
     } catch (err) {
       failures.push(err instanceof Error ? err.message : String(err));
@@ -1385,6 +1401,57 @@ export async function webSearch(args: Record<string, unknown>, settings?: Pick<A
 }
 
 const SEARCH_UA = "Mozilla/5.0 (compatible; Autarch village research; +https://github.com/billsargent/autarch)";
+
+// DeepSeek's search API (#192): $0.75 per 1,000 searches that find something.
+export const DEEPSEEK_SEARCH_USD = 0.00075;
+
+// The village's DeepSeek key and address, when the village runs on DeepSeek's
+// own API: the key is never sent anywhere else. AUTARCH_DEEPSEEK_SEARCH_URL
+// points the search elsewhere, for tests.
+export async function deepseekSearchKey(): Promise<{ key: string; url: string } | null> {
+  const { getSettings } = await import("./settingsStore");
+  const s = await getSettings();
+  if (!s.apiKey) return null;
+  if (process.env.AUTARCH_DEEPSEEK_SEARCH_URL) return { key: s.apiKey, url: process.env.AUTARCH_DEEPSEEK_SEARCH_URL };
+  let host = "";
+  try {
+    host = new URL(s.apiBaseUrl).hostname;
+  } catch {
+    return null;
+  }
+  return host === "api.deepseek.com" ? { key: s.apiKey, url: "https://api.deepseek.com/v1/tools/search" } : null;
+}
+
+// Some site names come back hex-encoded ("486973…" for "Historic England").
+export function siteName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  if (/^(?:[0-9a-f]{2}){4,}$/i.test(name)) {
+    const text = Buffer.from(name, "hex").toString("utf8");
+    if (!text.includes("�") &&/^[\p{L}\p{N}\p{P}\p{Zs}]+$/u.test(text)) return text;
+  }
+  return name;
+}
+
+export async function deepseekSearch(query: string, max: number, ds: { key: string; url: string }): Promise<SearchHit[]> {
+  const res = await fetch(ds.url, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${ds.key}` },
+    // The query is at most 128 characters; it can use site:, "phrases", after:2025-01-01 and so on.
+    body: JSON.stringify({ query: [...query].slice(0, 128).join(""), count: max }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) {
+    const why = ((await res.json().catch(() => ({}))) as { error?: { message?: string } }).error?.message;
+    throw new Error(`DeepSeek's search answered ${res.status}${why ? `: ${why}` : ""}`);
+  }
+  const data = (await res.json()) as { results?: Array<{ title?: string; url: string; summary?: string; snippet?: string; date?: string | null; site_name?: string | null }> };
+  return (data.results ?? []).map((r) => ({
+    title: r.title || r.url,
+    url: r.url,
+    // The summary is written for models; the date helps judge how current it is.
+    description: [siteName(r.site_name), r.date?.slice(0, 10), (r.summary || r.snippet || "").replace(/\s+/g, " ").trim().slice(0, 600)].filter(Boolean).join(" · "),
+  }));
+}
 
 // Tavily's search API: with a key from app.tavily.com (1,000 searches a month
 // free, no card), or without one in its keyless mode (free, rate-limited, for

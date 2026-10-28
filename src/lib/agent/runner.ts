@@ -733,6 +733,8 @@ export async function runAgentTurn(opts: {
                   status = "success";
                   output = execResult.output;
                   resultContent = output;
+                  // A tool that costs money (DeepSeek's search, #192) adds to this turn's spend.
+                  if (execResult.costUsd) session.costUsd += execResult.costUsd;
                   break;
                 } catch (err) {
                   attempt++;
