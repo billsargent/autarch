@@ -157,6 +157,16 @@ async function runDueJobs() {
     console.error(`[worker] the day's economy failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
+  // Housekeeping (#197): once a day, what's long out of date is let go.
+  try {
+    const { dailyTidy } = await import("@/lib/agent/housekeeping");
+    const tidied = dailyTidy((await getSettings()).historyDays);
+    const n = tidied ? Object.values(tidied.counts).reduce((a, b) => a + b, 0) : 0;
+    if (n) console.log(`[worker] tidied up ${n} out-of-date record(s)`);
+  } catch (err) {
+    console.error(`[worker] housekeeping failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   // The village calendar (#173): a meeting held when its time comes, and the
   // copy on the owner's Google calendar kept up to date.
   try {

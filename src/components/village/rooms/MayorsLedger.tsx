@@ -358,6 +358,7 @@ function Page({ id, s, settings, onConfirm }: { id: PageId; s: Settings; setting
             <NumberField s={s} settings={settings} field="voteCostCapUsd" label="Budget per round of votes (USD)" step="0.01" help="A vote stops collecting when it has spent this." />
             <NumberField s={s} settings={settings} field="awaySpendCapUsd" label="Away-mode budget (USD)" step="0.01" help="While you're away, the Mayor stops approving once the village has spent this." />
           </div>
+          <TidyUp s={s} settings={settings} />
           <WorkspaceField s={s} settings={settings} />
           <Toggle
             label="Allow fetching from the web"
@@ -1056,6 +1057,52 @@ function WebSearchSettings({ s, settings }: { s: Settings; settings: SettingsRow
         Try a search
       </button>
       {trying && <p className="text-[11px]">{trying}</p>}
+    </div>
+  );
+}
+
+// Housekeeping (#197): how long the record is kept, and tidying up now.
+function TidyUp({ s, settings }: { s: Settings; settings: SettingsRow }) {
+  const [last, setLast] = useState<{ at: number; counts: Record<string, number> } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void fetch("/api/housekeeping", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setLast(d.last ?? null))
+      .catch(() => {});
+  }, []);
+  const total = last ? Object.values(last.counts).reduce((a, b) => a + b, 0) : 0;
+  return (
+    <div className="space-y-2 rounded border-2 border-[#d8c49a] p-3 text-xs">
+      <p className="font-semibold">Housekeeping</p>
+      <p className="text-[11px] text-[#6b4a2e]">
+        Once a day, what&apos;s long out of date is let go: notices come down after two weeks; goals nobody touched for a month are set aside; finished goals, turned-down ideas, read
+        letters in your mailbox and settled orders go after a month; the chronicle, the guard tower&apos;s log, the villagers&apos; own threads, finished diary tasks and old drafts go
+        after the history below. Your own chats, approvals still waiting, weddings and the spending record are always kept.
+      </p>
+      <NumberField s={s} settings={settings} field="historyDays" label="Keep the village's history for (days)" />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            const d = await fetch("/api/housekeeping", { method: "POST" })
+              .then((r) => r.json())
+              .catch(() => null);
+            if (d?.last) setLast(d.last);
+            setBusy(false);
+          }}
+          className="village-btn px-2 py-1 text-[11px]"
+        >
+          {busy ? "Tidying…" : "Tidy up now"}
+        </button>
+        {last && (
+          <span className="text-[11px] text-[#6b4a2e]">
+            Last tidied {new Date(last.at * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}:{" "}
+            {total ? Object.entries(last.counts).map(([k, n]) => `${n} ${k}`).join(", ") : "nothing was out of date"}.
+          </span>
+        )}
+      </div>
     </div>
   );
 }

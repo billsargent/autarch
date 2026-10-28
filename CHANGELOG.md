@@ -8,6 +8,25 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 
 
 
+
+## 2026-10-29 — Housekeeping
+
+- **Once a day, what's long out of date is let go,** so the board, the chronicle and the logs don't
+  grow forever:
+  - Notices on the board come down after two weeks.
+  - Goals nobody has touched for a month are set aside.
+  - Finished goals, turned-down ideas, read letters in your mailbox, settled orders and past
+    happenings go after a month; past calendar events after two months.
+  - The chronicle, the guard tower's log, the villagers' own threads (work windows, own time,
+    votes, letters between neighbours, research), finished diary tasks, old drafts, settled hire
+    requests, past meetings and finished research notes go after the village's history (90 days
+    by default).
+- **Always kept:** your own chats, approvals still waiting, weddings, the villagers' own notes
+  (reflections, ideas, open tasks), research reports on the shelf and the spending record.
+- **Mayor's ledger → Limits** has the history setting, a "Tidy up now" button and what the last
+  tidy let go.
+- The diary now loads the newest few hundred entries, and the board's "Taken down" shows the latest
+  ten.
 ## 2026-10-29 — Seasons and happenings, the blacksmith, the chapel and the school
 
 - **The mill's flour is kept.** The stores were saved good by good and flour had been left out, so

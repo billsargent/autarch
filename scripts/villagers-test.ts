@@ -1465,6 +1465,46 @@ async function main() {
     await weddings.POST(req("/api/life/weddings", "POST", { a: pair[0], b: pair[1], action: "bless" }));
     check("with a chapel, sweethearts marry there", Boolean(db2.prepare("SELECT 1 FROM life_events WHERE kind = 'wedding' AND text LIKE '%married at the chapel%'").get()), true);
     db2.prepare("DELETE FROM buildings WHERE id = ?").run(chapelId);
+
+    // --- housekeeping (#197): what's long out of date goes; what matters stays ---------------
+    const hk = await import("../src/lib/agent/housekeeping");
+    const nowS = Math.floor(Date.now() / 1000);
+    const daysAgo = (d: number) => nowS - d * 86400;
+    const ins = (sql: string, ...args: unknown[]) => Number(db2.prepare(sql).run(...args).lastInsertRowid);
+    const exists = (table: string, id: number) => Boolean(db2.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(id));
+    const freshNotice = ins("INSERT INTO notices (title, created_at) VALUES ('Fresh', ?)", daysAgo(2));
+    const oldNotice = ins("INSERT INTO notices (title, created_at) VALUES ('Old news', ?)", daysAgo(20));
+    const staleGoal = ins("INSERT INTO goals (title, status, priority, created_at, updated_at) VALUES ('Dusty', 'backlog', 3, ?, ?)", daysAgo(40), daysAgo(40));
+    const busyGoal = ins("INSERT INTO goals (title, status, priority, created_at, updated_at) VALUES ('Lively', 'backlog', 3, ?, ?)", daysAgo(40), daysAgo(3));
+    const doneGoal = ins("INSERT INTO goals (title, status, priority, created_at, updated_at) VALUES ('Done long ago', 'done', 3, ?, ?)", daysAgo(50), daysAgo(45));
+    const rejected = ins("INSERT INTO ideas (title, status, created_at, decided_at) VALUES ('Nope', 'rejected', ?, ?)", daysAgo(50), daysAgo(40));
+    const readNote = ins("INSERT INTO notifications (kind, title, severity, read, created_at) VALUES ('info', 'Read', 'info', 1, ?)", daysAgo(40));
+    const unreadNote = ins("INSERT INTO notifications (kind, title, severity, read, created_at) VALUES ('info', 'Unread', 'info', 0, ?)", daysAgo(40));
+    const oldEvent = ins("INSERT INTO life_events (kind, text, created_at) VALUES ('gift', 'Long ago', ?)", daysAgo(120));
+    const oldWedding = ins("INSERT INTO life_events (kind, text, created_at) VALUES ('wedding', 'A wedding long ago', ?)", daysAgo(400));
+    const oldTool = ins("INSERT INTO tool_executions (tool, status, requested_at) VALUES ('read_file', 'success', ?)", daysAgo(120));
+    const waiting = ins("INSERT INTO tool_executions (tool, status, requested_at) VALUES ('run_shell_command', 'awaiting_approval', ?)", daysAgo(120));
+    const autoThread = ins("INSERT INTO conversations (title, agent_id) VALUES ('Votes', ?)", cal.id);
+    const autoMsg = ins("INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, 'event', 'old note', ?)", autoThread, daysAgo(120));
+    const ownerThread = ins("INSERT INTO conversations (title, agent_id) VALUES ('Owner chat', ?)", cal.id);
+    const ownerOld = ins("INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, 'assistant', 'old reply', ?)", ownerThread, daysAgo(120));
+    ins("INSERT INTO messages (conversation_id, role, content, created_at) VALUES (?, 'user', 'hello', ?)", ownerThread, daysAgo(121));
+    const doneTask = ins("INSERT INTO journal_entries (title, category, status, created_at, updated_at) VALUES ('Session log', 'task', 'done', ?, ?)", daysAgo(120), daysAgo(120));
+    const openTask = ins("INSERT INTO journal_entries (title, category, status, created_at, updated_at) VALUES ('Still to do', 'task', 'open', ?, ?)", daysAgo(120), daysAgo(120));
+    const reflection = ins("INSERT INTO journal_entries (title, category, status, created_at, updated_at) VALUES ('A thought', 'reflection', 'done', ?, ?)", daysAgo(120), daysAgo(120));
+    const tidied = hk.tidyUp(90);
+    check("a notice comes down after two weeks; a fresh one stays", [db2.prepare("SELECT removed_at IS NOT NULL AS gone FROM notices WHERE id = ?").get(oldNotice), db2.prepare("SELECT removed_at IS NOT NULL AS gone FROM notices WHERE id = ?").get(freshNotice)], [{ gone: 1 }, { gone: 0 }]);
+    check("a goal nobody touched for a month is set aside; a lively one stays", [(db2.prepare("SELECT status FROM goals WHERE id = ?").get(staleGoal) as { status: string }).status, (db2.prepare("SELECT status FROM goals WHERE id = ?").get(busyGoal) as { status: string }).status], ["abandoned", "backlog"]);
+    check("finished goals and turned-down ideas go after a month", [exists("goals", doneGoal), exists("ideas", rejected)], [false, false]);
+    check("read mailbox letters go after a month, unread ones are kept longer", [exists("notifications", readNote), exists("notifications", unreadNote)], [false, true]);
+    check("the chronicle lets go of old days, but weddings are kept", [exists("life_events", oldEvent), exists("life_events", oldWedding)], [false, true]);
+    check("the guard tower's log lets go of old entries, never an approval still waiting", [exists("tool_executions", oldTool), exists("tool_executions", waiting)], [false, true]);
+    check("old messages in a villager's own thread go; the owner's chats are kept whole", [exists("messages", autoMsg), exists("messages", ownerOld)], [false, true]);
+    check("finished diary tasks go; open tasks and reflections stay", [exists("journal_entries", doneTask), exists("journal_entries", openTask), exists("journal_entries", reflection)], [false, true, true]);
+    check("what was let go is counted", [tidied.counts["notices taken down"] >= 1, tidied.counts["goals set aside (untouched for a month)"] >= 1, (hk.lastTidy()?.at ?? 0) >= nowS - 5], [true, true, true]);
+    check("the daily round runs once a day", [hk.dailyTidy(90), hk.dailyTidy(90)].map((r) => r === null), [true, true]);
+    const hkRoute = await import("../src/app/api/housekeeping/route");
+    check("the owner can tidy up now", (await (await hkRoute.POST()).json()).last.at >= nowS - 5, true);
   }
 
   fake.close();
