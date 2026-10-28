@@ -378,7 +378,7 @@ if (!globalForDb.__agentLabSqlite) {
   if (!existingCols("agents").includes("trade")) {
     sqlite.exec("ALTER TABLE agents ADD COLUMN trade TEXT");
   }
-  for (const col of ["fish", "flowers", "crafts", "ale", "treasury", "reputation", "flour"]) {
+  for (const col of ["fish", "flowers", "crafts", "ale", "treasury", "reputation", "flour", "iron", "tools"]) {
     if (!existingCols("economy").includes(col)) sqlite.exec(`ALTER TABLE economy ADD COLUMN ${col} INTEGER NOT NULL DEFAULT 0`);
   }
   if (!existingCols("economy").includes("last_life_tick")) {

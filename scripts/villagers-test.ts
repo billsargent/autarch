@@ -1397,6 +1397,76 @@ async function main() {
   const ownUnknown = await agentRoute.PATCH(req(`/api/agents/${fay.id}`, "PATCH", { enabledTools: ["read_file", "made_up_tool"] }), { params: Promise.resolve({ id: String(fay.id) }) });
   check("…where a new unknown name is refused too", ownUnknown.status, 400);
 
+  // --- the mill's flour is kept, and seasons, happenings, the smithy, chapel and school (#186–#189)
+  {
+    const db2 = (await import("../src/db")).sqlite;
+    const eco = () => db2.prepare("SELECT * FROM economy WHERE id = 1").get() as Record<string, number>;
+    const build = (kind: string) => Number(db2.prepare("INSERT INTO buildings (kind, plot_id, status) VALUES (?, ?, 'built')").run(kind, `t-${kind}-${Math.random()}`).lastInsertRowid);
+    // Flour a miller grinds is saved with the stores (it was once left out).
+    const millId = build("mill");
+    const milo = (await add({ name: "Milo", role: "Miller" })).agent;
+    const others = db2.prepare("SELECT id, trade FROM agents WHERE id != ? AND status != 'dismissed'").all(milo.id) as Array<{ id: number; trade: string | null }>;
+    for (const o of others) db2.prepare("UPDATE agents SET trade = 'helper' WHERE id = ?").run(o.id);
+    db2.prepare("UPDATE economy SET wheat = 10, flour = 0, bread = 30 WHERE id = 1").run();
+    db2.prepare("UPDATE villager_life SET energy = 90, fullness = 90 WHERE agent_id = ?").run(milo.id);
+    const lifeMod = await import("../src/lib/agent/life");
+    const noon = new Date();
+    noon.setHours(10, 0, 0, 0);
+    await lifeMod.runLifeTick(noon, () => 0.99, true);
+    check("a miller's flour is kept in the stores", [eco().flour, eco().wheat], [1, 9]);
+    for (const o of others) db2.prepare("UPDATE agents SET trade = ? WHERE id = ?").run(o.trade, o.id);
+    db2.prepare("UPDATE agents SET status = 'dismissed' WHERE id = ?").run(milo.id);
+    db2.prepare("DELETE FROM buildings WHERE id = ?").run(millId);
+
+    // The day's happenings: a storm, a merchant and a fair, all at once (rng 0).
+    const hap = await import("../src/lib/agent/happenings");
+    const smithyId = build("smithy");
+    db2.prepare("UPDATE economy SET wheat = 20, crafts = 20, iron = 0, tools = 5, treasury = 100 WHERE id = 1").run();
+    db2.prepare("DELETE FROM village_seasons").run();
+    const ordersBefore = (db2.prepare("SELECT COUNT(*) AS n FROM trade_orders").get() as { n: number }).n;
+    const day = new Date();
+    const happened = hap.dailyHappenings(day, "real", 4, () => 0);
+    check("a day can bring a storm, a merchant and a fair", happened, ["storm", "merchant", "fair"]);
+    const after = eco();
+    check("the storm spoils some wheat; the merchant buys surplus crafts and sells the smithy iron", [after.wheat, after.crafts, after.iron, after.treasury], [14, 15, hap.MERCHANT_IRON.qty, 100 + 5 * 5 - hap.MERCHANT_IRON.qty * hap.MERCHANT_IRON.price]);
+    check("…the fair sends two orders", (db2.prepare("SELECT COUNT(*) AS n FROM trade_orders").get() as { n: number }).n - ordersBefore, 2);
+    const workers = (db2.prepare("SELECT COUNT(*) AS n FROM agents WHERE status = 'active'").get() as { n: number }).n;
+    check("…tools wear out, one for every four at work", after.tools, Math.max(0, 5 - Math.ceil(workers / 4)));
+    check("…once a day", hap.dailyHappenings(day, "real", 4, () => 0), []);
+    const facts = await (await import("../src/lib/agent/villageFacts")).villageFacts();
+    check("everyone hears the season and the day's happenings", [facts.includes("- The season: "), facts.includes("A travelling merchant set up in the square")], [true, true]);
+    const smithy = (await add({ name: "Hal", role: "Blacksmith" })).agent;
+    check("a blacksmith keeps the smithy", (db2.prepare("SELECT keeper_id AS k FROM buildings WHERE id = ?").get(smithyId) as { k: number }).k, smithy.id);
+    db2.prepare("UPDATE agents SET status = 'dismissed' WHERE id = ?").run(smithy.id);
+    db2.prepare("DELETE FROM buildings WHERE id = ?").run(smithyId);
+
+    // Autumn comes: it's said, and the harvest festival goes on the calendar for its fourth day.
+    const seasons = await import("../src/lib/agent/seasons");
+    let k = seasons.villageDayNumber(new Date(), "own", 4) + 1;
+    while (k % (4 * seasons.SEASON_DAYS) !== 2 * seasons.SEASON_DAYS) k++;
+    db2.prepare("INSERT OR REPLACE INTO village_seasons (id, day, season) VALUES (1, ?, 'summer')").run(k - 1);
+    hap.dailyHappenings(new Date(seasons.villageDayStart(k, "own", 4).getTime() + 60_000), "own", 4, () => 0.99);
+    const festival = db2.prepare("SELECT title, starts_at * 1000 AS at FROM village_events WHERE source = 'season' AND source_id = ?").get(k + 3) as { title: string; at: number } | undefined;
+    check("when autumn comes, the harvest festival goes on the calendar for its fourth day", [festival?.title, festival?.at], ["Harvest festival", seasons.villageDayStart(k + 3, "own", 4).getTime()]);
+    check("…and the chronicle says so", Boolean(db2.prepare("SELECT 1 FROM life_events WHERE kind = 'season' AND text LIKE 'Autumn has come%'").get()), true);
+
+    // Festival day lifts everyone.
+    const nowSec = Math.floor(Date.now() / 1000);
+    const fest = Number(db2.prepare("INSERT INTO village_events (title, kind, starts_at, ends_at, all_day, source) VALUES ('The spring fair', 'festival', ?, ?, 0, 'owner')").run(nowSec - 60, nowSec + 3600).lastInsertRowid);
+    const moods = await (await import("../src/lib/agent/morale")).villageMorale();
+    check("on festival day, spirits lift", moods.every((m) => m.reasons.includes("it's festival day: The spring fair (+6)")), true);
+    db2.prepare("UPDATE village_events SET cancelled = 1 WHERE id = ?").run(fest);
+
+    // A wedding at the chapel.
+    const chapelId = build("chapel");
+    const pair = (db2.prepare("SELECT id FROM agents WHERE status = 'active' ORDER BY id LIMIT 2").all() as Array<{ id: number }>).map((r) => r.id).sort((x, y) => x - y);
+    db2.prepare("INSERT OR REPLACE INTO relationships (a_id, b_id, affinity, romance, status) VALUES (?, ?, 90, 90, 'sweetheart')").run(pair[0], pair[1]);
+    const weddings = await import("../src/app/api/life/weddings/route");
+    await weddings.POST(req("/api/life/weddings", "POST", { a: pair[0], b: pair[1], action: "bless" }));
+    check("with a chapel, sweethearts marry there", Boolean(db2.prepare("SELECT 1 FROM life_events WHERE kind = 'wedding' AND text LIKE '%married at the chapel%'").get()), true);
+    db2.prepare("DELETE FROM buildings WHERE id = ?").run(chapelId);
+  }
+
   fake.close();
   try {
     fs.rmSync(tmp, { recursive: true, force: true });

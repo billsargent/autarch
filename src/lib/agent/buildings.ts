@@ -20,6 +20,10 @@ export const BUILDING_KINDS = {
   farm: { label: "Farm", beds: 0, stamp: "wheatField", morale: 0, cost: 30 },
   // The mill (#186): wheat into flour for the bakery; its sails turn on the map.
   mill: { label: "Mill", beds: 0, stamp: "millHouse", morale: 0, cost: 50 },
+  // The blacksmith's forge (#188), the chapel and the school (#189).
+  smithy: { label: "Smithy", beds: 0, stamp: "smithy", morale: 0, cost: 50 },
+  chapel: { label: "Chapel", beds: 0, stamp: "chapel", morale: 4, cost: 60 },
+  school: { label: "School", beds: 0, stamp: "school", morale: 2, cost: 60 },
   bakery: { label: "Bakery", beds: 0, stamp: "fishShop", morale: 0, cost: 40 },
   workshop: { label: "Workshop", beds: 0, stamp: "stoneHouse", morale: 0, cost: 40 },
   tavern: { label: "Tavern", beds: 0, stamp: "greenMarket", morale: 5, cost: 60 },

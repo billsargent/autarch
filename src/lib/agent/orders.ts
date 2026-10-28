@@ -49,8 +49,9 @@ export function dailyOrders(now = new Date(), rng: () => number = Math.random): 
     }
     const open = (sqlite.prepare("SELECT COUNT(*) AS n FROM trade_orders WHERE status = 'open'").get() as { n: number }).n;
     if (open < OPEN_ORDERS_MAX) {
-      const hasMill = Boolean(sqlite.prepare("SELECT 1 FROM buildings WHERE kind = 'mill' AND status = 'built'").get());
-      const o = makeOrder(eco.reputation, rng, hasMill ? ["flour"] : []);
+      // Flour and tools only once there's a mill or a smithy to make them (#186, #188).
+      const has = (kind: string) => Boolean(sqlite.prepare("SELECT 1 FROM buildings WHERE kind = ? AND status = 'built'").get(kind));
+      const o = makeOrder(eco.reputation, rng, [...(has("mill") ? ["flour" as const] : []), ...(has("smithy") ? ["tools" as const] : [])]);
       sqlite.prepare("INSERT INTO trade_orders (town, good, qty, reward, due_at) VALUES (?, ?, ?, ?, ?)").run(o.town, o.good, o.qty, o.reward, nowSec + o.days * 86400);
       logLife("order", null, `${o.town} would like ${o.qty} ${GOOD_LABEL[o.good]} within ${ORDER_DAYS} days, for ${o.reward} coins.`);
     }

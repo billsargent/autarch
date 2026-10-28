@@ -269,7 +269,7 @@ interviews, life windows, messages) runs without the model's thinking, at a talk
 **The village grows.** The land around town has plots along four roads out of it (north, west,
 east and south), two on each road for every ring of land cleared.
 
-- The Mayor proposes a building (`propose_building`): a house, a farm, a mill, a bakery, a workshop, a tavern, a shop or a garden.
+- The Mayor proposes a building (`propose_building`): a house, a farm, a mill, a bakery, a workshop, a tavern, a shop, a garden, a smithy, a chapel or a school.
 - The owner approves or declines it at the map table at home, or builds something there directly.
 - The tavern, the bakery and the shop have an inside: click one to go in. Whoever is there by
   their village life is shown inside, and the furniture shows the stores, who works there and
@@ -286,7 +286,7 @@ keeping a building makes them its trade.
 
 - **Every ten minutes, with no model calls,** each villager's day moves on. Energy, fullness and
   company drift. By day they work their trade at its building, making goods for the village
-  (wheat, flour, bread, fish, flowers, crafts, ale) and earning experience, levels and a coin. When
+  (wheat, flour, bread, fish, flowers, crafts, ale, tools) and earning experience, levels and a coin. When
   hungry they eat from the village pantry, when tired they rest, and in the evening they go to
   the tavern or drop in on a friend. At night they sleep.
 - **Friends.** Villagers who spend time together grow closer: acquaintances become friends, then

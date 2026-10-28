@@ -1,5 +1,6 @@
 // Village life without a database (#129): the daily tick, friendship, the day
 // split, trades and levels. Run with: npm run test:life
+import { SEASON_DAYS, scaled, seasonFactor, seasonOf } from "../src/lib/agent/seasons";
 import { lifeTick, makeOrder, nextWindowFor, readyToWed, romanceStep, socialise, statusFor, warmthOf, type LifeState, type TickInput } from "../src/lib/agent/lifeRules";
 import { TRAITS, characterBlock, checkTraits, pickTraits } from "../src/lib/agent/traits";
 import { placeDecor } from "../src/lib/agent/shop";
@@ -130,6 +131,24 @@ check("levels and titles", [levelOf(0), levelOf(20), levelOf(320), levelOf(1000)
   check("a good name brings bigger, better-paid orders", [big.qty > small.qty, big.reward / big.qty > small.reward / small.qty], [true, true]);
   // Flour is asked for only once there's a mill (#186): it's the last choice when offered.
   check("orders ask for flour only when the village can mill it", [makeOrder(0, () => 0.999).good, makeOrder(0, () => 0.999, ["flour"]).good], ["ale", "flour"]);
+}
+
+// --- seasons, storms, tools and the school (#187, #188, #189) -------------------------------
+{
+  const dayMs = 4 * 3_600_000;
+  const onDay = (n: number) => new Date(n * dayMs + 60_000);
+  check("on the village's own clock, seasons turn every week of village days", [0, SEASON_DAYS, 2 * SEASON_DAYS, 3 * SEASON_DAYS, 4 * SEASON_DAYS].map((n) => seasonOf(onDay(n), "own", 4).season), ["spring", "summer", "autumn", "winter", "spring"]);
+  check("…counting the days of each", [seasonOf(onDay(SEASON_DAYS + 2), "own", 4).day, seasonOf(onDay(SEASON_DAYS + 2), "own", 4).startedOn], [3, SEASON_DAYS]);
+  check("on the owner's clock, they follow the months", [new Date(2026, 3, 10), new Date(2026, 6, 1), new Date(2026, 9, 28), new Date(2027, 0, 5)].map((d) => seasonOf(d, "real", 4).season), ["spring", "summer", "autumn", "winter"]);
+  check("winter halves the fields, autumn's harvest adds half again", [seasonFactor("wheat", "winter"), seasonFactor("wheat", "autumn"), seasonFactor("bread", "winter"), seasonFactor("flowers", "summer")], [0.5, 1.5, 1, 1.5]);
+  check("a fraction is a chance of one more", [scaled(1, 1.5, () => 0.4), scaled(1, 1.5, () => 0.6), scaled(2, 0.5, () => 0.9), scaled(1, 0.5, () => 0.4)], [2, 1, 1, 1]);
+  const farmer = (more: Partial<TickInput>) => lifeTick(base, at(10, { trade: "farmer", rng: () => 0.6, ...more })).produced.wheat ?? 0;
+  check("a farmer's stint: winter one in two, a storm halves it, autumn more", [farmer({ season: "winter" }), farmer({ storm: true }), farmer({ season: "autumn", rng: () => 0.3 })], [0, 0, 2]);
+  check("tools in the stores now and then add one more", [farmer({ tools: true, rng: () => 0.1 }), farmer({ tools: true, rng: () => 0.9 })], [2, 1]);
+  const smith = lifeTick(base, at(10, { trade: "smith", stock: { iron: 3 } }));
+  check("a blacksmith turns iron into tools", [smith.used, smith.produced, smith.state.activity], [{ iron: 1 }, { tools: 1 }, "at the forge"]);
+  check("…and waits without iron", lifeTick(base, at(10, { trade: "smith", stock: {} })).state.activity, "waiting for iron");
+  check("a school helps those still learning", [lifeTick(base, at(10, { school: true })).state.xp, lifeTick({ ...base, xp: 500 }, at(10, { school: true })).state.xp], [3, 502]);
 }
 
 // --- the village's own clock (#150) ------------------------------------------------------

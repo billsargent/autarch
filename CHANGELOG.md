@@ -7,6 +7,29 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 
 
 
+
+## 2026-10-29 — Seasons and happenings, the blacksmith, the chapel and the school
+
+- **The mill's flour is kept.** The stores were saved good by good and flour had been left out, so
+  the miller's flour vanished. Every good is saved now.
+- **Seasons** turn every seven village days (on the owner's clock, with the months). Winter halves
+  what the fields, garden and pond give; autumn's harvest adds half again to the wheat; summer adds
+  to the flowers. The season shows in the bar at the top and in every villager's facts.
+- **When autumn comes, the harvest festival goes on the village calendar** for its fourth day, and
+  on festival day everyone's spirits lift (+6).
+- **Chance happenings, once a village day:**
+  - A storm spoils some wheat and slows the fields for the day.
+  - A travelling merchant buys the village's surplus for the treasury, and sells iron to a village
+    with a smithy.
+  - A fair in a neighbouring town sends two extra orders.
+  - Each goes in the chronicle and in THE VILLAGE TODAY.
+- **The blacksmith:** a new building, the smithy (the clay forge, with an anvil by the door), and a
+  new trade. The smith turns iron into tools; tools in the stores now and then add to every trade's
+  stint, and wear out a little each day. Orders can ask for tools once a smithy stands.
+- **The chapel** (the red-roofed hall) cheers everyone (+4), and weddings are held there, lifting
+  the couple.
+- **The school** (the wooden schoolhouse) cheers everyone (+2) and helps villagers still learning
+  their trade (below level 5) learn faster.
 ## 2026-10-29 — More land: east and south
 
 - **Every ring of land now reaches east and south too.** A new east road carries on from the upper

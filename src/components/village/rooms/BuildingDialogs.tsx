@@ -19,8 +19,11 @@ const WHAT: Record<BuildingKind, string> = {
   tavern: "Where the innkeeper brews ale from wheat, and where villagers spend their evenings: everyone's morale +5.",
   shop: "Where villagers buy things for their cottages, treats and flowers: everyone's morale +3.",
   garden: "Where the gardener grows flowers: everyone's morale +3.",
+  smithy: "Where the blacksmith turns iron from the travelling merchant into tools. Tools in the stores make everyone's work go further.",
+  chapel: "Weddings are held here, and the couple's spirits lift; everyone's morale +4.",
+  school: "Villagers still learning their trade (below level 5) learn faster; everyone's morale +2.",
 };
-const ICON: Record<BuildingKind, string> = { house: "🏠", farm: "🌾", mill: "⚙️", bakery: "🍞", workshop: "🔧", tavern: "🍺", shop: "🛍️", garden: "🌷" };
+const ICON: Record<BuildingKind, string> = { smithy: "⚒️", chapel: "⛪", school: "🏫", house: "🏠", farm: "🌾", mill: "⚙️", bakery: "🍞", workshop: "🔧", tavern: "🍺", shop: "🛍️", garden: "🌷" };
 // "north-3" → "North road, left (second ring)": two plots per road per ring,
 // on the north, west, east and south roads (#193).
 const RING = ["first", "second", "third", "fourth"];

@@ -17,6 +17,8 @@ interface VillageHudProps {
   // The village clock (#100).
   time: string;
   phase: DayPhase;
+  // The season (#187).
+  season?: string;
   onShowApprovals: () => void;
   onTogglePause: () => void;
   onShowMail: () => void;
@@ -54,7 +56,7 @@ export default function VillageHud(p: VillageHudProps) {
           value={`$${p.spentToday.toFixed(2)}${p.spendCeilingUsd != null ? ` / $${p.spendCeilingUsd.toFixed(2)}` : ""}`}
           dot="#d9643a"
         />
-        <Chip label={p.phase} value={`${PHASE_ICON[p.phase]} ${p.time}`} dot={p.phase === "night" ? "#1d2340" : "#e3b04b"} />
+        <Chip label={p.season ? `${p.season} · ${p.phase}` : p.phase} value={`${PHASE_ICON[p.phase]} ${p.time}`} dot={p.phase === "night" ? "#1d2340" : "#e3b04b"} />
       </div>
       <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:ml-auto sm:pb-0">
         {p.waiting > 0 && (
