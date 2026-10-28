@@ -32,10 +32,11 @@ this repository; get the full packs from their authors.
   - `characters/*.png` (`Actor/Character/<Name>/SpriteSheet.png`), copied by
     `npm run village:characters` (`scripts/import-characters.ts`)
   - `animals/*.png` (`Actor/Animal/<Name>/SpriteSheet*.png`)
+  - `props/mill-sails.png` (the first frame of `Backgrounds/Animated/MillPropeller/MillPropeller_A_64x64.png`)
 - Changed by this project: `characters/villager-*.png` and `characters/woman-*.png` are the
   Villager and Woman sheets with their clothing recoloured, and `characters/oldwoman.png` repeats
   the OldWoman sheet's two rows to fill the walk cycle.
-- Used for the town hall, workshop, market, shops, observatory, guard tower, vault, lamps, some
+- Used for the town hall, the mill and its sails, workshop, market, shops, observatory, guard tower, vault, lamps, some
   trees and the villagers outside; and inside, for the floors, wall rims, furniture, crates,
   barrels, chests, maps, lanterns, the hearth and the beds.
 

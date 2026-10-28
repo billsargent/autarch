@@ -91,6 +91,8 @@ export const STAMPS = {
   fishShop: s("house", 16, 0, 3, 3),
   greenMarket: s("house", 19, 0, 4, 3),
   beigeHouse: s("house", 4, 0, 4, 3),
+  // The mill (#186): the orange-roofed cottage, with sails drawn on top.
+  millHouse: s("house", 0, 0, 4, 3),
   marketStall: s("house", 16, 16, 3, 2),
   barrel: s("house", 16, 15),
   produceCrate: s("house", 19, 14),

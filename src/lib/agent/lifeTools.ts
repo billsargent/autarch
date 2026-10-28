@@ -4,7 +4,7 @@ import { ensureLife, logLife, romanceStep, statusFor } from "./life";
 import { SHOP, SHOP_KEYS, isShopKey } from "./shop";
 import type { RiskResult } from "./risk";
 import type { ToolContext } from "./tools";
-import { TRADES, levelOf, titleOf, tradeOf, type Good } from "./trades";
+import { TRADES, levelOf, stintInputs, titleOf, tradeOf, type Good } from "./trades";
 
 // The life window's tools (#133): the only tools a villager has in their own
 // time. Nothing here touches the computer: no shell, files or network. They
@@ -41,8 +41,11 @@ function doActivity(agentId: number, name: string, what: Activity): string {
       const stock = stockOf() ?? {};
       let made = t.goods ? 2 + Math.floor(levelOf(life.xp) / 4) : 0;
       if (made && t.building && !built(t.building)) made = 1;
-      if (made && "uses" in t && t.uses) made = Math.min(made, stock[t.uses] ?? 0);
-      if (made && "uses" in t && t.uses) sqlite.prepare(`UPDATE economy SET ${t.uses} = MAX(0, ${t.uses} - ?) WHERE id = 1`).run(made);
+      if (made && "uses" in t && t.uses) {
+        const got = stintInputs(t, made, stock);
+        made = got.made;
+        if (made && got.used) sqlite.prepare(`UPDATE economy SET ${got.used} = MAX(0, ${got.used} - ?) WHERE id = 1`).run(made);
+      }
       if (made && t.goods) sqlite.prepare(`UPDATE economy SET ${t.goods} = MIN(999, ${t.goods} + ?) WHERE id = 1`).run(made);
       const xp = life.xp + 6;
       set("work", t.doing, { xp, coins: life.coins + 2, energy: life.energy - 8 });

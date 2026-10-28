@@ -4,26 +4,30 @@
 // `spot`: where they work when there's no such building (a waypoint id in the
 // village scene); `goods`: what a working stint makes for the village.
 
-export type Good = "wheat" | "bread" | "fish" | "flowers" | "crafts" | "ale";
-export const GOODS: Good[] = ["wheat", "bread", "fish", "flowers", "crafts", "ale"];
-export const GOOD_LABEL: Record<Good, string> = { wheat: "wheat", bread: "loaves", fish: "fish", flowers: "flowers", crafts: "crafts", ale: "ale" };
-export const GOOD_ICON: Record<Good, string> = { wheat: "🌾", bread: "🍞", fish: "🐟", flowers: "🌷", crafts: "🪵", ale: "🍺" };
+export type Good = "wheat" | "flour" | "bread" | "fish" | "flowers" | "crafts" | "ale";
+export const GOODS: Good[] = ["wheat", "flour", "bread", "fish", "flowers", "crafts", "ale"];
+export const GOOD_LABEL: Record<Good, string> = { wheat: "wheat", flour: "sacks of flour", bread: "loaves", fish: "fish", flowers: "flowers", crafts: "crafts", ale: "ale" };
+export const GOOD_ICON: Record<Good, string> = { wheat: "🌾", flour: "🥣", bread: "🍞", fish: "🐟", flowers: "🌷", crafts: "🪵", ale: "🍺" };
 
 export interface Trade {
   label: string;
   // Doing it, for bubbles and the chronicle ("baking").
   doing: string;
   icon: string;
-  building: "farm" | "bakery" | "tavern" | "garden" | "shop" | "workshop" | null;
+  building: "farm" | "mill" | "bakery" | "tavern" | "garden" | "shop" | "workshop" | null;
   spot: string;
   goods: Good | null;
-  // What a stint uses up (a baker bakes wheat into bread).
+  // What a stint uses up (a miller grinds wheat into flour).
   uses?: Good;
+  // What it makes do with when there's none of that, at half the output (a
+  // baker with no flour bakes straight from wheat, #186).
+  makesDoWith?: Good;
 }
 
 export const TRADES = {
   farmer: { label: "Farmer", doing: "working the fields", icon: "🌾", building: "farm", spot: "nj", goods: "wheat" },
-  baker: { label: "Baker", doing: "baking", icon: "🍞", building: "bakery", spot: "tc", goods: "bread", uses: "wheat" },
+  miller: { label: "Miller", doing: "grinding at the mill", icon: "⚙️", building: "mill", spot: "nj", goods: "flour", uses: "wheat" },
+  baker: { label: "Baker", doing: "baking", icon: "🍞", building: "bakery", spot: "tc", goods: "bread", uses: "flour", makesDoWith: "wheat" },
   fisher: { label: "Fisher", doing: "fishing at the pond", icon: "🎣", building: null, spot: "c", goods: "fish" },
   innkeeper: { label: "Innkeeper", doing: "keeping the inn", icon: "🍺", building: "tavern", spot: "tr", goods: "ale", uses: "wheat" },
   gardener: { label: "Gardener", doing: "tending the flowers", icon: "🌷", building: "garden", spot: "bc", goods: "flowers" },
@@ -42,6 +46,7 @@ export const isTradeKey = (v: unknown): v is TradeKey => typeof v === "string" &
 
 // A best guess from a villager's role ("Head gardener" → gardener).
 const GUESSES: Array<[RegExp, TradeKey]> = [
+  [/mill|grind|flour/i, "miller"],
   [/farm|field|harvest|crop/i, "farmer"],
   [/bak|bread|pastr/i, "baker"],
   [/fish|angl|boat/i, "fisher"],
@@ -63,6 +68,24 @@ export function guessTrade(role: string | null | undefined, isMayor = false): Tr
 // A villager's trade: what the owner chose, or the guess.
 export const tradeOf = (v: { trade?: string | null; role?: string | null; isMayor?: boolean }): TradeKey =>
   isTradeKey(v.trade) ? v.trade : guessTrade(v.role, v.isMayor);
+
+// What a stint of `n` takes from the stores and how much it makes (#186):
+// from what the trade uses, or else from what it makes do with, at half the
+// output (rounded down; a single one becomes a coin toss). Nothing to use: 0.
+export function stintInputs(
+  t: { uses?: Good; makesDoWith?: Good },
+  n: number,
+  stock: Partial<Record<Good, number>>,
+  rng: () => number = Math.random,
+): { made: number; used: Good | null } {
+  if (!n || !t.uses) return { made: n, used: null };
+  const have = stock[t.uses] ?? 0;
+  if (have > 0) return { made: Math.min(n, have), used: t.uses };
+  if (!t.makesDoWith) return { made: 0, used: null };
+  const half = Math.floor(n / 2) || (rng() < 0.5 ? 1 : 0);
+  const made = Math.min(half, stock[t.makesDoWith] ?? 0);
+  return made ? { made, used: t.makesDoWith } : { made: 0, used: null };
+}
 
 // Skill: a level from experience, and a title for it.
 export const levelOf = (xp: number) => Math.min(10, Math.floor(Math.sqrt(Math.max(0, xp) / 20)) + 1);

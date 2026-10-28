@@ -5,7 +5,7 @@ import { ensureMayor } from "./agents";
 import type { AgentSettingsRow } from "./settingsStore";
 import type { ToolContext } from "./tools";
 import { MAX_VILLAGE_LEVEL, ringPlotIds } from "@/components/village/scenes/village";
-import { tradeOf } from "./trades";
+import { TRADES, tradeOf } from "./trades";
 
 // The village grows (#105, docs/town-charter.md section 9): the Mayor (or
 // the owner) proposes a building on one of the empty plots north and west of
@@ -18,6 +18,8 @@ import { tradeOf } from "./trades";
 export const BUILDING_KINDS = {
   house: { label: "House", beds: 2, stamp: "svHouseBlue", morale: 0, cost: 40 },
   farm: { label: "Farm", beds: 0, stamp: "wheatField", morale: 0, cost: 30 },
+  // The mill (#186): wheat into flour for the bakery; its sails turn on the map.
+  mill: { label: "Mill", beds: 0, stamp: "millHouse", morale: 0, cost: 50 },
   bakery: { label: "Bakery", beds: 0, stamp: "fishShop", morale: 0, cost: 40 },
   workshop: { label: "Workshop", beds: 0, stamp: "stoneHouse", morale: 0, cost: 40 },
   tavern: { label: "Tavern", beds: 0, stamp: "greenMarket", morale: 5, cost: 60 },
@@ -226,7 +228,11 @@ export async function setKeeper(id: number, agentId: number | null) {
 }
 
 // The trade that works each kind of building (trades.ts).
-const KEEPER_TRADE: Record<string, string> = { farm: "farmer", bakery: "baker", tavern: "innkeeper", garden: "gardener", shop: "shopkeeper", workshop: "carpenter" };
+// Who keeps each building: the trade that works there (trades.ts), so a new
+// building and its trade (the mill and the miller, #186) need nothing here.
+const KEEPER_TRADE: Record<string, string> = Object.fromEntries(
+  Object.entries(TRADES).flatMap(([key, trade]) => (trade.building ? [[trade.building, key]] : [])),
+);
 
 // The Mayor's propose_building tool.
 export async function proposeBuildingTool(args: Record<string, unknown>, ctx?: ToolContext) {

@@ -13,13 +13,14 @@ import ParchmentDialog from "../ParchmentDialog";
 const WHAT: Record<BuildingKind, string> = {
   house: "Beds for two more villagers.",
   farm: "Where the farmer grows wheat. Without a farm, a farmer grows half as much.",
-  bakery: "Where the baker bakes the village's wheat into loaves. Without a bakery, half as much.",
+  mill: "Where the miller grinds wheat into flour for the bakery. Without a mill, the bakers bake straight from wheat at half the pace.",
+  bakery: "Where the baker bakes flour (or, without a mill, wheat) into loaves. Without a bakery, half as much.",
   workshop: "Where the carpenter makes crafts. Without a workshop, half as much.",
   tavern: "Where the innkeeper brews ale from wheat, and where villagers spend their evenings: everyone's morale +5.",
   shop: "Where villagers buy things for their cottages, treats and flowers: everyone's morale +3.",
   garden: "Where the gardener grows flowers: everyone's morale +3.",
 };
-const ICON: Record<BuildingKind, string> = { house: "🏠", farm: "🌾", bakery: "🍞", workshop: "🔧", tavern: "🍺", shop: "🛍️", garden: "🌷" };
+const ICON: Record<BuildingKind, string> = { house: "🏠", farm: "🌾", mill: "⚙️", bakery: "🍞", workshop: "🔧", tavern: "🍺", shop: "🛍️", garden: "🌷" };
 // "north-3" → "North road, left (second ring)": two plots per road per ring.
 const RING = ["first", "second", "third", "fourth"];
 export function plotLabel(plot: string) {
@@ -91,7 +92,7 @@ export function BuildingDialog({ id, onClose }: { id: number; onClose: () => voi
         </label>
       )}
       {error && <p role="alert" className="text-xs text-[#b3261e]">{error}</p>}
-      {(b.kind === "farm" || b.kind === "bakery") && <Stores economy={state.economy} />}
+      {(b.kind === "farm" || b.kind === "mill" || b.kind === "bakery") && <Stores economy={state.economy} />}
     </ParchmentDialog>
   );
 }
@@ -212,6 +213,7 @@ export function Pantry({ onClose, kicker = "Your home" }: { onClose: () => void;
   const { state } = useBuildings();
   const farms = state?.buildings.filter((b) => b.kind === "farm" && b.status === "built").length ?? 0;
   const bakeries = state?.buildings.filter((b) => b.kind === "bakery" && b.status === "built").length ?? 0;
+  const mills = state?.buildings.filter((b) => b.kind === "mill" && b.status === "built").length ?? 0;
   return (
     <ParchmentDialog kicker={kicker} title="The village stores" onClose={onClose}>
       {!state && <p className="text-sm">Opening the cupboard…</p>}
@@ -220,7 +222,7 @@ export function Pantry({ onClose, kicker = "Your home" }: { onClose: () => void;
           <Stores economy={state.economy} />
           <p className="mt-2 text-xs text-[#6b4a2e]">
             {farms || bakeries
-              ? `${farms} farm${farms === 1 ? "" : "s"} and ${bakeries} ${bakeries === 1 ? "bakery" : "bakeries"}. The farmers and bakers fill the stores by working their trade, and villagers eat when they're hungry.`
+              ? `${farms} farm${farms === 1 ? "" : "s"}, ${mills} mill${mills === 1 ? "" : "s"} and ${bakeries} ${bakeries === 1 ? "bakery" : "bakeries"}. Wheat goes to the mill for flour and flour to the bakery for bread${mills ? "" : " (with no mill, the bakers bake from wheat at half the pace)"}; villagers eat when they're hungry.`
               : "No farm or bakery yet. Build them on the map table; villagers with that trade will work there."}{" "}
             If someone goes hungry the village gets grumpy, but nobody stops working. Spare goods go to other towns from the trading post.
           </p>

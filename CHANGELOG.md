@@ -4,6 +4,22 @@ All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-
 framework that gives an autonomous AI agent supervised control of a computer system.
 
 
+
+## 2026-10-29 — The mill
+
+- **A new building, the mill,** on a plot like the others (50 coins). It's the orange-roofed
+  cottage from the Ninja Adventure pack with windmill sails turning on its roof; they stand still
+  if you prefer less motion.
+- **A new trade and a new good:** the miller grinds wheat into flour, and the bakery now bakes from
+  flour. The chain for bread is farm → mill → bakery.
+- **Nothing stalls without a mill:** a baker with no flour bakes straight from wheat, at half the
+  pace.
+- **Orders** from other towns can ask for flour once a mill stands.
+- **The village knows:** the stores, the building dialogs, THE VILLAGE TODAY and the built-in
+  "How the village works" playbook all include the mill. A miller keeps it, and the Mayor can
+  propose it and hire one.
+- **Keeper posts** are now matched from the trades list itself, so a new building and its trade
+  need no extra wiring.
 ## 2026-10-28 — Web search that works out of the box: Tavily
 
 - **The villagers can search the whole web with no setup.** `web_search` now uses Tavily's keyless
