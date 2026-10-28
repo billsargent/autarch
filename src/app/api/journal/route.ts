@@ -11,7 +11,9 @@ export async function GET(req: Request) {
     .select()
     .from(journalEntries)
     .where(agent ? eq(journalEntries.agentId, agent) : undefined)
-    .orderBy(desc(journalEntries.updatedAt));
+    .orderBy(desc(journalEntries.updatedAt))
+    // The newest few hundred (#197): the diary grows with every work session.
+    .limit(Math.min(1000, Number(new URL(req.url).searchParams.get("limit")) || 300));
   return NextResponse.json({ entries: rows });
 }
 

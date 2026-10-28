@@ -586,6 +586,7 @@ if (!globalForDb.__agentLabSqlite) {
     ["search_api_key", "TEXT"],
     ["tavily_api_key", "TEXT"],
     ["deepseek_search", "INTEGER NOT NULL DEFAULT 1"],
+    ["history_days", "INTEGER NOT NULL DEFAULT 90"],
     ["searxng_url", "TEXT"],
     ["market_day", "INTEGER DEFAULT 6"],
   ] as const) {

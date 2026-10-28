@@ -58,6 +58,7 @@ const RULES: Record<string, Rule> = {
   searchApiKey: { kind: "text", max: 200, nullable: true },
   tavilyApiKey: { kind: "text", max: 200, nullable: true },
   deepseekSearch: { kind: "bool" },
+  historyDays: { kind: "int", min: 14, max: 3650 },
   searxngUrl: { kind: "text", max: 500, nullable: true },
   marketDay: { kind: "number", min: 0, max: 6, nullable: true },
   bedtime: { kind: "time" },

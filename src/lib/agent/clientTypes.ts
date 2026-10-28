@@ -73,6 +73,7 @@ export interface SettingsRow {
   searchKeySet: boolean;
   tavilyKeySet: boolean;
   deepseekSearch: boolean;
+  historyDays: number;
   searxngUrl: string | null;
   marketDay: number | null;
   bedtime: string;

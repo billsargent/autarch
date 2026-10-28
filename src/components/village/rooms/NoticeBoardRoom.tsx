@@ -79,10 +79,11 @@ const field = "mt-1 w-full rounded border-2 border-[#3b2716] bg-[#fffaf0] px-2 p
 const PIN: Record<number, string> = { 1: "#b3261e", 2: "#d9643a", 3: "#e3b04b", 4: "#5f8a3c", 5: "#4f86c6" };
 const pinColor = (p: number) => PIN[Math.min(5, Math.max(1, p))];
 
-const SECTIONS: Array<{ title: string; statuses: GoalRow["status"][]; empty: string }> = [
+// `latest`: only the most recent few (#197); older ones are tidied away after a month.
+const SECTIONS: Array<{ title: string; statuses: GoalRow["status"][]; empty: string; latest?: number }> = [
   { title: "Being worked on", statuses: ["in_progress"], empty: "Nothing in progress." },
   { title: "Up next", statuses: ["backlog"], empty: "No goals waiting." },
-  { title: "Taken down", statuses: ["done", "abandoned"], empty: "" },
+  { title: "Taken down", statuses: ["done", "abandoned"], empty: "", latest: 10 },
 ];
 
 export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
@@ -187,7 +188,8 @@ export default function NoticeBoardRoom({ action, onClose }: RoomProps) {
       )}
       {loaded && goals.length > 0 && open.length === 0 && <p className="mb-2 text-sm">Every goal is done or taken down. Pin a new one?</p>}
       {SECTIONS.map((sec) => {
-        const list = goals.filter((g) => sec.statuses.includes(g.status));
+        const all = goals.filter((g) => sec.statuses.includes(g.status));
+        const list = sec.latest ? [...all].sort((x, y) => Date.parse(String(y.updatedAt)) - Date.parse(String(x.updatedAt))).slice(0, sec.latest) : all;
         const old = sec.statuses.includes("done");
         if (!loaded || (old && list.length === 0) || goals.length === 0) return null;
         return (
