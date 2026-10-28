@@ -387,12 +387,12 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
       function: {
         name: "propose_building",
         description:
-          "Mayor only. Propose a new building on one of the empty plots north and west of town: a house (beds for two more villagers), a farm, a bakery, a workshop, a tavern, a shop or a garden (the last three cheer everyone up). The owner approves it and the village treasury pays (house 40 coins, farm 30, bakery 40, workshop 40, tavern 60, shop 50, garden 25); then it takes about half a day to build. When every plot is taken, propose `land` instead (120 coins): it clears the next ring of land around the village, with four new plots, and takes a day. Orders from other towns (accept_order) fill the treasury.",
+          "Mayor only. Propose a new building on one of the empty plots on the roads out of town (north, west, east and south): a house (beds for two more villagers), a farm, a bakery, a workshop, a tavern, a shop or a garden (the last three cheer everyone up). The owner approves it and the village treasury pays (house 40 coins, farm 30, bakery 40, workshop 40, tavern 60, shop 50, garden 25); then it takes about half a day to build. When every plot is taken, propose `land` instead (120 coins): it clears the next ring of land around the village, with eight new plots (two on each road), and takes a day. Orders from other towns (accept_order) fill the treasury.",
         parameters: {
           type: "object",
           properties: {
             kind: { type: "string", enum: ["house", "farm", "mill", "bakery", "workshop", "tavern", "shop", "garden", "land"] },
-            plot: { type: "string", description: "Optional, for a building: a free plot such as north-1 or west-2; default the first free plot." },
+            plot: { type: "string", description: "Optional, for a building: a free plot such as north-1, west-2, east-1 or south-2; default the first free plot." },
             reason: { type: "string", description: "Why the village needs it, for the owner." },
           },
           required: ["kind", "reason"],

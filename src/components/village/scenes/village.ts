@@ -154,30 +154,59 @@ const ORIGINAL: SceneLayout = {
 // after that clears another ring (8 more columns west, 6 more rows north) with
 // four more plots. The map is drawn once per level (npm run village:map); the
 // village shows the level that's been cleared.
+//
+// More land east and south (#193): every ring also reaches east (8 more
+// columns, beside an east road that carries on from the upper street) and
+// south (6 more rows, beside a south road from the lower street, by the guard
+// tower), with two plots on each. The map grows right and down for them, so
+// nothing to the north and west moves. A village that has cleared a ring gets
+// its east and south plots too.
 export const MAX_VILLAGE_LEVEL = 3;
 const RING_ROWS = 6;
 const ringCols = (r: number) => (r === 0 ? 7 : 8);
+const EAST_COLS = 8;
+const SOUTH_ROWS = 6;
+// Where the new roads leave the original village (before it's moved).
+const EAST_ROAD_FROM = 38; // the column after the upper street's east end
+const SOUTH_ROAD_COL = 22; // beside the guard tower, down from the lower street
+const SOUTH_ROAD_FROM = 16; // the lower street's row
 
 // The plot ids of one ring: the first ring keeps its original names.
 export function ringPlotIds(r: number): string[] {
-  return [`north-${2 * r + 1}`, `north-${2 * r + 2}`, `west-${2 * r + 1}`, `west-${2 * r + 2}`];
+  return [`north-${2 * r + 1}`, `north-${2 * r + 2}`, `west-${2 * r + 1}`, `west-${2 * r + 2}`, `east-${2 * r + 1}`, `east-${2 * r + 2}`, `south-${2 * r + 1}`, `south-${2 * r + 2}`];
 }
 
 function villageAtLevel(level: number): SceneLayout {
   let dc = 0;
   for (let r = 0; r <= level; r++) dc += ringCols(r);
   const dr = RING_ROWS * (level + 1);
-  const moved = shiftLayout(ORIGINAL, dc, dr);
+  const shifted = shiftLayout(ORIGINAL, dc, dr);
+  const ec = EAST_COLS * (level + 1);
+  const sr = SOUTH_ROWS * (level + 1);
   const roadCol = 27 + dc; // the north road
-  const roadRow = 9 + dr; // the west road
+  const roadRow = 9 + dr; // the west road, and the east road
+  const southCol = SOUTH_ROAD_COL + dc; // the south road
+  const right = ORIGINAL.cols + dc; // where the east land starts
+  const bottom = ORIGINAL.rows + dr; // where the south land starts
+  // The tree that stood where the south road now runs makes way for it.
+  const moved: SceneLayout = {
+    ...shifted,
+    cols: shifted.cols + ec,
+    rows: shifted.rows + sr,
+    decor: shifted.decor.filter((d) => !(d.col >= southCol - 1 && d.col <= southCol + 1 && d.row > SOUTH_ROAD_FROM + dr + 1)),
+  };
   const NORTH_ROAD: Rect = { col: roadCol, row: 0, w: 2, h: dr };
   const WEST_ROAD: Rect = { col: 0, row: roadRow, w: dc, h: 2 };
+  const EAST_ROAD: Rect = { col: EAST_ROAD_FROM + dc, row: roadRow, w: right + ec - (EAST_ROAD_FROM + dc), h: 2 };
+  const SOUTH_ROAD: Rect = { col: southCol, row: SOUTH_ROAD_FROM + dr, w: 2, h: bottom + sr - (SOUTH_ROAD_FROM + dr) };
 
   const plots: NonNullable<SceneLayout["plots"]> = [];
   const waypoints: SceneLayout["waypoints"] = [];
   const decor: SceneLayout["decor"] = [];
   const northChain: string[] = [];
   const westChain: string[] = [];
+  const eastChain: string[] = [];
+  const southChain: string[] = [];
   let inner = 0;
   for (let r = 0; r <= level; r++) {
     const [n1, n2, w1, w2] = ringPlotIds(r);
@@ -201,6 +230,27 @@ function villageAtLevel(level: number): SceneLayout {
     // Outermost first, towards town.
     northChain.unshift(ids[0], ids[1]);
     westChain.unshift(ids[2], ids[3]);
+    // East and south (#193): a ring's land there lies further out the more rings there are.
+    const [, , , , e1, e2, s1, s2] = ringPlotIds(r);
+    const eLeft = right + EAST_COLS * r;
+    const sTop = bottom + SOUTH_ROWS * r;
+    const eIds = [`er${r}t`, `er${r}b`];
+    const sIds = [`sr${r}l`, `sr${r}r`];
+    plots.push(
+      { id: e1, col: eLeft + 2, row: roadRow - 5, w: 4, h: 4, door: eIds[0] },
+      { id: e2, col: eLeft + 2, row: roadRow + 3, w: 4, h: 4, door: eIds[1] },
+      { id: s1, col: southCol - 5, row: sTop + 1, w: 4, h: 4, door: sIds[0] },
+      { id: s2, col: southCol + 3, row: sTop + 1, w: 4, h: 4, door: sIds[1] },
+    );
+    waypoints.push(
+      { id: eIds[0], x: eLeft + 4, y: roadRow + 0.4 },
+      { id: eIds[1], x: eLeft + 4, y: roadRow + 1.6 },
+      { id: sIds[0], x: southCol + 0.5, y: sTop + 2.5 },
+      { id: sIds[1], x: southCol + 1.5, y: sTop + 2.5 },
+    );
+    // Inner first, going out of town.
+    eastChain.push(...eIds);
+    southChain.push(...sIds);
     // Trees on the new land, clear of the plots and roads.
     if (r === 0) {
       const sx = dc - 7;
@@ -227,21 +277,25 @@ function villageAtLevel(level: number): SceneLayout {
   return countryside({
     ...moved,
     id: level === 0 ? "village" : `village-${level}`,
-    paths: { ...moved.paths!, rects: [...moved.paths!.rects, NORTH_ROAD, WEST_ROAD] },
-    walkable: [...moved.walkable, NORTH_ROAD, WEST_ROAD],
+    paths: { ...moved.paths!, rects: [...moved.paths!.rects, NORTH_ROAD, WEST_ROAD, EAST_ROAD, SOUTH_ROAD] },
+    walkable: [...moved.walkable, NORTH_ROAD, WEST_ROAD, EAST_ROAD, SOUTH_ROAD],
     decor: [...moved.decor, ...decor],
     waypoints: [
-      // The gates move out to the new edges.
+      // The gates move out to the new edges; two new ones east and south.
       ...moved.waypoints.map((w) => (w.id === "ng" ? { ...w, y: 0.6 } : w.id === "wg" ? { ...w, x: 0.6 } : w)),
       ...waypoints,
+      { id: "eg", x: right + ec - 0.6, y: roadRow + 1 },
+      { id: "sg", x: southCol + 1, y: bottom + sr - 0.6 },
     ],
     edges: [
       ...moved.edges.filter(([a, b]) => !(a === "ng" && b === "nj") && !(a === "wg" && b === "tl")),
       ...["ng", ...northChain, "nj"].slice(1).map((b, i, arr) => [i === 0 ? "ng" : arr[i - 1], b] as const),
       ...["wg", ...westChain, "tl"].slice(1).map((b, i, arr) => [i === 0 ? "wg" : arr[i - 1], b] as const),
+      ...["tr", ...eastChain, "eg"].slice(1).map((b, i, arr) => [i === 0 ? "tr" : arr[i - 1], b] as const),
+      ...["gt", ...southChain, "sg"].slice(1).map((b, i, arr) => [i === 0 ? "gt" : arr[i - 1], b] as const),
     ],
     plots,
-  }, level, roadCol, roadRow, dr, dc);
+  }, level, roadCol, roadRow, dr, dc, { right, bottom, ec, sr });
 }
 
 // The countryside (#160): the land north-west of town, between the roads and
@@ -249,10 +303,21 @@ function villageAtLevel(level: number): SceneLayout {
 // road to the west road (between the rings of plots, so it never crosses
 // one), with a pond and a grove around it. Placed from a fixed seed, so the
 // art is the same every time it's built.
-function countryside(layout: SceneLayout, level: number, roadCol: number, roadRow: number, dr: number, dc: number): SceneLayout {
+function countryside(
+  layout: SceneLayout,
+  level: number,
+  roadCol: number,
+  roadRow: number,
+  dr: number,
+  dc: number,
+  grown: { right: number; bottom: number; ec: number; sr: number },
+): SceneLayout {
   // The north-west corner, and the strip below the west road's plots.
   const corner: Rect = { col: 0, row: 0, w: roadCol - 6, h: roadRow - 6 };
-  const south: Rect = { col: 0, row: roadRow + 8, w: dc - 1, h: layout.rows - roadRow - 8 };
+  const south: Rect = { col: 0, row: roadRow + 8, w: dc - 1, h: grown.bottom - roadRow - 8 };
+  // The new land east and south (#193), round its plots.
+  const eastLand: Rect = { col: grown.right, row: 0, w: grown.ec, h: grown.bottom };
+  const southLand: Rect = { col: 0, row: grown.bottom, w: grown.right + grown.ec, h: grown.sr };
   const paths = [...layout.paths!.rects];
   const walkable = [...layout.walkable];
   if (level >= 1) {
@@ -280,7 +345,7 @@ function countryside(layout: SceneLayout, level: number, roadCol: number, roadRo
   for (const w of withLane.waypoints) taken.add(`${Math.floor(w.x)},${Math.floor(w.y)}`);
   const within = (r: Rect, a: Rect) => r.col >= a.col && r.row >= a.row && r.col + r.w <= a.col + a.w && r.row + r.h <= a.row + a.h;
   const free = (r: Rect) => {
-    if (!within(r, corner) && !within(r, south)) return false;
+    if (!within(r, corner) && !within(r, south) && !within(r, eastLand) && !within(r, southLand)) return false;
     for (let c = r.col; c < r.col + r.w; c++) for (let row = r.row; row < r.row + r.h; row++) if (taken.has(`${c},${row}`) || isPath(withLane, c, row)) return false;
     return true;
   };
@@ -305,7 +370,7 @@ function countryside(layout: SceneLayout, level: number, roadCol: number, roadRo
   for (let i = 0; i < 40 && !place("svPond", mid.col + Math.floor(rng() * 8) - 4, mid.row + Math.floor(rng() * 6) - 3); i++);
   // The grove: trees on a loose grid, flowers and bushes between.
   const trees: StampId[] = ["svTree", "pineTree", "roundTree", "leafyTree", "pineTree"];
-  for (const [area, density] of [[corner, 0.42], [south, 0.3]] as const) {
+  for (const [area, density] of [[corner, 0.42], [south, 0.3], [eastLand, 0.3], [southLand, 0.3]] as const) {
     for (let row = area.row; row < area.row + area.h; row += 3) {
       for (let col = area.col; col < area.col + area.w; col += 3) {
         const roll = rng();

@@ -696,10 +696,15 @@ async function main() {
   check("when the village runs short, morale dips", (await (await import("../src/lib/agent/morale")).villageMorale()).every((m) => m.reasons.includes("the village ran short of bread (−10)")), after.shortage > 0);
 
   // --- new land, in rings (#105), and the tavern, shop and garden ---------------------------
-  check("the first ring has four plots", bld.plotsForLevel(0), ["north-1", "north-2", "west-1", "west-2"]);
-  check("no new land while a plot is free", (await power("propose_building", { kind: "land", reason: "x" })).includes("build on north-2 first"), true);
+  check("the first ring has eight plots, two on each road (#193)", bld.plotsForLevel(0), ["north-1", "north-2", "west-1", "west-2", "east-1", "east-2", "south-1", "south-2"]);
+  check("no new land while a plot is free", (await power("propose_building", { kind: "land", reason: "x" })).includes("build on north-2, east-1, east-2, south-1, south-2 first"), true);
   const tavern = (await (await buildingsRoute.POST(req("/api/buildings", "POST", { kind: "tavern", plotId: "north-2" }))).json()).building;
   check("the owner builds a tavern", tavern.status, "building");
+  // The east and south plots take a building each too.
+  for (const [kind, plotId] of [["house", "east-1"], ["house", "east-2"], ["house", "south-1"], ["house", "south-2"]]) {
+    const made = await buildingsRoute.POST(req("/api/buildings", "POST", { kind, plotId }));
+    check(`the owner builds on ${plotId}`, made.status, 200);
+  }
   const poor = await power("propose_building", { kind: "land", reason: "x" });
   check("the Mayor can't propose what the treasury can't pay for", poor, "Refused: the treasury has 60 coins and this needs 120. Orders from the neighbouring towns bring coins in.");
   const { sqlite: treasuryDb } = await import("../src/db");
@@ -713,7 +718,8 @@ async function main() {
   const dayLater = new Date(Date.now() + 25 * 3600_000);
   await bld.listBuildings(dayLater);
   const landState = await (await buildingsRoute.GET()).json();
-  check("…then the village reaches further, with four more plots", [landState.level, landState.plots.length, landState.plots.includes("north-3")], [1, 8, true]);
+  check("…then the village reaches further, with eight more plots", [landState.level, landState.plots.length, ["north-3", "west-4", "east-3", "south-4"].every((p) => landState.plots.includes(p))], [1, 16, true]);
+  check("the east and south plots have names", [(await import("../src/components/village/rooms/BuildingDialogs")).plotLabel("east-4"), (await import("../src/components/village/rooms/BuildingDialogs")).plotLabel("south-1")], ["East road, lower (second ring)", "South road, left"]);
   check("the second ring has its own plots", (await power("propose_building", { kind: "garden", plot: "west-3", reason: "Flowers." })).startsWith("Proposed a garden on the west-3 plot"), true);
   const morale = await (await import("../src/lib/agent/morale")).villageMorale();
   check("a tavern cheers everyone up", morale.every((m) => m.reasons.includes("the village has a tavern (+5)")), true);
