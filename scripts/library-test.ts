@@ -281,6 +281,34 @@ async function main() {
   ).map((r) => [r.title, r.url]), [["A & B", "https://example.org/a"]]);
   check("fetch_url's links: absolute, once each, with their text", tools.pageLinks('<a href="/b">B page</a> <a href="https://x.org/c">C</a> <a href="/b">again</a> <a href="#top">top</a> <a href="mailto:a@b">m</a>', "https://example.org/a/"), ["- B page: https://example.org/b", "- C: https://x.org/c"]);
   check("the search key is kept from the model and the page", [tools.SECRET_COLUMN.test("search_api_key"), "searchApiKey" in (await (await (await import("../src/app/api/settings/route")).GET()).json()).settings], [true, false]);
+
+  // Tavily: with the owner's key, or without one (its keyless mode), so the
+  // village can search the whole web out of the box.
+  const tavilySeen: Array<{ auth?: string; mode?: string; body: { query: string; max_results: number } }> = [];
+  let tavilyLimited = false;
+  const tavily = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      tavilySeen.push({ auth: req.headers.authorization, mode: req.headers["x-tavily-access-mode"] as string | undefined, body: JSON.parse(body) });
+      res.setHeader("content-type", "application/json");
+      if (req.headers.authorization === "Bearer tvly-bad") return void res.writeHead(401).end("{}");
+      if (tavilyLimited && !req.headers.authorization) return void res.end(JSON.stringify({ detail: "You've used today's keyless searches. Get a free key at app.tavily.com." }));
+      res.end(JSON.stringify({ results: [{ title: "Persian windmills", url: "https://example.org/asbad", content: "Vertical-axis mills\n\nof Nashtifan, still sailing." }] }));
+    });
+  });
+  await new Promise<void>((r) => tavily.listen(0, "127.0.0.1", r));
+  process.env.AUTARCH_TAVILY_URL = `http://127.0.0.1:${(tavily.address() as { port: number }).port}/search`;
+  const keyless = await tools.webSearch({ query: "windmills", maxResults: 3 }, { searchApiKey: null, searxngUrl: null });
+  check("with no keys, web_search uses Tavily without a key, and says so", [keyless.output.startsWith("Web search results (Tavily, without a key)"), keyless.output.includes("https://example.org/asbad\n   Vertical-axis mills of Nashtifan, still sailing."), tavilySeen[0].mode, tavilySeen[0].auth, tavilySeen[0].body.max_results], [true, true, "keyless", undefined, 3]);
+  const keyed = await tools.webSearch({ query: "windmills" }, { searchApiKey: null, searxngUrl: null, tavilyApiKey: "tvly-good" });
+  check("with the owner's Tavily key, it goes first, with the key", [keyed.output.startsWith("Web search results (Tavily)"), tavilySeen.at(-1)!.auth, tavilySeen.at(-1)!.mode], [true, "Bearer tvly-good", undefined]);
+  check("a wrong key is said plainly", await tools.tavilySearch("x", 3, "tvly-bad").catch((e: Error) => e.message), "Tavily answered 401 (is the key right?)");
+  tavilyLimited = true;
+  check("when the keyless searches run out (Tavily answers in words), the next engine is tried", await tools.tavilySearch("x", 3, null).catch((e: Error) => e.message), "Tavily's keyless searches are used up for now");
+  tavily.close();
+  delete process.env.AUTARCH_TAVILY_URL;
+  check("the Tavily key is a secret too", [tools.SECRET_COLUMN.test("tavily_api_key"), "tavilyApiKey" in (await (await (await import("../src/app/api/settings/route")).GET()).json()).settings], [true, false]);
   fake.close();
 
   try {

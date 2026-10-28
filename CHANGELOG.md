@@ -3,6 +3,18 @@
 All notable changes to **Autarch** (formerly "DeepSeek Root Lab") — a general-purpose
 framework that gives an autonomous AI agent supervised control of a computer system.
 
+
+## 2026-10-28 — Web search that works out of the box: Tavily
+
+- **The villagers can search the whole web with no setup.** `web_search` now uses Tavily's keyless
+  mode (free and rate-limited, meant for light use) when no key is set, before DuckDuckGo, which
+  often turns automated searches away. Each result still says where it came from.
+- **A free Tavily key for more** (Mayor's ledger → Tools): 1,000 searches a month, no card. With a
+  key, Tavily goes first. It's kept like the other keys: never shown to the page or the villagers.
+- **Brave stays as an option**, but its free credit now needs a card. Scraping Bing was tried and
+  left out: it returns unrelated results to automated searches.
+- Order: Tavily with your key, Brave, your own SearXNG, Tavily without a key, DuckDuckGo, its plain
+  page, Wikipedia.
 ## 2026-10-28 — Saving the tool settings no longer fails on a newer tool
 
 - Under Mayor's ledger → Tools, any change failed with `unknown tool "add_event"` when the app ran

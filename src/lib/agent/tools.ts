@@ -1343,7 +1343,7 @@ type SearchHit = { title: string; url: string; description?: string };
 // Tools), DuckDuckGo, DuckDuckGo's plain HTML page (often still answering
 // when the other refuses), and Wikipedia's own search last. Each result says
 // where it came from.
-export async function webSearch(args: Record<string, unknown>, settings?: Pick<AgentSettingsRow, "searchApiKey" | "searxngUrl">) {
+export async function webSearch(args: Record<string, unknown>, settings?: Pick<AgentSettingsRow, "searchApiKey" | "searxngUrl"> & { tavilyApiKey?: string | null }) {
   const query = String(args.query || "").trim();
   if (!query) return { output: "No search query provided.", summary: "web search (empty query)" };
   const maxResults = Math.min(Math.max(Number(args.maxResults) || 5, 1), 10);
@@ -1352,8 +1352,10 @@ export async function webSearch(args: Record<string, unknown>, settings?: Pick<A
     summary: `web search "${query}" (${items.length} results)`,
   });
   const engines: Array<[string, () => Promise<SearchHit[]>]> = [];
+  if (settings?.tavilyApiKey) engines.push(["Web search results (Tavily)", () => tavilySearch(query, maxResults, settings.tavilyApiKey!)]);
   if (settings?.searchApiKey) engines.push(["Web search results (Brave)", () => braveSearch(query, maxResults, settings.searchApiKey!)]);
   if (settings?.searxngUrl) engines.push(["Web search results (SearXNG)", () => searxngSearch(query, maxResults, settings.searxngUrl!)]);
+  if (!settings?.tavilyApiKey) engines.push(["Web search results (Tavily, without a key)", () => tavilySearch(query, maxResults, null)]);
   engines.push(
     [
       "Web search results",
@@ -1384,7 +1386,29 @@ export async function webSearch(args: Record<string, unknown>, settings?: Pick<A
 
 const SEARCH_UA = "Mozilla/5.0 (compatible; Autarch village research; +https://github.com/billsargent/autarch)";
 
-// Brave Search's API (a key from api.search.brave.com; the free plan is plenty).
+// Tavily's search API: with a key from app.tavily.com (1,000 searches a month
+// free, no card), or without one in its keyless mode (free, rate-limited, for
+// light use), so the village searches the whole web out of the box.
+// AUTARCH_TAVILY_URL points it elsewhere, for tests.
+const tavilyUrl = () => process.env.AUTARCH_TAVILY_URL ?? "https://api.tavily.com/search";
+export async function tavilySearch(query: string, max: number, key: string | null): Promise<SearchHit[]> {
+  const res = await fetch(tavilyUrl(), {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(key ? { authorization: `Bearer ${key}` } : { "x-tavily-access-mode": "keyless" }) },
+    body: JSON.stringify({ query, max_results: max, search_depth: "basic" }),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const limited = res.status === 429 || res.status === 432;
+    throw new Error(`Tavily answered ${res.status}${res.status === 401 ? " (is the key right?)" : limited ? (key ? " (this month's free searches may be used up)" : " (its keyless searches are used up for now)") : ""}`);
+  }
+  // At its keyless limit, Tavily may answer in words instead of results.
+  const data = (await res.json().catch(() => ({}))) as { results?: Array<{ title?: string; url: string; content?: string }> };
+  if (!Array.isArray(data.results)) throw new Error(key ? "Tavily sent no results" : "Tavily's keyless searches are used up for now");
+  return (data.results ?? []).map((r) => ({ title: r.title || r.url, url: r.url, description: (r.content ?? "").replace(/\s+/g, " ").trim().slice(0, 300) }));
+}
+
+// Brave Search's API (a key from api.search.brave.com; its free credit now needs a card).
 export async function braveSearch(query: string, max: number, key: string): Promise<SearchHit[]> {
   const res = await fetch(`https://api.search.brave.com/res/v1/web/search?count=${max}&q=${encodeURIComponent(query)}`, {
     headers: { accept: "application/json", "x-subscription-token": key },

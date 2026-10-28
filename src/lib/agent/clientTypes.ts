@@ -71,6 +71,7 @@ export interface SettingsRow {
   noLimits: boolean;
   spendCeilingUsd: number | null;
   searchKeySet: boolean;
+  tavilyKeySet: boolean;
   searxngUrl: string | null;
   marketDay: number | null;
   bedtime: string;

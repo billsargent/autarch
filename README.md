@@ -313,9 +313,8 @@ and approvals pop up wherever you are. Every page of the app is a place in the v
   web, and write a report that cites its sources, which goes on the research shelf as Markdown,
   a web page, plain text, a Word document or a PDF. A **deep dive** asks more questions, reads
   widely (following pages' links to the original sources) and has a second round for the gaps.
-  Each project has a budget of its own. For research across the whole web, add a free Brave
-  Search key or your own SearXNG (Mayor's ledger → Tools): DuckDuckGo often turns automated
-  searches away, and Wikipedia's search is the last resort.
+  Each project has a budget of its own. Searching works out of the box (Tavily's free keyless
+  mode); for a lot of research add a free Tavily key, or your own SearXNG (Mayor's ledger → Tools).
 - **Workshop:** jobs are slips on the job board; new ones are set up at the workbench.
 - **Notice board:** goals pinned by priority, and ideas up for a vote.
 - **Guard tower:** the logbook (activity log), today's tally, and the neighbours' talk (everything

@@ -555,6 +555,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   // Better web search (#170): a Brave Search API key (a secret: never sent to
   // the page or the model) and the owner's own SearXNG address.
   searchApiKey: text("search_api_key"),
+  // Tavily's search API (a key free for 1,000 searches a month); a secret too.
+  tavilyApiKey: text("tavily_api_key"),
   searxngUrl: text("searxng_url"),
   // The weekly market day on the village calendar (#173): 0 = Sunday … 6 =
   // Saturday; empty = none.
