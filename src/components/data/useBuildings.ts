@@ -6,7 +6,7 @@ import { FALLBACK_MS, useLive } from "./useLive";
 // The village's plots and buildings (#105), its stores (#106), and how many
 // it has room for.
 
-export type BuildingKind = "house" | "farm" | "mill" | "bakery" | "workshop" | "tavern" | "shop" | "garden";
+export type BuildingKind = "house" | "farm" | "mill" | "bakery" | "workshop" | "tavern" | "shop" | "garden" | "smithy" | "chapel" | "school";
 
 export interface BuildingRow {
   id: number;
@@ -24,7 +24,7 @@ export interface BuildingsState {
   kinds: Record<BuildingKind, { label: string; beds: number; stamp: string; morale: number; cost: number }>;
   buildings: BuildingRow[];
   // The stores (#106, #132) and the treasury and good name (#136).
-  economy: { wheat: number; flour: number; bread: number; fish: number; flowers: number; crafts: number; ale: number; treasury: number; reputation: number; shortage: number; lastTickDay: string | null };
+  economy: { wheat: number; flour: number; iron: number; tools: number; bread: number; fish: number; flowers: number; crafts: number; ale: number; treasury: number; reputation: number; shortage: number; lastTickDay: string | null };
   keepers: Record<string, string>;
   room: number;
   // How far the land reaches (0 = the first ring), and why the next ring

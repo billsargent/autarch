@@ -10,6 +10,7 @@ import { ABANDONED_AFTER_MS } from "./turnLock";
 import { GOODS, TRADES, levelOf, titleOf, tradeOf, type Good } from "./trades";
 import { FRIEND_AT, TICK_MINUTES, dayKey, hm, lifeTick, nextWindowFor, romanceStep, socialise, statusFor, warmthOf, type Balance } from "./lifeRules";
 import { traitsOf } from "./traits";
+import { seasonOf } from "./seasons";
 
 // How likely a neighbour up and about is to notice a theft or a doze (#153).
 export const NOTICE_CHANCE = 0.12;
@@ -125,7 +126,13 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
   const vnow = villageDate(now, settings.villageClock, settings.villageDayHours);
   const vh = villageHours(settings.villageClock, settings.bedtime, settings.wakeTime);
   const asleep = isNight(vnow, vh.bedtime, vh.wakeTime);
-  const stock: Partial<Record<Good, number>> = Object.fromEntries(GOODS.map((g) => [g, Number(eco[g] ?? 0)]));
+  // The day's happenings (#187), rolled once a village day, before the stores are read.
+  const { dailyHappenings, happeningsOn } = await import("./happenings");
+  dailyHappenings(now, settings.villageClock, settings.villageDayHours, rng);
+  const season = seasonOf(now, settings.villageClock, settings.villageDayHours);
+  const storm = happeningsOn(season.dayNumber).some((h) => h.kind === "storm");
+  const fresh = sqlite.prepare("SELECT * FROM economy WHERE id = 1").get() as Record<string, number>;
+  const stock: Partial<Record<Good, number>> = Object.fromEntries(GOODS.map((g) => [g, Number(fresh[g] ?? 0)]));
   const names = new Map(villagers.map((v) => [v.id, v.name]));
   const bestFriend = sqlite.prepare(
     // A partner or sweetheart first, then the closest friend (#134).
@@ -160,6 +167,10 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
         friend: f && names.has(f.id) ? { id: f.id, name: names.get(f.id)! } : null,
         wish: wishKey ? { key: wishKey, label: SHOP[wishKey].label, price: SHOP[wishKey].price } : null,
         traits: traitsById.get(v.id),
+        season: season.season,
+        storm,
+        tools: (stock.tools ?? 0) > 0,
+        school: built.has("school"),
         rng,
       });
       if (r.bought && isShopKey(r.bought)) {
@@ -222,9 +233,10 @@ export async function runLifeTick(now = new Date(), rng: () => number = Math.ran
     }
     // The cart goes when an accepted order's goods are in stock (#136).
     deliverOrders(stock, now);
+    // Every good the village keeps (flour was once left out here, #186).
     sqlite
-      .prepare("UPDATE economy SET wheat = ?, bread = ?, fish = ?, flowers = ?, crafts = ?, ale = ?, shortage = shortage + ?, last_life_tick = ? WHERE id = 1")
-      .run(stock.wheat ?? 0, stock.bread ?? 0, stock.fish ?? 0, stock.flowers ?? 0, stock.crafts ?? 0, stock.ale ?? 0, hungry, nowSec);
+      .prepare(`UPDATE economy SET ${GOODS.map((g) => `${g} = ?`).join(", ")}, shortage = shortage + ?, last_life_tick = ? WHERE id = 1`)
+      .run(...GOODS.map((g) => stock[g] ?? 0), hungry, nowSec);
   });
   write();
   dailyOrders(now, rng);

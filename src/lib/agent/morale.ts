@@ -16,6 +16,8 @@ export interface MoraleStats {
   // Finished places that cheer everyone up (a tavern, a shop, a garden), with
   // what each adds; one of a kind counts.
   amenities?: Array<{ label: string; morale: number }>;
+  // A festival on the village calendar today (#187).
+  festival?: string | null;
 }
 
 export function moraleScore(s: MoraleStats): { score: number; reasons: string[] } {
@@ -50,6 +52,10 @@ export function moraleScore(s: MoraleStats): { score: number; reasons: string[] 
     score -= 10;
     reasons.push("the village ran short of bread (−10)");
   }
+  if (s.festival) {
+    score += 6;
+    reasons.push(`it's festival day: ${s.festival} (+6)`);
+  }
   for (const a of s.amenities ?? []) {
     score += a.morale;
     reasons.push(`the village has a ${a.label.toLowerCase()} (+${a.morale})`);
@@ -63,6 +69,10 @@ export async function villageMorale(now = Date.now()) {
   const builtKinds = (sqlite.prepare("SELECT DISTINCT kind FROM buildings WHERE status = 'built'").all() as Array<{ kind: string }>).map((r) => r.kind);
   const amenities = builtKinds.filter(isBuildingKind).map((k) => BUILDING_KINDS[k]).filter((k) => k.morale > 0);
   const hungry = (sqlite.prepare("SELECT shortage FROM economy WHERE id = 1").get() as { shortage: number } | undefined)?.shortage ? true : false;
+  // A festival going on now (#187): a timed one between its start and end, an all-day one on its day.
+  const { upcoming } = await import("./villageCalendar");
+  const festival =
+    upcoming(1, new Date(now)).find((e) => e.kind === "festival" && e.startsAt <= now && (e.allDay ? now < e.startsAt + 86_400_000 : now <= (e.endsAt ?? e.startsAt + 3 * 3_600_000)))?.title ?? null;
   return villagers.map((v) => {
     const count = (sql: string, ...args: unknown[]) => (sqlite.prepare(sql).get(...args) as { n: number }).n;
     const approved = count("SELECT COUNT(*) AS n FROM tool_executions WHERE agent_id = ? AND status IN ('success', 'approved') AND requested_at >= ?", v.id, week);
@@ -73,6 +83,6 @@ export async function villageMorale(now = Date.now()) {
       .get(v.id) as { t: number | null };
     const daysSinceOwner = last.t ? Math.floor((now / 1000 - last.t) / 86400) : null;
     const budgetSpent = v.dailyBudgetUsd != null && spentToday(v.id, new Date(now)) >= v.dailyBudgetUsd;
-    return { agentId: v.id, name: v.name, ...moraleScore({ approved, dropped, daysSinceOwner, notesReceived, budgetSpent, hungry, amenities }) };
+    return { agentId: v.id, name: v.name, ...moraleScore({ approved, dropped, daysSinceOwner, notesReceived, budgetSpent, hungry, amenities, festival }) };
   });
 }

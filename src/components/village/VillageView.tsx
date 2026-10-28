@@ -84,7 +84,7 @@ export default function VillageView() {
   const villagers = data.villagers;
   // The village clock sets the light and puts villagers to bed (#100, #150);
   // the same tick fades speech bubbles.
-  const { now: clock, time, phase, night } = useVillageClock(data.bedtime, data.wakeTime, data.villageClock, data.villageDayHours);
+  const { now: clock, time, phase, night, season } = useVillageClock(data.bedtime, data.wakeTime, data.villageClock, data.villageDayHours);
   const sound = useVillageSound(phase, data.pending.length, data.unread);
 
   // Idle villagers stroll between hangouts (plaza, market, gates, home…), each
@@ -281,6 +281,7 @@ export default function VillageView() {
         paused={data.paused}
         time={time}
         phase={phase}
+        season={season}
         onShowApprovals={() => setDeferred([])}
         onTogglePause={togglePause}
         onShowMail={() => openAction("mail.open")}
@@ -577,6 +578,11 @@ function PlotBuildings({ scene, state, onOpen }: { scene: SceneManifest; state: 
                   <StampSprite stamp={stamp} x={x} y={y} />
                   {/* The mill's sails (#186), turning slowly over its roof. */}
                   {b.kind === "mill" && <MillSails x={x + (st.w * CELL) / 2} y={y + CELL * 0.1} />}
+                  {/* The smithy's anvil (#188), out by the door. */}
+                  {b.kind === "smithy" && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src="/village/props/anvil.png" alt="" aria-hidden className="pointer-events-none absolute" style={{ left: x + st.w * CELL, top: y + (st.h - 1) * CELL, width: CELL, height: CELL, imageRendering: "pixelated" }} />
+                  )}
                 </>
               ) : (
                 <>

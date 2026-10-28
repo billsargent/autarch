@@ -93,6 +93,10 @@ export const STAMPS = {
   beigeHouse: s("house", 4, 0, 4, 3),
   // The mill (#186): the orange-roofed cottage, with sails drawn on top.
   millHouse: s("house", 0, 0, 4, 3),
+  // The smithy (#188): the clay forge; the chapel and the school (#189).
+  smithy: s("house", 0, 7, 3, 3),
+  chapel: s("house", 12, 0, 4, 3),
+  school: s("house", 29, 0, 4, 4),
   marketStall: s("house", 16, 16, 3, 2),
   barrel: s("house", 16, 15),
   produceCrate: s("house", 19, 14),

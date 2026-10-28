@@ -1,4 +1,5 @@
 import { stintInputs, TRADES, levelOf, type Good, type TradeKey } from "./trades";
+import { scaled, seasonFactor, type Season } from "./seasons";
 
 // The rules of village life (#129), with no database: one villager's ten
 // minutes, who grows closer, and the day split. life.ts applies them to the
@@ -36,6 +37,12 @@ export interface TickInput {
   wish?: { key: string; label: string; price: number } | null;
   // Their character traits (#153, traits.ts).
   traits?: readonly string[];
+  // The season and the day's happenings (#187): a storm slows the fields.
+  season?: Season;
+  storm?: boolean;
+  // Tools in the stores (#188), and a school standing (#189).
+  tools?: boolean;
+  school?: boolean;
   rng: () => number;
 }
 
@@ -115,12 +122,17 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
       return out;
     }
     const t = TRADES[i.trade];
-    // Hardworking (#153): they learn their trade faster.
-    st.xp += has("hardworking") ? 3 : 2;
+    // Hardworking (#153): they learn their trade faster; so does anyone still
+    // learning (below level 5) when there's a school (#189).
+    st.xp += (has("hardworking") ? 3 : 2) + (i.school && levelOf(st.xp) < 5 ? 1 : 0);
     st.coins += 1;
     const level = levelOf(st.xp);
     let n = t.goods ? 1 + (level >= 5 ? 1 : 0) + (level >= 8 ? 1 : 0) : 0;
     if (n && t.building && !i.workplace) n = i.rng() < 0.5 ? 1 : 0; // no proper workplace yet: half as much
+    // The season (#187), and a storm on the fields that day.
+    if (n) n = scaled(n, seasonFactor(t.goods, i.season) * (i.storm && t.goods === "wheat" ? 0.5 : 1), i.rng);
+    // Tools (#188): now and then they make a stint go further (not the smith's own).
+    if (n && i.tools && i.trade !== "smith" && i.rng() < TOOLS_CHANCE) n += 1;
     if (n && "uses" in t && t.uses) {
       const got = stintInputs(t, n, i.stock, i.rng);
       if (!got.made || !got.used) {
@@ -287,10 +299,12 @@ export const readyToWed = (b: Bond) => b.status === "sweetheart" && b.romance >=
 // --- orders from other towns (#136) ----------------------------------------------------
 export const TOWNS = ["Millbrook", "Stonehaven", "Riverbend", "Ashford"];
 // What a unit of each good fetches, in coins.
-export const GOOD_PRICE: Record<Good, number> = { wheat: 2, flour: 3, bread: 3, fish: 3, flowers: 2, crafts: 5, ale: 3 };
+export const GOOD_PRICE: Record<Good, number> = { wheat: 2, flour: 3, bread: 3, fish: 3, flowers: 2, crafts: 5, ale: 3, iron: 3, tools: 6 };
 // Flour is only asked for once the village has a mill (#186).
 const ORDER_GOODS: Good[] = ["wheat", "bread", "fish", "flowers", "crafts", "ale"];
 export const ORDER_DAYS = 3;
+// How often tools in the stores add one to a stint (#188).
+export const TOOLS_CHANCE = 0.25;
 
 // A new order: bigger and better paid as the village's name grows.
 export function makeOrder(reputation: number, rng: () => number, extra: Good[] = []): { town: string; good: Good; qty: number; reward: number; days: number } {

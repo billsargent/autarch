@@ -257,7 +257,7 @@ export const votes = sqliteTable("votes", {
 export const buildings = sqliteTable("buildings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   // "land" clears the next ring of the village; its plot_id is "ring-<n>".
-  kind: text("kind", { enum: ["house", "farm", "mill", "bakery", "workshop", "tavern", "shop", "garden", "land"] }).notNull(),
+  kind: text("kind", { enum: ["house", "farm", "mill", "bakery", "workshop", "tavern", "shop", "garden", "smithy", "chapel", "school", "land"] }).notNull(),
   plotId: text("plot_id").notNull(),
   status: text("status", { enum: ["proposed", "building", "built", "declined"] }).notNull().default("proposed"),
   // Who proposed it; empty = the owner.
@@ -367,6 +367,9 @@ export const economy = sqliteTable("economy", {
   wheat: integer("wheat").notNull().default(0),
   // Ground at the mill (#186).
   flour: integer("flour").notNull().default(0),
+  // The smithy's iron and tools (#188).
+  iron: integer("iron").notNull().default(0),
+  tools: integer("tools").notNull().default(0),
   bread: integer("bread").notNull().default(6),
   // Loaves short at the last day's meals.
   shortage: integer("shortage").notNull().default(0),

@@ -27,7 +27,10 @@ export async function POST(req: Request) {
   const [na, nb] = [names.find((n) => n.id === a)?.name, names.find((n) => n.id === b)?.name];
   if (body.action === "bless") {
     sqlite.prepare("UPDATE relationships SET status = 'partner', updated_at = unixepoch() WHERE a_id = ? AND b_id = ?").run(a, b);
-    logLife("wedding", a, `${na} and ${nb} were married, with the owner's blessing. The whole village came.`, b);
+    // With a chapel (#189), they marry there, and the day lifts them both.
+    const chapel = Boolean(sqlite.prepare("SELECT 1 FROM buildings WHERE kind = 'chapel' AND status = 'built'").get());
+    if (chapel) sqlite.prepare("UPDATE villager_life SET company = MIN(100, company + 20), energy = MIN(100, energy + 10) WHERE agent_id IN (?, ?)").run(a, b);
+    logLife("wedding", a, `${na} and ${nb} were married${chapel ? " at the chapel" : ""}, with the owner's blessing. The whole village came.`, b);
   } else if (body.action === "not_yet") {
     sqlite.prepare("UPDATE relationships SET romance = 60, updated_at = unixepoch() WHERE a_id = ? AND b_id = ?").run(a, b);
     logLife("romance", a, `${na} and ${nb} will wait a while before marrying.`, b);

@@ -391,7 +391,7 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
         parameters: {
           type: "object",
           properties: {
-            kind: { type: "string", enum: ["house", "farm", "mill", "bakery", "workshop", "tavern", "shop", "garden", "land"] },
+            kind: { type: "string", enum: ["house", "farm", "mill", "bakery", "workshop", "tavern", "shop", "garden", "smithy", "chapel", "school", "land"] },
             plot: { type: "string", description: "Optional, for a building: a free plot such as north-1, west-2, east-1 or south-2; default the first free plot." },
             reason: { type: "string", description: "Why the village needs it, for the owner." },
           },

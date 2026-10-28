@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { clockText, dayPhase, isNight, type DayPhase } from "@/lib/agent/daynight";
+import { seasonOf } from "@/lib/agent/seasons";
 import { villageDate, villageHours, type VillageClock } from "@/lib/agent/villageClock";
 
 // The village clock (#100, #150): the village's own time (or the owner's),
@@ -15,5 +16,7 @@ export function useVillageClock(bedtime: string, wakeTime: string, clock: Villag
   const date = villageDate(new Date(now), clock, dayHours);
   const hours = villageHours(clock, bedtime, wakeTime);
   const phase: DayPhase = dayPhase(date, hours.bedtime, hours.wakeTime);
-  return { now, time: clockText(date), phase, night: isNight(date, hours.bedtime, hours.wakeTime) };
+  // The season (#187), on the same clock.
+  const season = seasonOf(new Date(now), clock, dayHours).season;
+  return { now, time: clockText(date), phase, night: isNight(date, hours.bedtime, hours.wakeTime), season };
 }

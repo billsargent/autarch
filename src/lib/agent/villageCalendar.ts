@@ -41,7 +41,7 @@ export interface VillageEvent {
   allDay: boolean;
   place: string | null;
   notes: string | null;
-  source: "mayor" | "owner" | "idea" | "market" | "order";
+  source: "mayor" | "owner" | "idea" | "market" | "order" | "season";
   sourceId: number | null;
   createdBy: number | null;
   synced: boolean;

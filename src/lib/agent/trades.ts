@@ -4,17 +4,27 @@
 // `spot`: where they work when there's no such building (a waypoint id in the
 // village scene); `goods`: what a working stint makes for the village.
 
-export type Good = "wheat" | "flour" | "bread" | "fish" | "flowers" | "crafts" | "ale";
-export const GOODS: Good[] = ["wheat", "flour", "bread", "fish", "flowers", "crafts", "ale"];
-export const GOOD_LABEL: Record<Good, string> = { wheat: "wheat", flour: "sacks of flour", bread: "loaves", fish: "fish", flowers: "flowers", crafts: "crafts", ale: "ale" };
-export const GOOD_ICON: Record<Good, string> = { wheat: "🌾", flour: "🥣", bread: "🍞", fish: "🐟", flowers: "🌷", crafts: "🪵", ale: "🍺" };
+export type Good = "wheat" | "flour" | "bread" | "fish" | "flowers" | "crafts" | "ale" | "iron" | "tools";
+export const GOODS: Good[] = ["wheat", "flour", "bread", "fish", "flowers", "crafts", "ale", "iron", "tools"];
+export const GOOD_LABEL: Record<Good, string> = {
+  wheat: "wheat",
+  flour: "sacks of flour",
+  bread: "loaves",
+  fish: "fish",
+  flowers: "flowers",
+  crafts: "crafts",
+  ale: "ale",
+  iron: "bars of iron",
+  tools: "tools",
+};
+export const GOOD_ICON: Record<Good, string> = { wheat: "🌾", flour: "🥣", bread: "🍞", fish: "🐟", flowers: "🌷", crafts: "🪵", ale: "🍺", iron: "🔩", tools: "🔨" };
 
 export interface Trade {
   label: string;
   // Doing it, for bubbles and the chronicle ("baking").
   doing: string;
   icon: string;
-  building: "farm" | "mill" | "bakery" | "tavern" | "garden" | "shop" | "workshop" | null;
+  building: "farm" | "mill" | "bakery" | "tavern" | "garden" | "shop" | "workshop" | "smithy" | null;
   spot: string;
   goods: Good | null;
   // What a stint uses up (a miller grinds wheat into flour).
@@ -33,6 +43,8 @@ export const TRADES = {
   gardener: { label: "Gardener", doing: "tending the flowers", icon: "🌷", building: "garden", spot: "bc", goods: "flowers" },
   shopkeeper: { label: "Shopkeeper", doing: "minding the shop", icon: "🛍️", building: "shop", spot: "tc", goods: null },
   carpenter: { label: "Carpenter", doing: "at the workbench", icon: "🪚", building: "workshop", spot: "ws", goods: "crafts" },
+  // The blacksmith (#188): iron from the travelling merchant into tools.
+  smith: { label: "Blacksmith", doing: "at the forge", icon: "⚒️", building: "smithy", spot: "ws", goods: "tools", uses: "iron" },
   trader: { label: "Trader", doing: "seeing to the carts at the storehouse", icon: "🐴", building: null, spot: "sh", goods: null },
   scholar: { label: "Scholar", doing: "reading in the library", icon: "📚", building: null, spot: "lib", goods: null },
   watchman: { label: "Watchman", doing: "keeping watch", icon: "🛡️", building: null, spot: "gt", goods: null },
@@ -53,7 +65,8 @@ const GUESSES: Array<[RegExp, TradeKey]> = [
   [/inn|tavern|brew|ale|bar/i, "innkeeper"],
   [/garden|weed|herb|flower|plant/i, "gardener"],
   [/shop|merchant|sell|market/i, "shopkeeper"],
-  [/carpent|build|wood|craft|smith|fix|maker/i, "carpenter"],
+  [/smith|forge|anvil|iron/i, "smith"],
+  [/carpent|build|wood|craft|fix|maker/i, "carpenter"],
   [/trade|export|cart|courier/i, "trader"],
   [/librar|scholar|read|book|study|teach|research/i, "scholar"],
   [/watch|guard|night|sentry|security/i, "watchman"],

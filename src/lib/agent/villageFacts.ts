@@ -3,6 +3,8 @@ import { BUILDING_KINDS, isBuildingKind, listBuildings } from "./buildings";
 import { getEconomy } from "./economy";
 import { listOrders } from "./orders";
 import { calendarLines } from "./villageCalendar";
+import { seasonLines } from "./happenings";
+import { getSettings } from "./settingsStore";
 import { GOOD_LABEL, GOODS, TRADES, tradeOf } from "./trades";
 
 // THE VILLAGE TODAY (#151): the plain facts about the village, in every
@@ -20,6 +22,7 @@ interface Villager {
 
 // `mayor`: the Mayor also hears what neighbours noticed this week (#153).
 export async function villageFacts(now = new Date(), mayor = false): Promise<string> {
+  const settings = await getSettings();
   const villagers = sqlite
     .prepare("SELECT id, name, role, trade, is_mayor AS isMayor, status FROM agents WHERE status IN ('active', 'paused') ORDER BY is_mayor DESC, id")
     .all() as Villager[];
@@ -48,7 +51,7 @@ export async function villageFacts(now = new Date(), mayor = false): Promise<str
   const orderText = orders.map(
     (o) => `${o.town} wants ${o.qty} ${GOOD_LABEL[o.good]} for ${o.reward} coins by ${new Date(o.dueAt).toDateString().slice(0, 10)} (${o.status === "accepted" ? `accepted${o.acceptedBy && nameOf.has(o.acceptedBy) ? ` by ${nameOf.get(o.acceptedBy)}` : ""}` : "nobody has taken it"})`,
   );
-  const news = (sqlite.prepare("SELECT text FROM life_events WHERE kind IN ('order', 'level', 'wedding') ORDER BY id DESC LIMIT 3").all() as Array<{ text: string }>).map((r) => r.text);
+  const news = (sqlite.prepare("SELECT text FROM life_events WHERE kind IN ('order', 'level', 'wedding', 'season') ORDER BY id DESC LIMIT 3").all() as Array<{ text: string }>).map((r) => r.text);
 
   return [
     "THE VILLAGE TODAY (facts; these win over your notes, your memory or what a neighbour said)",
@@ -59,6 +62,7 @@ export async function villageFacts(now = new Date(), mayor = false): Promise<str
     `- In the stores: ${goods}. Treasury: ${stock.treasury} coins.`,
     `- Orders from other towns: ${orderText.length ? orderText.join("; ") : "none open"}.`,
     news.length ? `- Lately: ${news.join(" ")}` : "",
+    ...seasonLines(now, settings.villageClock, settings.villageDayHours),
     ...calendarLines(now),
     mayor ? conductLine(now) : "",
     "- If something isn't listed here, the village doesn't have it. Don't invent prices, dates, harvests, suppliers or trade the village doesn't have; say you don't know.",
