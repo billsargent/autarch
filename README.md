@@ -55,7 +55,7 @@ call risk-checked, and anything risky waiting for your approval.
 - **Villagers know their village and talk plainly.** Every prompt carries the village's facts
   (who lives here, what stands, the stores and orders), and village talk goes without the model's
   thinking, at a talk temperature: short, plain answers.
-- **A small economy.** Farms grow wheat, the mill grinds it into flour, bakeries bake bread and everyone eats. The seasons turn, storms, a travelling merchant and fairs come and go, a blacksmith makes tools, and a chapel and a school can be built. Houses add beds
+- **A small economy.** Farms grow wheat, the mill grinds it into flour, bakeries bake bread and everyone eats. The seasons turn, storms, a travelling merchant and fairs come and go, a blacksmith makes tools, a chapel and a school can be built, and the fishers work down at the riverside. Houses add beds
   for more villagers; a tavern, a shop and a garden lift everyone's morale. When every plot is
   taken, the village can clear the next ring of land (four rings in all, each laid out ahead of
   time).

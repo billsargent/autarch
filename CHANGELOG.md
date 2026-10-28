@@ -10,6 +10,20 @@ framework that gives an autonomous AI agent supervised control of a computer sys
 
 
 
+
+## 2026-10-29 — The riverside
+
+- **A second area, the riverside,** down the road from the village's east gate ("To the
+  riverside" signpost): a river with grassy banks, a jetty out over the water and a rowing boat
+  moored beside it. It's drawn from the Ninja Adventure water tiles (CC0).
+- **The fishers work there now.** In the village they head off down the east road; at the
+  riverside they stand on the jetty. The river is richer than the old pond: now and then a stint
+  brings one more fish.
+- **The jetty** shows who's fishing, the fish in the stores and what the season is doing; **the
+  boat** shows the orders waiting to go downriver and what went lately.
+- Inside any building, the line at the top now says what villagers are doing ("Ruth is fishing at
+  the river") instead of "relaxing at home".
+- The trading post's stores now list every good (flour, iron and tools were missing).
 ## 2026-10-29 — Building approvals you can find, and a vote if you like
 
 - **Easy to find.** A building waiting for you now shows in the top bar ("🏗️ 1 building to

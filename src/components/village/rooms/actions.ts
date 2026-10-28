@@ -14,5 +14,6 @@ export const ROOM_ACTIONS: Record<string, string[]> = {
   tavern: ["tavern.bar", "tavern.keeper"],
   bakery: ["bakery.oven", "bakery.keeper"],
   shop: ["shop.counter", "shop.keeper"],
+  riverside: ["riverside.docks", "riverside.boat"],
   home: ["home.computer", "home.desk", "home.books", "home.calendar", "home.invite", "home.guitar", "home.map", "home.pantry", "home.keepsakes"],
 };

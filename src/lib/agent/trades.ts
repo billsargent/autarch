@@ -38,7 +38,8 @@ export const TRADES = {
   farmer: { label: "Farmer", doing: "working the fields", icon: "🌾", building: "farm", spot: "nj", goods: "wheat" },
   miller: { label: "Miller", doing: "grinding at the mill", icon: "⚙️", building: "mill", spot: "nj", goods: "flour", uses: "wheat" },
   baker: { label: "Baker", doing: "baking", icon: "🍞", building: "bakery", spot: "tc", goods: "bread", uses: "flour", makesDoWith: "wheat" },
-  fisher: { label: "Fisher", doing: "fishing at the pond", icon: "🎣", building: null, spot: "c", goods: "fish" },
+  // At the riverside (#190): in the village they're off down the east road.
+  fisher: { label: "Fisher", doing: "fishing at the river", icon: "🎣", building: null, spot: "eg", goods: "fish" },
   innkeeper: { label: "Innkeeper", doing: "keeping the inn", icon: "🍺", building: "tavern", spot: "tr", goods: "ale", uses: "wheat" },
   gardener: { label: "Gardener", doing: "tending the flowers", icon: "🌷", building: "garden", spot: "bc", goods: "flowers" },
   shopkeeper: { label: "Shopkeeper", doing: "minding the shop", icon: "🛍️", building: "shop", spot: "tc", goods: null },

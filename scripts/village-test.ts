@@ -174,6 +174,13 @@ check(
   check("trade looks are real looks", Object.values(TRADE_LOOKS).flat().filter((k) => !(CHARACTER_KEYS as readonly string[]).includes(k)), []);
 }
 
+// The riverside (#190): reached from every level of the village, with its jetty and boat.
+{
+  const river = INTERIORS.riverside;
+  check("the riverside has a jetty, a boat and a river", [river.places.map((p) => p.action), Boolean(river.water?.rects.length)], [["riverside.docks", "riverside.boat"], true]);
+  check("every level of the village has the road to the riverside at its east gate", ALL_SCENES.filter((s) => s.id.startsWith("village")).map((s) => s.places.find((p) => p.id === "riverroad")?.door), ["eg", "eg", "eg", "eg"]);
+}
+
 // Where villagers were (#181): nobody runs in from the gate.
 {
   const stored = new Map<string, string>();

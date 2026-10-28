@@ -28,6 +28,8 @@ export const TILESETS = {
   wall: { image: "village/tiles/ninja-wall.png", columns: 10, rows: 11 },
   camp: { image: "village/tiles/ninja-camp.png", columns: 23, rows: 9 },
   bed: { image: "village/tiles/ninja-bed.png", columns: 14, rows: 12 },
+  // The riverside's river, jetty and boat (#190).
+  water: { image: "village/tiles/ninja-water.png", columns: 28, rows: 17 },
   // Drawn for this project (scripts/build-custom-tiles.ts).
   custom: { image: "village/tiles/autarch-custom.png", columns: 12, rows: 3 },
 } as const satisfies Record<string, Tileset>;
@@ -51,6 +53,11 @@ export const STAMPS = {
   svGrassTuft: s("sv", 0, 1),
   svGrassTuft2: s("sv", 1, 1),
   svPathBlob: s("sv", 2, 0, 3, 3), // 3×3 path edges/corners
+  // Water with grassy banks (#190): a 3×3 blob like the path's, and the
+  // jetty's planks and a rowing boat on it.
+  waterBlob: s("water", 0, 6, 3, 3),
+  jetty: s("water", 4, 12, 4, 3),
+  rowboat: s("water", 26, 0, 2, 1),
   svPond: s("sv", 5, 0, 3, 3),
   svTree: s("sv", 0, 5, 2, 3),
   svFlowersPatch: s("sv", 0, 3, 2, 2),
@@ -208,6 +215,9 @@ export interface SceneLayout {
   ground?: Placement[];
   // Paths drawn with edges picked from their neighbours.
   paths?: { rects: Rect[]; blob: StampId };
+  // Water the same way, banks picked from their neighbours (#190); drawn
+  // over the paths, under everything standing.
+  water?: { rects: Rect[]; blob: StampId };
   places: PlaceDef[];
   decor: Placement[];
   lamps: Placement[];

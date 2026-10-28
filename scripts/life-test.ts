@@ -148,6 +148,10 @@ check("levels and titles", [levelOf(0), levelOf(20), levelOf(320), levelOf(1000)
   const smith = lifeTick(base, at(10, { trade: "smith", stock: { iron: 3 } }));
   check("a blacksmith turns iron into tools", [smith.used, smith.produced, smith.state.activity], [{ iron: 1 }, { tools: 1 }, "at the forge"]);
   check("…and waits without iron", lifeTick(base, at(10, { trade: "smith", stock: {} })).state.activity, "waiting for iron");
+  // The river (#190): a fisher now and then lands one more.
+  const fisher = (rng: number) => lifeTick(base, at(10, { trade: "fisher", rng: () => rng })).produced.fish ?? 0;
+  check("the river now and then gives a fisher one more fish", [fisher(0.1), fisher(0.9)], [2, 1]);
+  check("…and fishers work at the river", lifeTick(base, at(10, { trade: "fisher" })).state.activity, "fishing at the river");
   check("a school helps those still learning", [lifeTick(base, at(10, { school: true })).state.xp, lifeTick({ ...base, xp: 500 }, at(10, { school: true })).state.xp], [3, 502]);
 }
 
