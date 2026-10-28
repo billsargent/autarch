@@ -38,6 +38,12 @@ function insidePlot(kind: string, life: VillagerLife | null | undefined): boolea
   return life.place === "work" && TRADES[life.trade as TradeKey]?.building === kind;
 }
 
+// What someone here is doing: their village life when they're about it
+// ("Ruth is fishing at the river"), or else their mood.
+function sayWhat(v: { name: string; life?: VillagerLife | null }, mood: Parameters<typeof moodLabel>[0]): string {
+  return mood === "idle" && v.life?.activity ? `${v.name} is ${v.life.activity}` : moodLabel(mood, v.name);
+}
+
 // The last thing each villager said at the meeting going on, and who's
 // speaking now (#83). Only polls while there's a meeting.
 function useMeetingLines(on: boolean) {
@@ -92,7 +98,11 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
   const plotKind = (PLOT_INTERIORS as readonly string[]).includes(sceneId) ? sceneId : null;
   const plots = useBuildings().state;
   const plot = plotKind ? plots?.buildings.find((b) => b.kind === plotKind && b.status === "built") : undefined;
-  const here = plotKind
+  const riverside = sceneId === "riverside";
+  const here = riverside
+    ? // The riverside (#190): the fishers at work.
+      moods.filter(({ v, mood }) => mood === "idle" && v.life?.place === "work" && v.life.trade === "fisher")
+    : plotKind
     ? moods.filter(({ v, mood }) => mood === "idle" && insidePlot(plotKind, v.life))
     : isCottage
       ? // At home (#159): its owner asleep or at home, and any friend visiting them.
@@ -102,7 +112,7 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
             (mood === "idle" && v.life?.place === "visit" && v.life.withId === owner?.id),
         )
       : moods.filter(({ v, mood }) => building && MOOD_PLACE[mood] === building.id);
-  const atWork = (life: VillagerLife | null | undefined) => Boolean(plotKind && life?.place === "work" && WORK_SPOT[plotKind]);
+  const atWork = (life: VillagerLife | null | undefined) => riverside || Boolean(plotKind && life?.place === "work" && WORK_SPOT[plotKind]);
   const away = owner && !here.some((h) => h.v.id === owner.id) ? moods.find((m) => m.v.id === owner.id) : null;
 
   // Which furniture's dialogs are open; `opened` remounts the room UI each time.
@@ -136,12 +146,13 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
     color: v.color,
     sprite: spriteFor(v.character),
     // Asleep at home, they're in bed (#111); at a meeting, at the table (#83).
-    target: isCottage && mood === "asleep" ? "bed" : mood === "meeting" && seated.indexOf(v.id) < 6 ? `seat-${seated.indexOf(v.id) + 1}` : atWork(v.life) ? WORK_SPOT[plotKind!] : center,
-    offset: (isCottage && mood === "asleep") || (mood === "meeting" && seated.indexOf(v.id) < 6) || atWork(v.life) ? 0 : offsets[i],
-    said: mood === "meeting" ? (meeting.speaking === v.id ? "💬 …" : meeting.lines[v.name] ?? null) : plotKind && v.life ? v.life.activity : null,
+    target: isCottage && mood === "asleep" ? "bed" : mood === "meeting" && seated.indexOf(v.id) < 6 ? `seat-${seated.indexOf(v.id) + 1}` : atWork(v.life) ? (riverside ? "jetty" : WORK_SPOT[plotKind!]) : center,
+    // Fishers on the jetty stand side by side (#190); a keeper at their counter stands alone.
+    offset: (isCottage && mood === "asleep") || (mood === "meeting" && seated.indexOf(v.id) < 6) || (atWork(v.life) && !riverside) ? 0 : offsets[i],
+    said: mood === "meeting" ? (meeting.speaking === v.id ? "💬 …" : meeting.lines[v.name] ?? null) : (plotKind || riverside) && v.life ? v.life.activity : null,
     badge: MOOD_BADGE[mood],
     vest: v.tier === "worker",
-    title: moodLabel(mood, v.name),
+    title: sayWhat(v, mood),
     asleep: mood === "asleep",
     lying: isCottage && mood === "asleep",
   }));
@@ -150,7 +161,7 @@ export default function InteriorView({ sceneId, startAction, agentId }: { sceneI
   const note = here.length
     ? here.length > 3
       ? `${here.length} villagers are here: ${here.map(({ v }) => v.name).join(", ")}.`
-      : here.map(({ v, mood }) => moodLabel(mood, v.name)).join(" · ")
+      : here.map(({ v, mood }) => sayWhat(v, mood)).join(" · ")
     : away
       ? `${away.v.name} isn't home — ${awayWhere ? `they're at the ${awayWhere.label.toLowerCase()}` : "they're out"}.`
       : sceneId === "home"

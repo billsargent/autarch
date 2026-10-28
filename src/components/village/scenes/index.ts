@@ -13,6 +13,7 @@ import { POSTOFFICE_SCENE } from "./postoffice";
 import { TAVERN_SCENE } from "./tavern";
 import { BAKERY_SCENE } from "./bakery";
 import { SHOP_SCENE } from "./shop";
+import { RIVERSIDE_SCENE } from "./riverside";
 
 export { MAX_VILLAGE_LEVEL, VILLAGE_LEVELS, VILLAGE_SCENE, ringPlotIds } from "./village";
 
@@ -31,6 +32,8 @@ export const INTERIORS: Record<string, SceneLayout> = {
   tavern: TAVERN_SCENE,
   bakery: BAKERY_SCENE,
   shop: SHOP_SCENE,
+  // Not a building: the area by the river, down the east road (#190).
+  riverside: RIVERSIDE_SCENE,
 };
 
 // Buildings on the plots (#154) whose door leads inside, by building kind.

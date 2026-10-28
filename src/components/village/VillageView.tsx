@@ -201,7 +201,10 @@ export default function VillageView() {
         ? doorOf(v.dwelling)
         : place === "visit"
           ? doorOf(friend?.dwelling)
-          : place === "tavern" && plotDoor("tavern", scene, buildings.state);
+          : place === "work" && v.life?.trade === "fisher" && scene.waypoints.some((w) => w.id === "eg")
+            ? // Off to the riverside (#190), down the east road.
+              "eg"
+            : place === "tavern" && plotDoor("tavern", scene, buildings.state);
     const target = indoors || living || stroll || home.door;
     return { v, mood, target, inside: Boolean(indoors), strolling: mood === "idle" && !v.life && target !== home.door };
   });

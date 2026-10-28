@@ -21,6 +21,8 @@ import {
   validateScene,
   validateStamps,
   type Placement,
+  type Rect,
+  type StampId,
   type SceneLayout,
   type TilesetId,
 } from "../src/components/village/scene";
@@ -66,8 +68,15 @@ async function cut(set: TilesetId, col: number, row: number, w = 1, h = 1): Prom
 // neighbour is off the path. Off the map counts as path, so roads that reach
 // the edge look like they carry on out of town.
 function pathTile(scene: SceneLayout, col: number, row: number): TileRef {
-  const blob = STAMPS[scene.paths!.blob];
-  const on = (c: number, r: number) => c < 0 || r < 0 || c >= scene.cols || r >= scene.rows || isPath(scene, c, r);
+  return blobTile(scene, scene.paths!.blob, (c, r) => isPath(scene, c, r), col, row);
+}
+
+// Water (#190): the same, over the water's rectangles.
+const inRects = (rects: Rect[], c: number, r: number) => rects.some((x) => c >= x.col && c < x.col + x.w && r >= x.row && r < x.row + x.h);
+
+function blobTile(scene: SceneLayout, blobId: StampId, isOn: (c: number, r: number) => boolean, col: number, row: number): TileRef {
+  const blob = STAMPS[blobId];
+  const on = (c: number, r: number) => c < 0 || r < 0 || c >= scene.cols || r >= scene.rows || isOn(c, r);
   const offN = !on(col, row - 1);
   const offS = !on(col, row + 1);
   const offW = !on(col - 1, row);
@@ -100,7 +109,9 @@ async function buildScene(scene: SceneLayout) {
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       let ref: TileRef;
-      if (isPath(scene, col, row)) {
+      if (scene.water && inRects(scene.water.rects, col, row)) {
+        ref = blobTile(scene, scene.water.blob, (c, r) => inRects(scene.water!.rects, c, r), col, row);
+      } else if (isPath(scene, col, row)) {
         ref = pathTile(scene, col, row);
       } else {
         let r = random() * total;
@@ -134,7 +145,7 @@ async function buildScene(scene: SceneLayout) {
     while (placements.length < wanted && tries++ < 5000) {
       const col = Math.floor(random() * cols);
       const row = Math.floor(random() * rows);
-      if (isPath(scene, col, row) || taken.has(`${col},${row}`)) continue;
+      if (isPath(scene, col, row) || (scene.water && inRects(scene.water.rects, col, row)) || taken.has(`${col},${row}`)) continue;
       taken.add(`${col},${row}`);
       placements.push({ stamp: scene.scatter.stamps[Math.floor(random() * scene.scatter.stamps.length)], col, row });
     }

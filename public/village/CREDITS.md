@@ -29,6 +29,7 @@ this repository; get the full packs from their authors.
   - `tiles/ninja-wall.png` (`Backgrounds/Tilesets/Interior/TilesetWallSimple.png`)
   - `tiles/ninja-camp.png` (`Backgrounds/Tilesets/tileset_camp.png`)
   - `tiles/ninja-bed.png` (`Backgrounds/Tilesets/tileset_bed.png`)
+  - `tiles/ninja-water.png` (`Backgrounds/Tilesets/TilesetWater.png`): the riverside's river, jetty and boat
   - `characters/*.png` (`Actor/Character/<Name>/SpriteSheet.png`), copied by
     `npm run village:characters` (`scripts/import-characters.ts`)
   - `animals/*.png` (`Actor/Animal/<Name>/SpriteSheet*.png`)

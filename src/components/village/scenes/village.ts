@@ -294,6 +294,18 @@ function villageAtLevel(level: number): SceneLayout {
       ...["tr", ...eastChain, "eg"].slice(1).map((b, i, arr) => [i === 0 ? "tr" : arr[i - 1], b] as const),
       ...["gt", ...southChain, "sg"].slice(1).map((b, i, arr) => [i === 0 ? "gt" : arr[i - 1], b] as const),
     ],
+    places: [
+      ...moved.places,
+      // The road to the riverside (#190), from the east gate.
+      {
+        id: "riverroad",
+        label: "To the riverside",
+        role: "The road east to the river: the jetty, the fishers and the boat",
+        interior: "riverside",
+        door: "eg",
+        parts: [{ stamp: "svSign", col: right + ec - 2, row: roadRow - 2 }],
+      },
+    ],
     plots,
   }, level, roadCol, roadRow, dr, dc, { right, bottom, ec, sr });
 }

@@ -131,6 +131,8 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
     if (n && t.building && !i.workplace) n = i.rng() < 0.5 ? 1 : 0; // no proper workplace yet: half as much
     // The season (#187), and a storm on the fields that day.
     if (n) n = scaled(n, seasonFactor(t.goods, i.season) * (i.storm && t.goods === "wheat" ? 0.5 : 1), i.rng);
+    // The river (#190) is richer than the old pond: now and then one more fish.
+    if (n && i.trade === "fisher" && i.rng() < RIVER_FISH_CHANCE) n += 1;
     // Tools (#188): now and then they make a stint go further (not the smith's own).
     if (n && i.tools && i.trade !== "smith" && i.rng() < TOOLS_CHANCE) n += 1;
     if (n && "uses" in t && t.uses) {
@@ -305,6 +307,8 @@ const ORDER_GOODS: Good[] = ["wheat", "bread", "fish", "flowers", "crafts", "ale
 export const ORDER_DAYS = 3;
 // How often tools in the stores add one to a stint (#188).
 export const TOOLS_CHANCE = 0.25;
+// How often the river gives a fisher one more fish (#190).
+export const RIVER_FISH_CHANCE = 0.25;
 
 // A new order: bigger and better paid as the village's name grows.
 export function makeOrder(reputation: number, rng: () => number, extra: Good[] = []): { town: string; good: Good; qty: number; reward: number; days: number } {
