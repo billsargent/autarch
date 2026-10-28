@@ -116,6 +116,20 @@
     border-top-color: #3b2716;
   }
 
+  @keyframes village-sails {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  .village-sails {
+    animation: village-sails 9s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .village-sails {
+      animation: none;
+    }
+  }
+
   @keyframes village-bob {
     0%,
     100% {

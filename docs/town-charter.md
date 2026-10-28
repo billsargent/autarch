@@ -286,7 +286,7 @@ keeping a building makes them its trade.
 
 - **Every ten minutes, with no model calls,** each villager's day moves on. Energy, fullness and
   company drift. By day they work their trade at its building, making goods for the village
-  (wheat, bread, fish, flowers, crafts, ale) and earning experience, levels and a coin. When
+  (wheat, flour, bread, fish, flowers, crafts, ale) and earning experience, levels and a coin. When
   hungry they eat from the village pantry, when tired they rest, and in the evening they go to
   the tavern or drop in on a friend. At night they sleep.
 - **Friends.** Villagers who spend time together grow closer: acquaintances become friends, then

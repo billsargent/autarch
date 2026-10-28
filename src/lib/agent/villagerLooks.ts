@@ -169,6 +169,7 @@ export const CHARACTER_VARIANTS: Partial<Record<CharacterKey, { base: string; sw
 // A look that suits a village trade (#131), for new villagers and hires.
 export const TRADE_LOOKS: Record<string, CharacterKey[]> = {
   farmer: ["villager2", "woodsman", "eggboy", "villager-olive"],
+  miller: ["villager2", "oldman", "villager-olive"],
   baker: ["woman", "villager5", "woman-gold", "egggirl"],
   innkeeper: ["villager7", "strongman", "villager4"],
   gardener: ["oldman", "herbalist", "woman-olive", "villager2"],

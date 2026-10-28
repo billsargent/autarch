@@ -1231,6 +1231,15 @@ async function main() {
   check("…not before it's built", keeperOf(workshopId), null);
   await buildingsLib.listBuildings();
   check("a finished building gets a keeper of its trade", keeperOf(workshopId), owen.id);
+  // The mill (#186): a miller keeps it, and the village knows the chain.
+  const millId = addBuilding("mill");
+  const mo = (await add({ name: "Mo", role: "Miller" })).agent;
+  check("a miller (by role) keeps the mill", [mo.trade ?? "miller", keeperOf(millId)], ["miller", mo.id]);
+  check("…and the village's facts say so", (await (await import("../src/lib/agent/villageFacts")).villageFacts()).includes("mill (kept by Mo)"), true);
+  const { builtInPlaybooks } = await import("../src/lib/agent/villagePlaybooks");
+  check("the village's know-how explains farm → mill → bakery", builtInPlaybooks(false).includes("farm → mill → bakery"), true);
+  lifeDb.prepare("UPDATE agents SET status = 'dismissed' WHERE id = ?").run(mo.id);
+  lifeDb.prepare("DELETE FROM buildings WHERE id = ?").run(millId);
   const secondShop = addBuilding("shop");
   buildingsLib.fillKeeperPosts();
   check("one post each: nobody keeps two", keeperOf(secondShop), null);

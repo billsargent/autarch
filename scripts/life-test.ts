@@ -31,10 +31,16 @@ const at = (hour: number, more: Partial<TickInput> = {}): TickInput => ({
 
 // --- the tick ---------------------------------------------------------------------------
 {
-  const r = lifeTick(base, at(10));
-  check("by day a baker bakes: wheat in, bread out, experience and a coin", [r.state.place, r.state.activity, r.used, r.produced, r.state.xp, r.state.coins], ["work", "baking", { wheat: 1 }, { bread: 1 }, 2, 11]);
+  const r = lifeTick(base, at(10, { stock: { wheat: 10, flour: 4, bread: 5, ale: 3 } }));
+  check("by day a baker bakes: flour in, bread out, experience and a coin", [r.state.place, r.state.activity, r.used, r.produced, r.state.xp, r.state.coins], ["work", "baking", { flour: 1 }, { bread: 1 }, 2, 11]);
   check("…and gets a little tired and hungry", [r.state.energy, r.state.fullness], [78, 78]);
-  check("no wheat, no baking", lifeTick(base, at(10, { stock: { wheat: 0, bread: 5 } })).state.activity, "waiting for wheat");
+  // With no flour (no mill yet, #186), straight from wheat at half the pace.
+  const fromWheat = (rng: number, xp = 0) => lifeTick({ ...base, xp }, at(10, { rng: () => rng }));
+  check("no flour: a baker bakes from wheat, half as much (a coin toss for one loaf)", [fromWheat(0.2).used, fromWheat(0.2).produced, fromWheat(0.9).produced], [{ wheat: 1 }, { bread: 1 }, {}]);
+  check("…a skilled baker makes one loaf from wheat instead of two", [fromWheat(0.9, 500).used, fromWheat(0.9, 500).produced], [{ wheat: 1 }, { bread: 1 }]);
+  check("no flour and no wheat, no baking", lifeTick(base, at(10, { stock: { wheat: 0, bread: 5 } })).state.activity, "waiting for flour or wheat");
+  const miller = lifeTick(base, at(10, { trade: "miller" }));
+  check("a miller grinds wheat into flour", [miller.state.activity, miller.used, miller.produced], ["grinding at the mill", { wheat: 1 }, { flour: 1 }]);
   const field = lifeTick(base, at(10, { trade: "farmer", workplace: false, rng: () => 0.9 }));
   check("a farmer with no farm yet manages only half", field.produced, {});
   check("a skilled worker makes more", lifeTick({ ...base, xp: 400 }, at(10, { trade: "fisher" })).produced, { fish: 2 });
@@ -122,6 +128,8 @@ check("levels and titles", [levelOf(0), levelOf(20), levelOf(320), levelOf(1000)
   const big = makeOrder(10, () => 0);
   check("an order: a town, a good, a quantity, a reward, three days", [small.town, small.good, small.qty, small.reward, small.days], ["Millbrook", "wheat", 4, 10, 3]);
   check("a good name brings bigger, better-paid orders", [big.qty > small.qty, big.reward / big.qty > small.reward / small.qty], [true, true]);
+  // Flour is asked for only once there's a mill (#186): it's the last choice when offered.
+  check("orders ask for flour only when the village can mill it", [makeOrder(0, () => 0.999).good, makeOrder(0, () => 0.999, ["flour"]).good], ["ale", "flour"]);
 }
 
 // --- the village's own clock (#150) ------------------------------------------------------

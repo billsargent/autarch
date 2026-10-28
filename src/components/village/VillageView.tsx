@@ -7,7 +7,7 @@ import { villageFonts } from "./fonts";
 import { OWNER_SPRITE, VILLAGE, VILLAGE_MANIFESTS, spriteFor, type Place, type SceneManifest } from "./manifest";
 import type { PlayerSpec } from "./SceneView";
 import StampSprite from "./StampSprite";
-import { CELL, STAMPS, stampRect, type StampId } from "./scene";
+import { CELL, SCALE, STAMPS, stampRect, type StampId } from "./scene";
 import { PLOT_INTERIORS, VILLAGE_LEVELS } from "./scenes";
 import { useBuildings } from "../data/useBuildings";
 import { useVillageSound } from "./useVillageSound";
@@ -537,6 +537,23 @@ function PlotSigns({ scene, state, onOpen }: { scene: SceneManifest; state: Retu
 }
 
 // The stamps and labels come with the buildings (src/lib/agent/buildings.ts).
+// Windmill sails from the Ninja Adventure pack (CC0), hub at the top of the
+// roof, small enough that they clear the door; they stand still for anyone
+// who prefers less motion.
+function MillSails({ x, y }: { x: number; y: number }) {
+  const size = 44 * SCALE;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/village/props/mill-sails.png"
+      alt=""
+      aria-hidden
+      className="village-sails pointer-events-none absolute"
+      style={{ left: x - size / 2, top: y - size / 2, width: size, height: size, imageRendering: "pixelated" }}
+    />
+  );
+}
+
 function PlotBuildings({ scene, state, onOpen }: { scene: SceneManifest; state: ReturnType<typeof useBuildings>["state"]; onOpen: (id: number) => void }) {
   if (!state) return null;
   return (
@@ -556,7 +573,11 @@ function PlotBuildings({ scene, state, onOpen }: { scene: SceneManifest; state: 
           return (
             <div key={b.id}>
               {built ? (
-                <StampSprite stamp={stamp} x={x} y={y} />
+                <>
+                  <StampSprite stamp={stamp} x={x} y={y} />
+                  {/* The mill's sails (#186), turning slowly over its roof. */}
+                  {b.kind === "mill" && <MillSails x={x + (st.w * CELL) / 2} y={y + CELL * 0.1} />}
+                </>
               ) : (
                 <>
                   <StampSprite stamp={stamp} x={x} y={y} opacity={0.35} />

@@ -1,4 +1,4 @@
-import { TRADES, levelOf, type Good, type TradeKey } from "./trades";
+import { stintInputs, TRADES, levelOf, type Good, type TradeKey } from "./trades";
 
 // The rules of village life (#129), with no database: one villager's ten
 // minutes, who grows closer, and the day split. life.ts applies them to the
@@ -122,12 +122,13 @@ export function lifeTick(s: LifeState, i: TickInput): TickResult {
     let n = t.goods ? 1 + (level >= 5 ? 1 : 0) + (level >= 8 ? 1 : 0) : 0;
     if (n && t.building && !i.workplace) n = i.rng() < 0.5 ? 1 : 0; // no proper workplace yet: half as much
     if (n && "uses" in t && t.uses) {
-      n = Math.min(n, i.stock[t.uses] ?? 0);
-      if (!n) {
-        set("work", `waiting for ${t.uses}`);
+      const got = stintInputs(t, n, i.stock, i.rng);
+      if (!got.made || !got.used) {
+        set("work", `waiting for ${t.uses}${"makesDoWith" in t && t.makesDoWith ? ` or ${t.makesDoWith}` : ""}`);
         return out;
       }
-      out.used[t.uses] = n;
+      n = got.made;
+      out.used[got.used] = n;
     }
     if (n && t.goods) out.produced[t.goods] = n;
     set("work", hungryNoFood ? `${t.doing} on an empty stomach` : t.doing);
@@ -286,13 +287,15 @@ export const readyToWed = (b: Bond) => b.status === "sweetheart" && b.romance >=
 // --- orders from other towns (#136) ----------------------------------------------------
 export const TOWNS = ["Millbrook", "Stonehaven", "Riverbend", "Ashford"];
 // What a unit of each good fetches, in coins.
-export const GOOD_PRICE: Record<Good, number> = { wheat: 2, bread: 3, fish: 3, flowers: 2, crafts: 5, ale: 3 };
+export const GOOD_PRICE: Record<Good, number> = { wheat: 2, flour: 3, bread: 3, fish: 3, flowers: 2, crafts: 5, ale: 3 };
+// Flour is only asked for once the village has a mill (#186).
 const ORDER_GOODS: Good[] = ["wheat", "bread", "fish", "flowers", "crafts", "ale"];
 export const ORDER_DAYS = 3;
 
 // A new order: bigger and better paid as the village's name grows.
-export function makeOrder(reputation: number, rng: () => number): { town: string; good: Good; qty: number; reward: number; days: number } {
-  const good = ORDER_GOODS[Math.floor(rng() * ORDER_GOODS.length)];
+export function makeOrder(reputation: number, rng: () => number, extra: Good[] = []): { town: string; good: Good; qty: number; reward: number; days: number } {
+  const choices = [...ORDER_GOODS, ...extra.filter((g) => !ORDER_GOODS.includes(g))];
+  const good = choices[Math.floor(rng() * choices.length)];
   const rep = Math.max(0, Math.min(20, reputation));
   const qty = Math.min(40, 4 + Math.floor(rng() * 5) + rep);
   const reward = Math.round(qty * GOOD_PRICE[good] * (1.2 + rep * 0.05));
