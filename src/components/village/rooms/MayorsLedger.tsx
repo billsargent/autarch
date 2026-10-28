@@ -1219,6 +1219,27 @@ function HiringSettings({ s, settings }: { s: Settings; settings: SettingsRow })
           ? "Every hire waits for you, with the Mayor's interview to read."
           : "When the Mayor recommends someone, they're hired straight away and you're told. New villagers never get more tools or budget than whoever drafted them."}
       </p>
+      <p className="mt-3 text-xs font-semibold">Who approves buildings</p>
+      <div className="mt-1 flex flex-wrap gap-1.5" role="radiogroup" aria-label="Who approves buildings">
+        {(["ask", "vote", "mayor"] as const).map((m) => (
+          <button
+            key={m}
+            role="radio"
+            aria-checked={settings.buildingApproval === m}
+            onClick={() => void s.save({ buildingApproval: m })}
+            className={`village-btn px-2.5 py-1 text-[11px] ${settings.buildingApproval === m ? "village-btn-go" : ""}`}
+          >
+            {m === "ask" ? "✋ I approve each one" : m === "vote" ? "🗳️ The village votes" : "🎩 The Mayor decides"}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-[11px] text-[#6b4a2e]">
+        {settings.buildingApproval === "ask"
+          ? "The Mayor's proposals wait for you at the map table in your home (and on your desk)."
+          : settings.buildingApproval === "vote"
+            ? "The Mayor's proposals go straight to a village vote; adopted, the treasury pays and they're built. You can still approve, decline or veto one at the map table. Proposals already waiting go to a vote now."
+            : "The Mayor's proposals go ahead at once when the treasury can pay, and you're told. Proposals already waiting go ahead now."}
+      </p>
       <label className="mt-2 block max-w-xs text-xs font-semibold">
         Room for (villagers, the Mayor included)
         <input

@@ -506,6 +506,7 @@ if (!globalForDb.__agentLabSqlite) {
   // An idea that's an event (#173).
   if (!existingCols("ideas").includes("event_at")) sqlite.exec("ALTER TABLE ideas ADD COLUMN event_at INTEGER");
   if (!existingCols("ideas").includes("event_all_day")) sqlite.exec("ALTER TABLE ideas ADD COLUMN event_all_day INTEGER NOT NULL DEFAULT 0");
+  if (!existingCols("ideas").includes("building_id")) sqlite.exec("ALTER TABLE ideas ADD COLUMN building_id INTEGER");
   // Ideas a meeting's write-up pinned were once recorded as the Mayor's (#147).
   sqlite.exec("UPDATE ideas SET proposed_by = NULL WHERE body LIKE 'Raised at town meeting%' AND proposed_by IS NOT NULL");
   sqlite.exec(`CREATE TABLE IF NOT EXISTS votes (
@@ -587,6 +588,7 @@ if (!globalForDb.__agentLabSqlite) {
     ["tavily_api_key", "TEXT"],
     ["deepseek_search", "INTEGER NOT NULL DEFAULT 1"],
     ["history_days", "INTEGER NOT NULL DEFAULT 90"],
+    ["building_approval", "TEXT NOT NULL DEFAULT 'ask'"],
     ["searxng_url", "TEXT"],
     ["market_day", "INTEGER DEFAULT 6"],
   ] as const) {

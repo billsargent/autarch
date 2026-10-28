@@ -54,12 +54,14 @@ export async function proposeIdea(
   proposedBy: number | null,
   conduct: Conduct | null = null,
   event: { at: Date; allDay: boolean } | null = null,
+  buildingId: number | null = null,
 ): Promise<IdeaRow> {
   const t = title.trim();
   if (!t) throw new IdeaError("An idea needs a title.", 400);
   const open = (sqlite.prepare("SELECT COUNT(*) AS n FROM ideas WHERE status IN ('open', 'voting')").get() as { n: number }).n;
   if (open >= OPEN_IDEAS_MAX) throw new IdeaError(`The notice board already has ${OPEN_IDEAS_MAX} open ideas. Vote on some first.`);
-  if (proposedBy) {
+  // A building put to a vote (#199) isn't one of the Mayor's own ideas: no daily limit.
+  if (proposedBy && !buildingId) {
     // Since midnight, as "today" says (#147).
     const since = Math.floor(new Date(new Date().setHours(0, 0, 0, 0)).getTime() / 1000);
     const mine = (sqlite.prepare("SELECT COUNT(*) AS n FROM ideas WHERE proposed_by = ? AND created_at >= ?").get(proposedBy, since) as { n: number }).n;
@@ -68,7 +70,7 @@ export async function proposeIdea(
   if (event && event.at.getTime() <= Date.now()) throw new IdeaError("the event's date has passed.");
   const [row] = await db
     .insert(ideas)
-    .values({ title: t.slice(0, 120), body: body?.trim().slice(0, 2000) || null, proposedBy, conduct, eventAt: event?.at ?? null, eventAllDay: event?.allDay ?? false })
+    .values({ title: t.slice(0, 120), body: body?.trim().slice(0, 2000) || null, proposedBy, conduct, eventAt: event?.at ?? null, eventAllDay: event?.allDay ?? false, buildingId })
     .returning();
   return row;
 }
@@ -163,6 +165,8 @@ async function settle(ideaId: number, active: number) {
   }
   if (t.outcome === "rejected") {
     await db.update(ideas).set({ status: "rejected", decidedBy: "vote", decidedAt: new Date() }).where(eq(ideas.id, ideaId));
+    // A building turned down by the village (#199) is declined.
+    if (idea.buildingId) await (await import("./buildings")).declineBuilding(idea.buildingId).catch(() => {});
     return;
   }
   await adopt(idea, "vote", `Adopted by vote: ${t.yes} yes, ${t.no} no, ${t.abstain} abstained.`);
@@ -170,6 +174,7 @@ async function settle(ideaId: number, active: number) {
 
 async function adopt(idea: IdeaRow, by: "vote" | "owner", note: string) {
   if (idea.conduct) return settleConduct(idea, by, note);
+  if (idea.buildingId) return settleBuilding(idea, by, note);
   const [goal] = await db
     .insert(goals)
     .values({ title: idea.title, body: [idea.body, note].filter(Boolean).join("\n\n"), status: "backlog", priority: 3, agentId: null })
@@ -201,6 +206,21 @@ async function adopt(idea: IdeaRow, by: "vote" | "owner", note: string) {
   });
 }
 
+// A building the village voted for (#199): approved and paid from the
+// treasury, as if the owner had said yes; no town goal (it builds itself).
+async function settleBuilding(idea: IdeaRow, by: "vote" | "owner", note: string) {
+  await db.update(ideas).set({ status: "adopted", decidedBy: by, decidedAt: new Date() }).where(eq(ideas.id, idea.id));
+  const mayor = await ensureMayor();
+  let outcome: string;
+  try {
+    await (await import("./buildings")).approveBuilding(idea.buildingId!);
+    outcome = "It's going up now, paid from the treasury.";
+  } catch (err) {
+    outcome = `It couldn't start: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  await db.insert(notifications).values({ kind: "building", title: `Adopted: ${idea.title}`, body: `${note} ${outcome}`, severity: "success", source: mayor.name, agentId: mayor.id });
+}
+
 // The owner greenlights an idea without a vote.
 export async function adoptNow(ideaId: number) {
   const [idea] = await db.select().from(ideas).where(eq(ideas.id, ideaId));
@@ -216,6 +236,8 @@ export async function veto(ideaId: number) {
   if (idea.status === "vetoed" || idea.status === "rejected") throw new IdeaError(`That idea is already ${idea.status}.`);
   await db.update(ideas).set({ status: "vetoed", decidedBy: "owner", decidedAt: new Date() }).where(eq(ideas.id, ideaId));
   if (idea.goalId) await db.update(goals).set({ status: "abandoned", updatedAt: new Date() }).where(eq(goals.id, idea.goalId));
+  // A building still waiting is declined with it (#199).
+  if (idea.buildingId) await (await import("./buildings")).declineBuilding(idea.buildingId).catch(() => {});
   (await import("./villageCalendar")).cancelEventsFrom("idea", ideaId);
 }
 

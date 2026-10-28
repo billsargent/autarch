@@ -106,6 +106,7 @@ export async function PUT(req: Request) {
     "bedtime",
     "wakeTime",
     "hiringMode",
+    "buildingApproval",
     "maxPopulation",
     "meetingCostCapUsd",
     "awayUntil",
@@ -140,6 +141,8 @@ export async function PUT(req: Request) {
   if (checked.patch.awayUntil) checked.patch.awayStartedAt = new Date();
   const updated = await updateSettings(checked.patch as Partial<AgentSettingsRow>);
   const clean = checked.patch as Partial<AgentSettingsRow>;
+  // Proposals already waiting go the new way (#199).
+  if (clean.buildingApproval) await (await import("@/lib/agent/buildings")).applyBuildingApproval(clean.buildingApproval).catch(() => 0);
   if ("agentName" in clean || "persona" in clean) {
     const mayor = await ensureMayor();
     await db

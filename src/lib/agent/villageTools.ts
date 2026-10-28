@@ -387,7 +387,7 @@ export const VILLAGE_TOOLS: Record<string, VillageTool> = {
       function: {
         name: "propose_building",
         description:
-          "Mayor only. Propose a new building on one of the empty plots on the roads out of town (north, west, east and south): a house (beds for two more villagers), a farm, a bakery, a workshop, a tavern, a shop or a garden (the last three cheer everyone up). The owner approves it and the village treasury pays (house 40 coins, farm 30, bakery 40, workshop 40, tavern 60, shop 50, garden 25); then it takes about half a day to build. When every plot is taken, propose `land` instead (120 coins): it clears the next ring of land around the village, with eight new plots (two on each road), and takes a day. Orders from other towns (accept_order) fill the treasury.",
+          "Mayor only. Propose a new building on one of the empty plots on the roads out of town (north, west, east and south): a house (beds for two more villagers), a farm, a bakery, a workshop, a tavern, a shop or a garden (the last three cheer everyone up). Depending on the owner's setting (THE VILLAGE TODAY says), the owner approves it at the map table in their home, the village votes on it, or it goes ahead at once; the village treasury pays (house 40 coins, farm 30, bakery 40, workshop 40, tavern 60, shop 50, garden 25); then it takes about half a day to build. When every plot is taken, propose `land` instead (120 coins): it clears the next ring of land around the village, with eight new plots (two on each road), and takes a day. Orders from other towns (accept_order) fill the treasury.",
         parameters: {
           type: "object",
           properties: {

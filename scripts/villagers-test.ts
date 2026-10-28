@@ -1505,6 +1505,47 @@ async function main() {
     check("the daily round runs once a day", [hk.dailyTidy(90), hk.dailyTidy(90)].map((r) => r === null), [true, true]);
     const hkRoute = await import("../src/app/api/housekeeping/route");
     check("the owner can tidy up now", (await (await hkRoute.POST()).json()).last.at >= nowS - 5, true);
+
+    // --- who approves buildings (#199) -------------------------------------------------------
+    const bl = await import("../src/lib/agent/buildings");
+    const ideasMod = await import("../src/lib/agent/ideas");
+    db2.prepare("UPDATE economy SET treasury = 1000 WHERE id = 1").run();
+    // Room to build: clear what's on the plots of the first rings.
+    db2.prepare("DELETE FROM buildings WHERE kind != 'land'").run();
+    const statusOf = (id: number) => (db2.prepare("SELECT status FROM buildings WHERE id = ?").get(id) as { status: string }).status;
+    const lastLetter = () => db2.prepare("SELECT title, body FROM notifications WHERE kind = 'building' ORDER BY id DESC LIMIT 1").get() as { title: string; body: string };
+    const idOf = (out: string) => Number(/#(\d+)\)/.exec(out)?.[1]);
+
+    await settingsRoute.PUT(req("/api/settings", "PUT", { buildingApproval: "ask" }));
+    const asked = await power("propose_building", { kind: "garden", plot: "east-1", reason: "Flowers." });
+    check("asked: the proposal waits for the owner, who's told where", [statusOf(idOf(asked)), asked.includes("map table in their home"), lastLetter().body.includes("map table in your home (it's on your desk too)")], ["proposed", true, true]);
+    check("…and the Mayor knows who decides", (await (await import("../src/lib/agent/villageFacts")).villageFacts()).includes("Who decides buildings: the owner, at the map table in their home"), true);
+
+    await settingsRoute.PUT(req("/api/settings", "PUT", { buildingApproval: "mayor" }));
+    check("switched to the Mayor, a proposal already waiting goes ahead", statusOf(idOf(asked)), "building");
+    const treasuryBefore = (db2.prepare("SELECT treasury FROM economy WHERE id = 1").get() as { treasury: number }).treasury;
+    const byMayor = await power("propose_building", { kind: "shop", plot: "east-2", reason: "A shop." });
+    check("the Mayor decides: it goes up at once, paid from the treasury", [statusOf(idOf(byMayor)), treasuryBefore - (db2.prepare("SELECT treasury FROM economy WHERE id = 1").get() as { treasury: number }).treasury, lastLetter().title], ["building", 50, "The Mayor is building a shop"]);
+
+    // A vote: paused, so no vote round runs here (the daily vote would take it).
+    await settingsRoute.PUT(req("/api/settings", "PUT", { buildingApproval: "vote", paused: true }));
+    const voted = await power("propose_building", { kind: "house", plot: "south-1", reason: "Beds." });
+    const voteIdea = db2.prepare("SELECT id, title, status FROM ideas WHERE building_id = ?").get(idOf(voted)) as { id: number; title: string; status: string };
+    check("the village votes: the proposal goes on the board as an idea to vote on", [statusOf(idOf(voted)), voteIdea?.title, voteIdea?.status, voted.includes("village vote (in the daily vote")], ["proposed", "Build a house (the south-1 plot)", "open", true]);
+    await ideasMod.adoptNow(voteIdea.id);
+    check("adopted, it's built from the treasury (and no goal is made for it)", [statusOf(idOf(voted)), (db2.prepare("SELECT goal_id FROM ideas WHERE id = ?").get(voteIdea.id) as { goal_id: number | null }).goal_id], ["building", null]);
+    const turnedDown = await power("propose_building", { kind: "farm", plot: "south-2", reason: "Wheat." });
+    const downIdea = (db2.prepare("SELECT id FROM ideas WHERE building_id = ?").get(idOf(turnedDown)) as { id: number }).id;
+    await ideasMod.veto(downIdea);
+    check("vetoed, it's declined", statusOf(idOf(turnedDown)), "declined");
+    const direct = await power("propose_building", { kind: "garden", plot: "north-1", reason: "More flowers." });
+    await bl.approveBuilding(idOf(direct));
+    check("the owner deciding at the map table closes the village's vote", (db2.prepare("SELECT status, decided_by FROM ideas WHERE building_id = ?").get(idOf(direct)) as { status: string; decided_by: string }), { status: "adopted", decided_by: "owner" });
+    await settingsRoute.PUT(req("/api/settings", "PUT", { buildingApproval: "ask" }));
+    const waitingNow = await power("propose_building", { kind: "garden", plot: "north-2", reason: "Even more flowers." });
+    await settingsRoute.PUT(req("/api/settings", "PUT", { buildingApproval: "vote" }));
+    check("switched to a vote, a proposal already waiting goes to one", Boolean(db2.prepare("SELECT 1 FROM ideas WHERE building_id = ? AND status = 'open'").get(idOf(waitingNow))), true);
+    await settingsRoute.PUT(req("/api/settings", "PUT", { buildingApproval: "ask", paused: false }));
   }
 
   fake.close();

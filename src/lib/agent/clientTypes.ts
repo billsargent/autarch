@@ -89,6 +89,7 @@ export interface SettingsRow {
   flawsAllowed: "none" | "one" | "any";
   wakeTime: string;
   hiringMode: "ask" | "auto";
+  buildingApproval: "ask" | "vote" | "mayor";
   maxPopulation: number;
   meetingCostCapUsd: number;
   awayUntil: string | null;

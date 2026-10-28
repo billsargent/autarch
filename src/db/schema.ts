@@ -239,6 +239,8 @@ export const ideas = sqliteTable("ideas", {
   // An idea that's an event (#173): when; adopted, it goes on the calendar.
   eventAt: integer("event_at", { mode: "timestamp" }),
   eventAllDay: integer("event_all_day", { mode: "boolean" }).notNull().default(false),
+  // A building the village votes on (#199): adopted, it's built; turned down, declined.
+  buildingId: integer("building_id"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
   decidedAt: integer("decided_at", { mode: "timestamp" }),
 });
@@ -596,6 +598,8 @@ export const agentSettings = sqliteTable("agent_settings", {
   // Hiring (#99): "ask" = every hire waits for the owner; "auto" = the Mayor
   // hires within the caps. And how many villagers the village can hold.
   hiringMode: text("hiring_mode", { enum: ["ask", "auto"] }).notNull().default("ask"),
+  // Who approves the Mayor's buildings (#199): the owner, a village vote, or the Mayor.
+  buildingApproval: text("building_approval", { enum: ["ask", "vote", "mayor"] }).notNull().default("ask"),
   maxPopulation: integer("max_population").notNull().default(8),
   // What one town meeting may spend in all, in USD (#81).
   meetingCostCapUsd: real("meeting_cost_cap_usd").notNull().default(0.25),

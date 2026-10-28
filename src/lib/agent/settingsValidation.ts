@@ -73,6 +73,7 @@ const RULES: Record<string, Rule> = {
   talkTemperature: { kind: "number", min: 0, max: 2 },
   flawsAllowed: { kind: "enum", values: ["none", "one", "any"] },
   hiringMode: { kind: "enum", values: ["ask", "auto"] },
+  buildingApproval: { kind: "enum", values: ["ask", "vote", "mayor"] },
   maxPopulation: { kind: "int", min: 1, max: 50 },
   meetingCostCapUsd: { kind: "number", min: 0.01, max: 100 },
   awayUntil: { kind: "future", maxDays: 60 },

@@ -283,6 +283,8 @@ export default function VillageView() {
         phase={phase}
         season={season}
         onShowApprovals={() => setDeferred([])}
+        buildingsWaiting={data.buildingApproval === "ask" ? (buildings.state?.buildings.filter((b) => b.status === "proposed").length ?? 0) : 0}
+        onShowBuildings={() => router.push("/village/home?open=home.map")}
         onTogglePause={togglePause}
         onShowMail={() => openAction("mail.open")}
         meetingOn={villagers.some((v) => v.inMeeting)}

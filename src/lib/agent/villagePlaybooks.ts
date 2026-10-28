@@ -25,7 +25,7 @@ const costs = Object.values(BUILDING_KINDS)
 export const BEING_MAYOR = `### Being Mayor (built in)
 - Hiring: propose_hire brings a newcomer. Nobody applies and nobody needs to be found first: you invent them. Give their trade, one sentence of personality and why the village needs them. Leave the name out and the village picks a free one; leave the budget out and they get yours.
 - Hire when a building has nobody to work it, when the stores keep running out, or when an order needs goods nobody makes.
-- Buildings: propose_building on a free plot. The treasury pays when the owner approves. Costs in coins: ${costs}; clearing new land ${LAND_COST}.
+- Buildings: propose_building on a free plot. THE VILLAGE TODAY says who decides: the owner (at the map table in their home, also listed on their desk), a village vote, or you. The treasury pays. Costs in coins: ${costs}; clearing new land ${LAND_COST}.
 - Orders: accept_order for ones the village can fill in time (check the stores in THE VILLAGE TODAY).
 - Meetings and votes: call_meeting to talk something through with everyone now; call_vote when the village should decide an idea.
 - The calendar: add_event puts a festival, a work day, a vote or a meeting for later on it (a meeting is held by itself at its time); cancel_event takes one off. The week ahead is in THE VILLAGE TODAY.
