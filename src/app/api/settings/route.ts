@@ -20,7 +20,7 @@ import {
 // agent's name and personality are the Mayor's now that there are villagers
 // (#55), so older screens that edit "the agent" edit him.
 async function publicSettings(settings: AgentSettingsRow) {
-  const { apiKey, calendarIcsUrl, searchApiKey, ...safeSettings } = settings;
+  const { apiKey, calendarIcsUrl, searchApiKey, tavilyApiKey, ...safeSettings } = settings;
   const mayor = await ensureMayor();
   return {
     ...safeSettings,
@@ -30,6 +30,7 @@ async function publicSettings(settings: AgentSettingsRow) {
     // The calendar's address is a secret too: only whether it's set.
     calendarSet: Boolean(calendarIcsUrl),
     searchKeySet: Boolean(searchApiKey),
+    tavilyKeySet: Boolean(tavilyApiKey),
     deepseekModels: (settings.deepseekModels as string[]) || [],
   };
 }
@@ -97,6 +98,7 @@ export async function PUT(req: Request) {
     "noLimits",
     "spendCeilingUsd",
     "searchApiKey",
+    "tavilyApiKey",
     "searxngUrl",
     "marketDay",
     "bedtime",

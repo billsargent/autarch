@@ -56,6 +56,7 @@ const RULES: Record<string, Rule> = {
   noLimits: { kind: "bool" },
   spendCeilingUsd: { kind: "number", min: 0, max: 10000, nullable: true },
   searchApiKey: { kind: "text", max: 200, nullable: true },
+  tavilyApiKey: { kind: "text", max: 200, nullable: true },
   searxngUrl: { kind: "text", max: 500, nullable: true },
   marketDay: { kind: "number", min: 0, max: 6, nullable: true },
   bedtime: { kind: "time" },
